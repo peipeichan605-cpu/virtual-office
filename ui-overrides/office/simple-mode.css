@@ -1,0 +1,55 @@
+#office-mode-toggle {
+  position: fixed;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 46;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 17px;
+  min-height: 44px;
+  border: 1px solid #d7dfd9;
+  border-radius: 24px;
+  background: #fffefa;
+  color: #20372b;
+  box-shadow: 0 3px 16px #17251c18;
+  font: 650 13px system-ui, sans-serif;
+  cursor: pointer;
+}
+#office-mode-toggle:hover { background: #edf5ee; border-color: #97b59e; }
+#office-mode-toggle:focus-visible { outline: 3px solid #49835e; outline-offset: 3px; }
+.office-simple-mode #office-mode-toggle { top: max(24px, env(safe-area-inset-top)); bottom: auto; }
+.office-simple-mode #topbar,
+.office-simple-mode #floors,
+.office-simple-mode #panel,
+.office-simple-mode #feed,
+.office-simple-mode #enrollment-empty,
+.office-simple-mode .bhq-dock,
+.office-simple-mode .bhq-zoom,
+.office-simple-mode .bhq-sheet,
+.office-simple-mode .office-invite-launch,
+.office-simple-mode .hqt { display: none !important; }
+
+/* Each visible avatar keeps a small, keyboard-accessible chat entry. */
+.office-simple-mode .office-speech:not(.expanded) { width: 148px; }
+.office-simple-mode .office-speech.is-subagent:not(.expanded) { width: 132px; }
+.office-simple-mode .office-speech.has-family:not(.expanded) { width: 220px; }
+.office-simple-mode .office-speech:not(.expanded) .speech-peek {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border-radius: 999px;
+}
+.office-simple-mode .office-speech:not(.expanded) .speech-name { flex: 1; }
+.office-simple-mode .office-speech:not(.expanded) .speech-meta,
+.office-simple-mode .office-speech:not(.expanded) .speech-preview { display: none; }
+.office-simple-mode .office-speech:not(.expanded) .speech-peek::after { content: none; }
+.office-simple-mode .office-speech.has-family .speech-peek { padding-right: 91px; }
+.office-simple-mode .speech-peek:focus-visible { outline: 3px solid #49835e; outline-offset: 3px; }
+@media (max-width: 700px) {
+  #office-mode-toggle { right: 178px; bottom: max(20px, env(safe-area-inset-bottom)); padding: 10px 14px; }
+  .office-simple-mode #office-mode-toggle { right: 14px; top: max(14px, env(safe-area-inset-top)); bottom: auto; }
+  .office-simple-mode .office-speech:not(.expanded) { width: 132px; }
+  .office-simple-mode .office-speech.has-family:not(.expanded) { width: 204px; }
+}

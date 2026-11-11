@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Virtual Office · 私人 3D 辦公室</title>
+  <meta name="description" content="本機 Agent 辦公室：即時對話、工作狀態與交付記錄。">
+  <!-- the link preview (Telegram, X, iMessage): the dashboard itself -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Virtual Office">
+  <meta property="og:title" content="Virtual Office">
+  <meta property="og:description" content="本機 Agent 辦公室：即時對話、工作狀態與交付記錄。">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Virtual Office">
+  <link rel="icon" type="image/png" href="../assets/brand/logo-mark.png">
+  <link rel="apple-touch-icon" href="../assets/brand/logo-mark.png">
+  <meta name="theme-color" content="#F3F4F6">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./scene/scene.css">
+  <link rel="stylesheet" href="./ui/ui.css">
+  <link rel="stylesheet" href="./share/share.css">
+  <link rel="stylesheet" href="./invite.css">
+  <link rel="stylesheet" href="./commands.css">
+  <link rel="stylesheet" href="./simple-mode.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+  <!-- the two big downloads start with the page, not after the scripts that ask for them (after the import map) -->
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js">
+  <link rel="preload" href="../assets/office/office.glb" as="fetch" crossorigin>
+<style>.office-empty #panel,.office-empty #feed,.office-empty #floors,.office-empty .bhq-dock{display:none!important}</style></head>
+<body>
+  <main id="scene" aria-label="Office"><div class="hq-loading" role="status"><span class="hq-loading-label">Building the office</span><span class="hq-loading-track"><i></i></span></div></main>
+  <header id="topbar"></header>
+  <section id="enrollment-empty" aria-label="入駐說明" hidden style="position:fixed;left:50%;bottom:32px;transform:translateX(-50%);z-index:10;background:rgba(255,255,255,.94);color:#25342e;border:1px solid #d7dfd8;border-radius:18px;padding:18px 26px;box-shadow:0 8px 30px #0001;text-align:center;max-width:440px;font-family:system-ui;pointer-events:none">
+    <strong style="display:block;font-size:18px;margin-bottom:8px">辦公室已準備好</strong>
+    <span style="font-size:14px;line-height:1.7">目前沒有 Agent 入駐。<br>按「邀請 Agent」，把接入 Prompt 貼給你選定的 Agent。</span>
+  </section>
+  <nav id="floors" aria-label="Floors"></nav>
+  <aside id="panel" aria-label="Bot card and floor team"></aside>
+  <section id="feed" aria-label="Event feed"></section>
+  <script>addEventListener("unhandledrejection",e=>{const t=document.querySelector(".hq-loading-label");if(t)t.textContent="載入錯誤："+(e.reason?.message||"unknown");});</script><script type="module" src="./app.js"></script>
+  <script type="module" src="./invite.js"></script>
+</body>
+</html>
