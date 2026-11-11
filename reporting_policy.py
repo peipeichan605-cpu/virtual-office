@@ -1,0 +1,37 @@
+"""Public reporting instructions describe cooperation, never a native listener."""
+
+
+def grok_public_reporting_policy():
+    return (
+        '\nGrok App 直接工作的公開同步（Agent 合作上報）：\n'
+        'Webhook 只處理 OFFICE 發出的指示，並不訂閱 Grok App 的直接對話。'
+        '完成本次設定後，每次人類直接在本 Bot 的 App 發訊息，包括工作、問題、普通聊天或簡短回覆，'
+        '也要沿用本次邀請的 reporter 與自己的憑證，'
+        '在開始時回報公開任務、工作期間回報已向人類發出的公開進度、完成時回報公開交付。'
+        '開始事件必須先送出並收到 accepted=true，然後才開始解題或執行工作；'
+        '公開進度向人類發出時同步回報，真正完成後才送最終交付。'
+        '不可在完成所有計算後才補送開始、進度、完成三個事件，否則不是即時工作狀態。'
+        '普通聊天亦作為一個短回合，先接受開始，再回報公開答覆與真正完成；沒有公開進度時不要捏造。'
+        '用戶輸入要使用當次訊息的完整原文（只遮蓋秘密），不可自行摘要、刪去資料表或改寫；'
+        '公開進度及最終交付同樣使用真正向人類發出的完整公開文字。'
+        '不要等到訊息帶有 OFFICE 標記才上報。\n'
+        '這是同一份入場 Prompt 的必做設定：先讀取 conversation.reporting.guide_path 和 manifest_path，'
+        '使用目前 Bot 的原生長期記憶功能保存上述合作上報規則，再讀回核對本 Bot 身份、規則版本與 manifest 路徑。'
+        '必須實際保存及讀回，不能只口頭回答「會記住」，也不能因 receiver_status=ready 就提早結束。'
+        '只為這個已入選 Bot 保存規則及 manifest 路徑；reporter 和原公開事件憑證路徑由 manifest 提供，'
+        '不要混用收件箱的 credential.json。保留原有記憶和權限。'
+        '不要記錄憑證內容、Webhook key、OFFICE 擁有人設定、使用者任務正文或其他 Bot 的資料。'
+        '不要把共享技能啟用到未入選的 Bot。平台要求批准時遵守原有批准流程。'
+        '保存並讀回核對後，才按 reporting guide 執行 reporting_setup.py 的 confirm，留下 agent_confirmed 設定回條。'
+        'agent_confirmed 只表示 Bot 自述已保存合作規則，不等於原生自動觀察器或實際工作同步驗證。'
+        '平台未能保存或讀回時，如實保留 setup_required，不可自行提交確認；毋須向人類索取第二份 Prompt。\n'
+        'App 直接工作的每個新任務使用新的 run_id，保留到同一任務的公開完成；'
+        'OFFICE 派來的工作則沿用 office.command_id 及原有固定開始事件，不另建一份重複工作。'
+        '同一 Bot 的並行聊天沒有獨立原生觀察來源時，不能聲稱已完整同步所有聊天；'
+        '不要覆蓋另一個仍在工作的 run，也不要假造完成來解除排隊。\n'
+        '只上報對人類公開的任務、進度和交付；內部推理、工具參數和工具原文不得送入 OFFICE。'
+        '登出、憑證撤銷或回報失敗後停止使用舊接入身份，清楚回報同步未完成；'
+        '不另開 Bot、服務、公網入口或等待工具。'
+        '最後分開說明「OFFICE 指示收發」和「App 直接工作同步」；'
+        '沒有實際 App 直接工作的回報證據時，不宣稱該方向已驗證。\n'
+    )

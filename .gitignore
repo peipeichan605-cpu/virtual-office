@@ -1,0 +1,17 @@
+.office/
+public/
+__pycache__/
+*.pyc
+*.sqlite*
+*.log
+*.zip
+.env*
+credentials/
+.DS_Store
+.office-ui-*/
+.venv/
+.pytest_cache/
+platform-secrets/
+credential*.json
+auth.json
+private.json

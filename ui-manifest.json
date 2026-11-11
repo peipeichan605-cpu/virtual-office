@@ -1,0 +1,1521 @@
+{
+  "repository": "Bodila51/grokbot-wallpaper",
+  "commit": "76232f7af1a94d3cbd3d0b1cf05e460c85637acf",
+  "files": [
+    {
+      "source": "README.md",
+      "destination": "README.md",
+      "source_sha256": "10fcff72bc91d087fe0cc0dbeab39802d1c01b664788ec262af139f8356463e6",
+      "installed_sha256": "10fcff72bc91d087fe0cc0dbeab39802d1c01b664788ec262af139f8356463e6"
+    },
+    {
+      "source": "assets/blobs/thumbs/_default.png",
+      "destination": "assets/blobs/thumbs/_default.png",
+      "source_sha256": "d10d27ca0db5661b0316096f777819e4766e0fa5d46bd3f01ef78bafc93d7bad",
+      "installed_sha256": "d10d27ca0db5661b0316096f777819e4766e0fa5d46bd3f01ef78bafc93d7bad"
+    },
+    {
+      "source": "assets/brand/logo-mark.png",
+      "destination": "assets/brand/logo-mark.png",
+      "source_sha256": "63dbbe1d54d2572b855dd88c8160fc924fb5a4a280ce6a63fc7b3405244a57d7",
+      "installed_sha256": "63dbbe1d54d2572b855dd88c8160fc924fb5a4a280ce6a63fc7b3405244a57d7"
+    },
+    {
+      "source": "assets/earth/day.jpg",
+      "destination": "assets/earth/day.jpg",
+      "source_sha256": "5b54cc586c6cbf2b28762ef4d4011f6cf4227a8b93a637b818a0c54090ce6c2c",
+      "installed_sha256": "5b54cc586c6cbf2b28762ef4d4011f6cf4227a8b93a637b818a0c54090ce6c2c"
+    },
+    {
+      "source": "assets/earth/night.jpg",
+      "destination": "assets/earth/night.jpg",
+      "source_sha256": "d87de751a264e4f8ff69c68de5dab9606daee87a6f15ae743c93200743bd7ec1",
+      "installed_sha256": "d87de751a264e4f8ff69c68de5dab9606daee87a6f15ae743c93200743bd7ec1"
+    },
+    {
+      "source": "assets/office/night/baked_floor.jpg",
+      "destination": "assets/office/night/baked_floor.jpg",
+      "source_sha256": "4e14210ecf2596764d8efd62049446089cfdcb8832770270f0a7d145dce8ad63",
+      "installed_sha256": "4e14210ecf2596764d8efd62049446089cfdcb8832770270f0a7d145dce8ad63"
+    },
+    {
+      "source": "assets/office/night/baked_slab_top.jpg",
+      "destination": "assets/office/night/baked_slab_top.jpg",
+      "source_sha256": "f4bed4f048f6bfb9a4bcf9491ac44386650655dd3f03b67365058d40c0cad3e8",
+      "installed_sha256": "f4bed4f048f6bfb9a4bcf9491ac44386650655dd3f03b67365058d40c0cad3e8"
+    },
+    {
+      "source": "assets/office/night/baked_wall_left.jpg",
+      "destination": "assets/office/night/baked_wall_left.jpg",
+      "source_sha256": "c5d2dedd9894de51cff4af989b5dec2bfbdb7824bc1556cbfc30daf2975ef4ed",
+      "installed_sha256": "c5d2dedd9894de51cff4af989b5dec2bfbdb7824bc1556cbfc30daf2975ef4ed"
+    },
+    {
+      "source": "assets/office/office.glb",
+      "destination": "assets/office/office.glb",
+      "source_sha256": "2709917bd83409a558281ac496a1bc437c9c4210831d26399c11d1e205d3d03c",
+      "installed_sha256": "2709917bd83409a558281ac496a1bc437c9c4210831d26399c11d1e205d3d03c"
+    },
+    {
+      "source": "web/app.js",
+      "destination": "office/app.js",
+      "source_sha256": "8e3edcb51f5f7f5641bb789c5ca552379c67f1af79eaea28fcc480ee723e187f",
+      "installed_sha256": "9ebd278718765c13e48bda686b5213d01d060a6f313ad2d8ec7c70a7b50e511b",
+      "edits": [
+        [
+          5,
+          5,
+          [
+            "import { selectionFloor,isGround } from './overview.js';\n"
+          ]
+        ],
+        [
+          48,
+          49,
+          [
+            "    const target=selectionFloor(state,view.currentFloor,bot.id);\n",
+            "    if (target !== view.currentFloor) setFloor(target, true);\n"
+          ]
+        ],
+        [
+          96,
+          96,
+          [
+            "  if (view.selectedBot) view.currentFloor = selectionFloor(state,view.currentFloor,view.selectedBot);\n",
+            "  document.documentElement.classList.toggle('office-ground-view',isGround(view.currentFloor));\n"
+          ]
+        ],
+        [
+          136,
+          136,
+          [
+            "const receiveState = (data) => {\n",
+            "  const empty = Object.keys(data.bots || {}).length === 0;\n",
+            "  if (empty) {\n",
+            "    const counts = { working: 0, idle: 0, waiting_user: 0, error: 0, stuck: 0, done: 0 };\n",
+            "    data.floors = [{ id: 'office', name: '辦公室', order: 1, bots: [], counts }];\n",
+            "    data.summary = { ...counts, total: 0 };\n",
+            "  }\n",
+            "  document.getElementById('enrollment-empty').hidden = !empty;\n",
+            "  document.body.classList.toggle('office-empty', empty);\n",
+            "  state = data;\n",
+            "  document.title=(data.brand || 'Virtual Office')+' · 3D 辦公室';\n",
+            "  render();\n",
+            "};\n"
+          ]
+        ],
+        [
+          137,
+          138,
+          [
+            "if (feedFromLink(location)) {\n"
+          ]
+        ],
+        [
+          139,
+          141,
+          [
+            "  connectFeed(feedFromHash(location.hash, location.search), receiveState);\n",
+            "  addEventListener('hashchange', () => location.reload());\n"
+          ]
+        ],
+        [
+          142,
+          143,
+          [
+            "  // An office without an invitation link is empty. Never inject demo agents.\n",
+            "  const { StateStore } = await import('./lib/state.js');\n",
+            "  receiveState(new StateStore({ tz: Intl.DateTimeFormat().resolvedOptions().timeZone }).snapshot());\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/audio/music-loop.m4a",
+      "destination": "office/audio/music-loop.m4a",
+      "source_sha256": "9e165348f9b3e39d5e39fcd11c2700db1db29b1a0ba880471ae247f83af026bd",
+      "installed_sha256": "9e165348f9b3e39d5e39fcd11c2700db1db29b1a0ba880471ae247f83af026bd"
+    },
+    {
+      "source": "web/audio/sound.js",
+      "destination": "office/audio/sound.js",
+      "source_sha256": "ef078a78ad4b3380eca8b9b2db120999e7bf88ba8a6e67dc39c8f6a6657e1c62",
+      "installed_sha256": "ef078a78ad4b3380eca8b9b2db120999e7bf88ba8a6e67dc39c8f6a6657e1c62"
+    },
+    {
+      "source": "web/data/demo-looks.json",
+      "destination": "office/data/demo-looks.json",
+      "source_sha256": "0a0ab5cfa4294f12531988d3dc3a312ca231ac86e048d04b6fe52935f14af627",
+      "installed_sha256": "0a0ab5cfa4294f12531988d3dc3a312ca231ac86e048d04b6fe52935f14af627"
+    },
+    {
+      "source": "web/data/demo-state.json",
+      "destination": "office/data/demo-state.json",
+      "source_sha256": "727200e63837c7ba11e9c071f37b8382c744d9d4f60d0b790b9f8a816765c283",
+      "installed_sha256": "727200e63837c7ba11e9c071f37b8382c744d9d4f60d0b790b9f8a816765c283"
+    },
+    {
+      "source": "web/face/face.css",
+      "destination": "office/face/face.css",
+      "source_sha256": "5de3e616a0458922dd7d03b0de15f5a8c02a759afe6cab405a55770c2dc11468",
+      "installed_sha256": "5de3e616a0458922dd7d03b0de15f5a8c02a759afe6cab405a55770c2dc11468"
+    },
+    {
+      "source": "web/face/face.js",
+      "destination": "office/face/face.js",
+      "source_sha256": "9a6cfc72841f32fbcd244bd4abc6237b23310cbed4bde194fc8563efc1209a80",
+      "installed_sha256": "9a6cfc72841f32fbcd244bd4abc6237b23310cbed4bde194fc8563efc1209a80"
+    },
+    {
+      "source": "web/face/index.html",
+      "destination": "office/face/index.html",
+      "source_sha256": "44100ac4bad10522d3e707b28f6eaeb9d67055b114602778f2ab41f6311158f6",
+      "installed_sha256": "44100ac4bad10522d3e707b28f6eaeb9d67055b114602778f2ab41f6311158f6"
+    },
+    {
+      "source": "web/feed.js",
+      "destination": "office/feed.js",
+      "source_sha256": "e74aa541c9b4bc194e05c2ff904306570fb03d0bc2028ead984f6560f6eb0f2b",
+      "installed_sha256": "6957ee92056d24106d0aaec3fb6ccb8c978f06d942c29911338e6556be8643fa",
+      "edits": [
+        [
+          7,
+          9,
+          [
+            "// empty, every bot is still there. Cached history does not prove the service is live.\n"
+          ]
+        ],
+        [
+          24,
+          24,
+          [
+            "import { agentPageUrl, officeGet } from './office-api.js';\n",
+            "import { withGroundFloor } from './overview.js';\n"
+          ]
+        ],
+        [
+          27,
+          28,
+          [
+            "const QUIET_MS = Infinity, CHECK_MS = 6 * 3600e3, HEALTH_MS = 5000;\n"
+          ]
+        ],
+        [
+          37,
+          38,
+          [
+            "  return { topic: f.topic, servers: [location.origin] };\n"
+          ]
+        ],
+        [
+          42,
+          43,
+          [
+            "  const sources = servers.map((server) => ({ server, tag: server.startsWith(RELAY) ? 'relay' : 'ntfy', base: `${server}/${encodeURIComponent(topic)}`, lastId: null, connected: false }));\n"
+          ]
+        ],
+        [
+          47,
+          48,
+          [
+            "  const store = new StateStore({ tz, quietIdleMs: QUIET_MS, statusIdleMs: Infinity, hasAvatar: (id) => HANDMADE.has(id) });   // Local observer determines stale/unknown states.\n"
+          ]
+        ],
+        [
+          52,
+          52,
+          [
+            "  let health = null, connectionKey = '', healthPending = false;\n",
+            "  let privateWork = null, workKey = '', workPending = false, workAvailable = false;\n",
+            "  const localStates = new Map();\n",
+            "  const streams = [];\n"
+          ]
+        ],
+        [
+          54,
+          54,
+          [
+            "  await loadWork(false);\n"
+          ]
+        ],
+        [
+          56,
+          57,
+          [
+            "  await Promise.all((privateWork?.feed_enabled === false ? [] : sources).map(async (s) => {\n"
+          ]
+        ],
+        [
+          58,
+          59,
+          [
+            "      const response = await fetch(`${s.base}/json?poll=1&since=12h`, { cache: 'no-store', signal: AbortSignal.timeout(5000) });\n",
+            "      if (!response.ok) throw new Error('History unavailable');\n",
+            "      const text = await response.text();\n"
+          ]
+        ],
+        [
+          60,
+          60,
+          [
+            "      s.connected = true;\n"
+          ]
+        ],
+        [
+          68,
+          75,
+          [
+            "  // Private local deployment: no third-party analytics or relay.\n",
+            "  if (privateWork?.feed_enabled !== false) for (const s of sources) follow(s);\n",
+            "  const tickTimer = setInterval(() => { const v = store.version, s = store.snapshot(); if (store.version !== v) onState(extras(s)); }, TICK_MS);\n",
+            "  const healthTimer = setInterval(checkHealth, HEALTH_MS);\n",
+            "  const workTimer = setInterval(loadWork, 2000);\n",
+            "  await checkHealth();\n",
+            "  return { close() { clearInterval(tickTimer); clearInterval(healthTimer); clearInterval(workTimer); clearTimeout(saveTimer); streams.forEach((s) => s.close()); } };\n",
+            "\n",
+            "  async function loadWork(emit = true) {\n",
+            "    if (workPending) return;\n",
+            "    workPending = true;\n",
+            "    try {\n",
+            "      const data = await officeGet('/api/office/work', topic);\n",
+            "      const key = JSON.stringify(data);\n",
+            "      const recovered = !workAvailable;\n",
+            "      workAvailable = true;\n",
+            "      if (key === workKey) { if (emit && recovered) publish(); return; }\n",
+            "      workKey = key; privateWork = data;\n",
+            "      const selected = new Set((data.agents || []).map((agent) => botIdFor(agent.name)));\n",
+            "      for (const [id, bot] of store.bots) if (!selected.has(id)) {\n",
+            "        if (bot.assign) store.members.get(bot.assign.floor)?.delete(bot.assign.desk);\n",
+            "        store.bots.delete(id); localStates.delete(bot.name);\n",
+            "      }\n",
+            "      store.feed = store.feed.filter((row) => selected.has(row.id));\n",
+            "      const floors = new Map();\n",
+            "      for (const agent of data.agents || []) {\n",
+            "        const workspace = agent.workspace || {id:'workspace-unassigned',name:'未指定 Workspace'};\n",
+            "        floors.set(workspace.id, {id:workspace.id,name:workspace.name});\n",
+            "      }\n",
+            "      store.setFloorsConfig({floors:[...floors.values()]});\n",
+            "      for (const agent of data.agents || []) {\n",
+            "        const config = (cfg[agent.name] ||= {});\n",
+            "        config.chat_url = agentPageUrl(agent.id, topic);\n",
+            "        config.floor = agent.workspace?.id || 'workspace-unassigned';\n",
+            "        if (agent.provider) {\n",
+            "          const codex = agent.provider === 'codex';\n",
+            "          config.look ||= { shape: codex ? 'rounded_cube' : 'sphere', color: codex ? '#4087E8' : '#6CAC72', accessory: codex ? 'antenna' : 'glasses' };\n",
+            "        }\n",
+            "        if (!['working', 'done', 'idle', 'waiting_user', 'error'].includes(agent.state)) continue;\n",
+            "        const stateKey = JSON.stringify([agent.state, agent.step, agent.state_changed_at]);\n",
+            "        if (localStates.get(agent.name) === stateKey) continue;\n",
+            "        localStates.set(agent.name, stateKey);\n",
+            "        store.apply({ bot: agent.name, status: agent.state, step: agent.step,\n",
+            "          t: agent.state_changed_at || new Date().toISOString() });\n",
+            "      }\n",
+            "      store.setBotsConfig(cfg);\n",
+            "      if (emit) publish();\n",
+            "    } catch { workAvailable = false; if (emit) publish(); }\n",
+            "    finally { workPending = false; }\n",
+            "  }\n",
+            "\n",
+            "  function connection() {\n",
+            "    const local = privateWork?.local_ok !== undefined;\n",
+            "    const status = health === null ? 'connecting' : !health.ok ? 'offline'\n",
+            "      : local ? (health.local_ok && privateWork.local_ok && workAvailable ? 'live' : 'syncing')\n",
+            "      : !health.sync_ok || !sources.some((s) => s.connected) ? 'syncing' : 'live';\n",
+            "    return { status, label: { connecting: '連線中', offline: '連線中斷・狀態未更新', syncing: '同步中・狀態待確認', live: local ? '本機即時同步' : '即時同步' }[status] };\n",
+            "  }\n",
+            "  function connectionChanged() {\n",
+            "    const key = connection().status;\n",
+            "    if (key !== connectionKey) { connectionKey = key; publish(); }\n",
+            "  }\n",
+            "  async function checkHealth() {\n",
+            "    if (healthPending) return;\n",
+            "    healthPending = true;\n",
+            "    try {\n",
+            "      const response = await fetch('/health', { cache: 'no-store', signal: AbortSignal.timeout(3500) });\n",
+            "      if (!response.ok) throw new Error('Service unavailable');\n",
+            "      health = await response.json();\n",
+            "    } catch { health = { ok: false, sync_ok: false }; }\n",
+            "    finally { healthPending = false; connectionChanged(); }\n",
+            "  }\n"
+          ]
+        ],
+        [
+          103,
+          103,
+          [
+            "      streams.push(live);\n"
+          ]
+        ],
+        [
+          105,
+          105,
+          [
+            "      live.onerror = () => { s.connected = false; connectionChanged(); };\n"
+          ]
+        ],
+        [
+          121,
+          122,
+          [
+            "      const response = await fetch(`${s.base}/json?poll=1&since=${s.lastId ?? '12h'}`, { cache: 'no-store', signal: AbortSignal.timeout(5000) });\n",
+            "      if (!response.ok) throw new Error('History unavailable');\n",
+            "      const text = await response.text();\n"
+          ]
+        ],
+        [
+          124,
+          124,
+          [
+            "      s.connected = true;\n"
+          ]
+        ],
+        [
+          125,
+          126,
+          [
+            "    } catch { s.connected = false; }\n",
+            "    connectionChanged();\n"
+          ]
+        ],
+        [
+          132,
+          132,
+          [
+            "    const allowed = (name) => !privateWork || privateWork.agents.some((agent) => agent.name === name);\n"
+          ]
+        ],
+        [
+          135,
+          136,
+          [
+            "        if (typeof name === 'string' && name.trim() && allowed(name) && !store.bots.has(botIdFor(name))) store.apply({ t, bot: name, status: 'idle', step: '', listed: true }, { replay });\n"
+          ]
+        ],
+        [
+          140,
+          141,
+          [
+            "      for (const [name, look] of Object.entries(rec.looks).slice(0, 400)) if (allowed(name)) (cfg[name] ||= {}).look = look;\n"
+          ]
+        ],
+        [
+          144,
+          145,
+          [
+            "    if (!privateWork && isMap(rec.groups)) {             // Local workspace assignments take precedence over mailbox groups.\n"
+          ]
+        ],
+        [
+          146,
+          147,
+          [
+            "        if (allowed(name) && typeof team === 'string' && team.trim()) (cfg[name] ||= {}).floor = team.trim().slice(0, 40);\n"
+          ]
+        ],
+        [
+          153,
+          154,
+          [
+            "        if (!privateWork && typeof url === 'string' && /^(grokbot|https):\\/\\//i.test(url.trim())) (cfg[name] ||= {}).chat_url = url.trim();\n"
+          ]
+        ],
+        [
+          176,
+          176,
+          [
+            "    // The local observer is authoritative; delayed mailbox events cannot undo it.\n",
+            "    if (!allowed(rec.bot) || localStates.has(rec.bot)) return false;\n"
+          ]
+        ],
+        [
+          180,
+          180,
+          [
+            "    s.connection = connection();\n",
+            "    s.brand = privateWork?.brand || 'VIRTUAL OFFICE';\n",
+            "    for (const agent of privateWork?.agents || []) {\n",
+            "      const bot = s.bots[botIdFor(agent.name)];\n",
+            "      if (bot) { bot.agent_id=agent.id; bot.provider=agent.provider; bot.workspace=agent.workspace || null; bot.latest_message=agent.latest_message || null; bot.command_capability=agent.command_capability || null; }\n",
+            "    }\n",
+            "    s.history_ok = privateWork?.history_ok !== false;\n"
+          ]
+        ],
+        [
+          190,
+          191,
+          [
+            "    s.finished = privateWork ? (privateWork.finished || []).map((r) => ({\n",
+            "      t: r.finished_at || r.started_at, bot: botIdFor(r.name), name: r.name,\n",
+            "      step: r.delivery_preview || (r.status === 'done' ? '完成；此來源未提供文字交付。' : '工作未完成；查看記錄。'),\n",
+            "      persisted: true, run_id: r.id, status: r.status, url: agentPageUrl(r.agent_id, topic, r.id),\n",
+            "    })) : finished;\n"
+          ]
+        ],
+        [
+          200,
+          201,
+          [
+            "    return privateWork ? withGroundFloor(s) : s;\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/index.html",
+      "destination": "office/index.html",
+      "source_sha256": "23b668816dfb19fefb03a9ff205d39ba0261c65525a398f7df99b77fa77657e8",
+      "installed_sha256": "c3eefec08d101218ee848d8269d6329ff3a9e1dead8d7dc5368bd9614d80f40c",
+      "edits": [
+        [
+          1,
+          2,
+          [
+            "<html lang=\"zh-Hant\">\n"
+          ]
+        ],
+        [
+          5,
+          7,
+          [
+            "  <title>Virtual Office · 私人 3D 辦公室</title>\n",
+            "  <meta name=\"description\" content=\"本機 Agent 辦公室：即時對話、工作狀態與交付記錄。\">\n"
+          ]
+        ],
+        [
+          9,
+          15,
+          [
+            "  <meta property=\"og:site_name\" content=\"Virtual Office\">\n",
+            "  <meta property=\"og:title\" content=\"Virtual Office\">\n",
+            "  <meta property=\"og:description\" content=\"本機 Agent 辦公室：即時對話、工作狀態與交付記錄。\">\n"
+          ]
+        ],
+        [
+          16,
+          18,
+          [
+            "  <meta name=\"twitter:title\" content=\"Virtual Office\">\n"
+          ]
+        ],
+        [
+          29,
+          29,
+          [
+            "  <link rel=\"stylesheet\" href=\"./invite.css\">\n",
+            "  <link rel=\"stylesheet\" href=\"./commands.css\">\n"
+          ]
+        ],
+        [
+          40,
+          41,
+          [
+            "<style>.office-empty #panel,.office-empty #feed,.office-empty #floors,.office-empty .bhq-dock{display:none!important}</style></head>\n"
+          ]
+        ],
+        [
+          44,
+          44,
+          [
+            "  <section id=\"enrollment-empty\" aria-label=\"入駐說明\" hidden style=\"position:fixed;left:50%;bottom:32px;transform:translateX(-50%);z-index:10;background:rgba(255,255,255,.94);color:#25342e;border:1px solid #d7dfd8;border-radius:18px;padding:18px 26px;box-shadow:0 8px 30px #0001;text-align:center;max-width:440px;font-family:system-ui;pointer-events:none\">\n",
+            "    <strong style=\"display:block;font-size:18px;margin-bottom:8px\">辦公室已準備好</strong>\n",
+            "    <span style=\"font-size:14px;line-height:1.7\">目前沒有 Agent 入駐。<br>按「邀請 Agent」，把接入 Prompt 貼給你選定的 Agent。</span>\n",
+            "  </section>\n"
+          ]
+        ],
+        [
+          47,
+          48,
+          [
+            "  <script>addEventListener(\"unhandledrejection\",e=>{const t=document.querySelector(\".hq-loading-label\");if(t)t.textContent=\"載入錯誤：\"+(e.reason?.message||\"unknown\");});</script><script type=\"module\" src=\"./app.js\"></script>\n",
+            "  <script type=\"module\" src=\"./invite.js\"></script>\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/lib/feedbase.js",
+      "destination": "office/lib/feedbase.js",
+      "source_sha256": "91a7738ce3bb5a0a31b1f15e5c32c742de430cb5ffcb8ced4c17a2172be7fab4",
+      "installed_sha256": "91a7738ce3bb5a0a31b1f15e5c32c742de430cb5ffcb8ced4c17a2172be7fab4"
+    },
+    {
+      "source": "web/lib/state.js",
+      "destination": "office/lib/state.js",
+      "source_sha256": "998e4938c4fa3c085c95c80d23ee531b661d7eddd66761513ea9018b3272b9d1",
+      "installed_sha256": "486e2137cbe67d51120b09f344d74f9aa9d133df306caae6ea556b51b115383c",
+      "edits": [
+        [
+          50,
+          53,
+          [
+            "  // Preserve distinct Chinese and otherwise similar names without changing display labels.\n",
+            "  return 'bot-' + hex(String(name).normalize('NFC').trim());\n"
+          ]
+        ],
+        [
+          157,
+          157,
+          [
+            "    this.statusIdleMs = opts.statusIdleMs ?? LIMITS.IDLE_MS;\n"
+          ]
+        ],
+        [
+          179,
+          179,
+          [
+            "    for (const floor of this.floorReg.values()) {\n",
+            "      const base = this.floorsCfg.floors.find((item) => item.id === floor.baseId);\n",
+            "      if (base) floor.name = floor.n === 1 ? base.name : `${base.name} · ${floor.n}`;\n",
+            "    }\n"
+          ]
+        ],
+        [
+          392,
+          393,
+          [
+            "    if (age > this.statusIdleMs) return 'idle';\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/lib/util.js",
+      "destination": "office/lib/util.js",
+      "source_sha256": "a902727b8da2516732d83b506903c897170b3d16795ff93e5b6d881ae1c54830",
+      "installed_sha256": "a902727b8da2516732d83b506903c897170b3d16795ff93e5b6d881ae1c54830"
+    },
+    {
+      "source": "web/scene/actor.js",
+      "destination": "office/scene/actor.js",
+      "source_sha256": "990701cf4300ea51ad65e42fe12850e74b769b6c50edecbc859c9664c8edffda",
+      "installed_sha256": "ecc925e25b1db636e3c34786b5e7c093f24ab56a3bfd6fd45102ab87b57fedae",
+      "edits": [
+        [
+          5,
+          5,
+          [
+            "import { DialogueBubble } from './dialogue.js';\n"
+          ]
+        ],
+        [
+          75,
+          75,
+          [
+            "    this.tagStatus=document.createElement('span');this.tagStatus.className='hqt-state';this.tagEl.querySelector('.hqt-pill').append(this.tagStatus);\n"
+          ]
+        ],
+        [
+          81,
+          81,
+          [
+            "    this.dialogue = new DialogueBubble(() => this.ctx.onSelect?.(this.id));\n",
+            "    this.speech = new CSS2DObject(this.dialogue.element);\n",
+            "    this.speech.center.set(0.5, 1);\n",
+            "    this.speech.position.y = MODEL_HEIGHT + 0.65;\n",
+            "    this.speech.visible = false;\n",
+            "    this.pivot.add(this.speech);\n"
+          ]
+        ],
+        [
+          122,
+          122,
+          [
+            "    this.speech.position.y = box.max.y + 0.65;\n"
+          ]
+        ],
+        [
+          145,
+          145,
+          [
+            "    this.tag.center.y=bot.overview?1:0;\n"
+          ]
+        ],
+        [
+          151,
+          151,
+          [
+            "    this.dialogue.update(bot, this.selected);\n"
+          ]
+        ],
+        [
+          170,
+          171,
+          [
+            "    const mode = this.selected ? 'sel' : bot.overview ? 'overview' : attn ? 'attn' : this.hovered ? 'hover' : 'off';\n"
+          ]
+        ],
+        [
+          176,
+          176,
+          [
+            "    const statusText={working:'工作中',idle:'休息中',waiting_user:'等待',error:'錯誤',stuck:'待確認',done:'完成'}[s]||s;\n"
+          ]
+        ],
+        [
+          181,
+          182,
+          [
+            "    this.tagStatus.textContent=bot.overview?statusText:'';\n",
+            "    this.tagEl.title = bot.overview?`${bot.name} · ${statusText}`:'';\n"
+          ]
+        ],
+        [
+          357,
+          357,
+          [
+            "    this.speech.visible = this.dialogue.visible && this.hostAlpha > 0.5 && !this.retiring && this.scaleS.x > 0.6;\n",
+            "    // Floor/model animation can hide the anchor for one frame; keep the reader open.\n",
+            "    if (this.retiring && this.dialogue.open) this.dialogue.setOpen(false);\n"
+          ]
+        ],
+        [
+          389,
+          389,
+          [
+            "    this.dialogue.dispose();\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/scene/blobgen.html",
+      "destination": "office/scene/blobgen.html",
+      "source_sha256": "7b56408e504e97b6bce891c80dae7f02935b26704082f487ec42423e5783756d",
+      "installed_sha256": "7b56408e504e97b6bce891c80dae7f02935b26704082f487ec42423e5783756d"
+    },
+    {
+      "source": "web/scene/blobgen.js",
+      "destination": "office/scene/blobgen.js",
+      "source_sha256": "f5800c8f6e7db58de92b38ccc0129905ee64d16f1f4c2b57807879db8f878a15",
+      "installed_sha256": "f5800c8f6e7db58de92b38ccc0129905ee64d16f1f4c2b57807879db8f878a15"
+    },
+    {
+      "source": "web/scene/building.js",
+      "destination": "office/scene/building.js",
+      "source_sha256": "9e67d3f50daf60b76c9e4a95825068ab7c3ae88a63baeda1cc83e990c64e5f87",
+      "installed_sha256": "288c8384442fe0a2dd26bacdcfa6fe49f21518148eec8774357ea91e2a917c07",
+      "edits": [
+        [
+          11,
+          11,
+          [
+            "import { GroundHall } from './ground-hall.js';\n"
+          ]
+        ],
+        [
+          129,
+          129,
+          [
+            "    this.overview = new GroundHall();\n",
+            "    this.group.add(this.overview.root);\n"
+          ]
+        ],
+        [
+          253,
+          253,
+          [
+            "    this.overview.configure(list.find(f=>f.kind==='overview')?.bots.length||0);\n"
+          ]
+        ],
+        [
+          263,
+          264,
+          [
+            "        const closed=f.kind==='overview'?{root:this.overview.closed,setShown(v){this.root.visible=v;},dispose(){this.root.removeFromParent();}}:new Instance(this,this.assets.templates.floor_closed,'closed');\n",
+            "        s = { id: f.id, name: f.name, kind:f.kind, index: i, closed, open: null, lift: new Spring(1, 0.5), showOpen: false };\n"
+          ]
+        ],
+        [
+          280,
+          280,
+          [
+            "    if(slot.kind==='overview')return;\n"
+          ]
+        ],
+        [
+          294,
+          294,
+          [
+            "    if(s.open===this.overview){this.overview.setShown(false);return;}\n"
+          ]
+        ],
+        [
+          343,
+          343,
+          [
+            "    if(slot.kind==='overview'){slot.open=this.overview;this.overview.floorId=slot.id;return this.overview;}\n"
+          ]
+        ],
+        [
+          367,
+          368,
+          [
+            "    const all = [this.roof, this.shaft, this.cabin, ...this.slots.map((s) => s.closed), ...this.pool, this.overview];\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/scene/daylight.js",
+      "destination": "office/scene/daylight.js",
+      "source_sha256": "86087d296ea2b4e9b52acbffddb7fd3b1bf64d50873f0cc0bb23e5a68a76effb",
+      "installed_sha256": "562767cc03c6b3741b3b792defb875b74e40a847c7a2aff2860879fdf2864053",
+      "edits": [
+        [
+          263,
+          263,
+          [
+            "    const layout=building?.activeSlot?.kind==='overview'?building.overview.layout:null;\n",
+            "    const room=layout?{...ROOM,x:layout.width/2+.3,z:layout.depth/2+.3}:ROOM;\n"
+          ]
+        ],
+        [
+          274,
+          275,
+          [
+            "      corner.set(centre.x + (i & 1 ? room.x : -room.x), y + (i & 2 ? room.y1 : room.y0), centre.z + (i & 4 ? room.z : -room.z));\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/scene/floorstyle.js",
+      "destination": "office/scene/floorstyle.js",
+      "source_sha256": "9bef0eefa759849eafda5ae22e8c3ea58d9fa8a971b3c033c68cb07fa03c8506",
+      "installed_sha256": "9bef0eefa759849eafda5ae22e8c3ea58d9fa8a971b3c033c68cb07fa03c8506"
+    },
+    {
+      "source": "web/scene/looks.js",
+      "destination": "office/scene/looks.js",
+      "source_sha256": "f6493d9fd6087b2262249a74a882a05c8f1112ebeafb520d5df8554b79e14e5c",
+      "installed_sha256": "f6493d9fd6087b2262249a74a882a05c8f1112ebeafb520d5df8554b79e14e5c"
+    },
+    {
+      "source": "web/scene/office.js",
+      "destination": "office/scene/office.js",
+      "source_sha256": "7c40733ab6cb5349e2cde7280079c557713a29b8c338f1e6e23ece13f232310c",
+      "installed_sha256": "7c40733ab6cb5349e2cde7280079c557713a29b8c338f1e6e23ece13f232310c"
+    },
+    {
+      "source": "web/scene/outlines.js",
+      "destination": "office/scene/outlines.js",
+      "source_sha256": "23ec5de5f78eb59a466a1480952b6cd385fb9f0808a058dc908f758abc1e5828",
+      "installed_sha256": "23ec5de5f78eb59a466a1480952b6cd385fb9f0808a058dc908f758abc1e5828"
+    },
+    {
+      "source": "web/scene/post.js",
+      "destination": "office/scene/post.js",
+      "source_sha256": "46c1fa953b307fa1e502f2523b6ed1f836326093933dba9f38f5b2f2f348ff25",
+      "installed_sha256": "46c1fa953b307fa1e502f2523b6ed1f836326093933dba9f38f5b2f2f348ff25"
+    },
+    {
+      "source": "web/scene/scene.css",
+      "destination": "office/scene/scene.css",
+      "source_sha256": "429c34f56a5a9b52d6cf1847ed6f91e6b59ca36afaa50ca066d72915315066a9",
+      "installed_sha256": "59aa5e5e51faea6b685591ce24717d2c6b39f90add09ae7f05fc54e25c8522a6",
+      "edits": [
+        [
+          52,
+          52,
+          [
+            ".hqt[data-mode=\"overview\"] .hqt-pill{max-width:144px;height:24px;padding:0 8px;font-size:10px;gap:5px}\n",
+            ".hqt[data-mode=\"overview\"] .hqt-stem{height:8px}\n",
+            ".hqt-state{flex:none;font-size:9px;font-weight:650}.hqt-state:empty{display:none}\n"
+          ]
+        ],
+        [
+          73,
+          73,
+          [
+            "\n",
+            "/* Public dialogue follows the avatar's 3D head anchor, including movement and zoom. */\n",
+            ".office-speech { width: 240px; pointer-events:auto; color:#20312b; font:13px/1.5 system-ui,sans-serif; user-select:text; -webkit-user-select:text; filter:drop-shadow(0 8px 18px #14271f22); }\n",
+            ".office-speech.expanded { width:min(350px,76vw); z-index:10000 !important; }\n",
+            ".speech-peek { display:grid; grid-template-columns:1fr auto; gap:4px 12px; width:100%; padding:12px 14px; background:#fffffff5; border:1px solid #d8e3db; border-radius:15px; text-align:left; color:inherit; cursor:pointer; box-shadow:0 1px 1px #0001; font:inherit; }\n",
+            ".speech-name { font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:11px; }\n",
+            ".speech-meta { font-size:10px; color:#43745a; }\n",
+            ".speech-preview { grid-column:1/-1; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.5; overflow-wrap:anywhere; }\n",
+            ".speech-tail { display:block; width:12px; height:12px; background:#fff; border-right:1px solid #d8e3db; border-bottom:1px solid #d8e3db; transform:rotate(45deg); margin:-7px auto 0; }\n",
+            ".speech-detail { border:1px solid #d8e3db; border-top:0; border-radius:0 0 15px 15px; background:#fbfdfb; overflow:hidden; }\n",
+            ".speech-detail[hidden] { display:none; }\n",
+            ".expanded .speech-peek { border-radius:15px 15px 0 0; }\n",
+            ".expanded .speech-preview { -webkit-line-clamp:1; }\n",
+            ".speech-toolbar { display:flex; align-items:center; justify-content:space-between; padding:6px 12px; color:#567060; font-size:10px; }\n",
+            ".speech-close { border:0; background:none; color:#567060; cursor:pointer; font-size:20px; padding:0 5px; }\n",
+            ".speech-messages { box-sizing:border-box; max-height:min(210px,30vh); overflow:auto; overscroll-behavior:contain; padding:0 12px 10px; touch-action:pan-y; }\n",
+            ".office-speech.below .speech-tail { position:absolute; top:0; left:50%; margin:0; transform:translate(-50%,-50%) rotate(225deg); }\n",
+            ".speech-message { padding:9px 10px; margin:8px 0; border-radius:10px; background:#edf4ef; }\n",
+            ".speech-message[data-role=user] { background:#edf1f8; }\n",
+            ".speech-message small { color:#65766c; font-size:10px; }\n",
+            ".speech-message p { margin:4px 0 0; font-size:12px; line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; }\n",
+            ".speech-history { display:block; border-top:1px solid #e0e8e2; padding:9px 12px; color:#37634b; font-size:11px; text-decoration:none; }\n",
+            ".speech-older { display:block; margin:0 auto; border:0; background:transparent; color:#37634b; cursor:pointer; font:inherit; font-size:11px; }\n",
+            ".speech-older[hidden] { display:none; }\n",
+            "@media(max-width:600px){.office-speech{width:190px}.office-speech.expanded{width:min(300px,78vw)}.speech-peek{padding:8px 10px}.speech-messages{max-height:24vh}}\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/scene/scene.js",
+      "destination": "office/scene/scene.js",
+      "source_sha256": "35eea27d0343f2d4eeeafbb0e28d1169fac56a939c266f0f669cbd8c0ef9a4e7",
+      "installed_sha256": "f9218b9700f27fbd23cc847e961185f2b3b6d40b4a928ce95054d858ddc9684b",
+      "edits": [
+        [
+          15,
+          15,
+          [
+            "import { isGround } from '../overview.js';\n"
+          ]
+        ],
+        [
+          52,
+          52,
+          [
+            "let sizeSignature='';\n"
+          ]
+        ],
+        [
+          170,
+          171,
+          [
+            "  const overview=isGround(building.activeId);\n",
+            "  const floorBots = overview?Object.values(state.bots).sort((a,b)=>a.id.localeCompare(b.id)).map(b=>({...b,overview:true})):Object.values(state.bots).filter((b) => b.floor === building.activeId);\n",
+            "  resize();\n"
+          ]
+        ],
+        [
+          176,
+          178,
+          [
+            "  const lounge = overview?new Map():assignLounge(floorBots);\n",
+            "  const flags = new Array(overview?inst.spots.length:20).fill(0);\n"
+          ]
+        ],
+        [
+          179,
+          180,
+          [
+            "  for (const [index,bot] of floorBots.entries()) {\n"
+          ]
+        ],
+        [
+          182,
+          183,
+          [
+            "      actor = new Actor(bot, { parent: inst.root, inst, pickables, confetti, cursor, onSelect: callbacks.onSelectBot, dropDelay: delay });\n"
+          ]
+        ],
+        [
+          186,
+          188,
+          [
+            "    const deskIdx = overview?index:(DESK_ORDER[(bot.desk || 1) - 1] || 1) - 1;\n",
+            "    const desk = overview?inst.spots[deskIdx]:assets.spots.desks[deskIdx] || assets.spots.desks[0];\n"
+          ]
+        ],
+        [
+          306,
+          307,
+          [
+            "  cam.y.to(building.activeY + 4.0); // Leave room above the actor for its dialogue.\n"
+          ]
+        ],
+        [
+          320,
+          322,
+          [
+            "  const bounds=panBounds();\n",
+            "  cam.x.target = clamp(cam.x.target, -bounds.x, bounds.x);\n",
+            "  cam.z.target = clamp(cam.z.target, -bounds.z, bounds.z);\n"
+          ]
+        ],
+        [
+          328,
+          328,
+          [
+            "  const layout=isGround(building?.activeId)?building.overview.layout:null;\n",
+            "  const signature=`${w}:${h}:${layout?.width||0}:${layout?.depth||0}`;\n",
+            "  if(signature===sizeSignature)return;\n",
+            "  sizeSignature=signature;\n"
+          ]
+        ],
+        [
+          334,
+          335,
+          [
+            "  const wide=layout?Math.max(spanW,(layout.width+layout.depth)*.99):spanW;\n",
+            "  const tall=layout?Math.max(VIEW_SPAN.h,(layout.width+layout.depth)*.59):VIEW_SPAN.h;\n",
+            "  const halfH = Math.max(tall, wide / aspect) / 2 * (WALLPAPER ? WALLPAPER_FRAMING : 1);\n"
+          ]
+        ],
+        [
+          344,
+          344,
+          [
+            "const panBounds = ()=>isGround(building?.activeId)?{x:building.overview.layout.width/2,z:building.overview.layout.depth/2}:{x:9.5,z:7.5};\n"
+          ]
+        ],
+        [
+          398,
+          400,
+          [
+            "  const bounds=panBounds();\n",
+            "  cam.x.snap(clamp(cam.x.x + wx, -bounds.x, bounds.x));\n",
+            "  cam.z.snap(clamp(cam.z.x + wz, -bounds.z, bounds.z));\n"
+          ]
+        ],
+        [
+          626,
+          627,
+          [
+            "  if (!WALLPAPER || WALLPAPER_TAGS) {\n",
+            "    labels.render(scene, camera);\n",
+            "    const height = container.clientHeight;\n",
+            "    for (const actor of actors.values()) {\n",
+            "      if (!actor.speech.visible) continue;\n",
+            "      actor.speech.getWorldPosition(tmp).project(camera);\n",
+            "      const below = actor.dialogue.fitViewport((1 - tmp.y) * height / 2, height);\n",
+            "      actor.speech.center.y = below ? 0 : 1;\n",
+            "    }\n",
+            "  }\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/scene/spring.js",
+      "destination": "office/scene/spring.js",
+      "source_sha256": "b84525887cedc24824f73eefb0b80eb40028f6862aad2a6d85bf1602d4147a6f",
+      "installed_sha256": "b84525887cedc24824f73eefb0b80eb40028f6862aad2a6d85bf1602d4147a6f"
+    },
+    {
+      "source": "web/scene/studio.js",
+      "destination": "office/scene/studio.js",
+      "source_sha256": "ab63f9db333db401d9d407e8366b54da925e7dd0ec559fd3fc723f5d20a2e46b",
+      "installed_sha256": "ab63f9db333db401d9d407e8366b54da925e7dd0ec559fd3fc723f5d20a2e46b"
+    },
+    {
+      "source": "web/scene/sunpatch.js",
+      "destination": "office/scene/sunpatch.js",
+      "source_sha256": "426d21d29c3d01b399e5e2011c65b4e23f35f419120ee9deec58bfb23671ee98",
+      "installed_sha256": "426d21d29c3d01b399e5e2011c65b4e23f35f419120ee9deec58bfb23671ee98"
+    },
+    {
+      "source": "web/scene/walls.js",
+      "destination": "office/scene/walls.js",
+      "source_sha256": "899cd86c01a5dc12dc5f3968ac739108c3c5e14490f646fb40a9ed42416097ed",
+      "installed_sha256": "899cd86c01a5dc12dc5f3968ac739108c3c5e14490f646fb40a9ed42416097ed"
+    },
+    {
+      "source": "web/share/share.css",
+      "destination": "office/share/share.css",
+      "source_sha256": "b3b4e23e013d639c4c8a8398d6fa1693ee1a94abcc150b88b438619f1cb3e374",
+      "installed_sha256": "b3b4e23e013d639c4c8a8398d6fa1693ee1a94abcc150b88b438619f1cb3e374"
+    },
+    {
+      "source": "web/share/share.js",
+      "destination": "office/share/share.js",
+      "source_sha256": "2a606ed0fc81cc68b863d103f3a28ba9ab490f8f403e024dda3b39302c0c2f50",
+      "installed_sha256": "2a606ed0fc81cc68b863d103f3a28ba9ab490f8f403e024dda3b39302c0c2f50"
+    },
+    {
+      "source": "web/styles.css",
+      "destination": "office/styles.css",
+      "source_sha256": "715ab5291f420c9dd91691e1f17a1837d7254960ea2adb5ff666c19ea66e8ea8",
+      "installed_sha256": "715ab5291f420c9dd91691e1f17a1837d7254960ea2adb5ff666c19ea66e8ea8"
+    },
+    {
+      "source": "web/ui/harness.html",
+      "destination": "office/ui/harness.html",
+      "source_sha256": "d0f5fe1c77396806e36f189abe2d829d859746767df6fee3c2b347084968b730",
+      "installed_sha256": "d0f5fe1c77396806e36f189abe2d829d859746767df6fee3c2b347084968b730"
+    },
+    {
+      "source": "web/ui/ui.css",
+      "destination": "office/ui/ui.css",
+      "source_sha256": "40cc4c428acff83e7b158b31c562cb0fd7bdc2f93f6c661bed80b8caa77dba21",
+      "installed_sha256": "2b6ab920129465bbfceadababf86809b36534cc2e93c5d1f133b4792f9bc7c45",
+      "edits": [
+        [
+          159,
+          159,
+          [
+            ".bhq-live:not([data-connection=\"live\"]) .bhq-live-dot { --s: #FFB020; animation: none; }\n",
+            ".bhq-live[data-connection=\"offline\"] { color: #FFB6AD; }\n",
+            ".bhq-live[data-connection=\"offline\"] .bhq-live-dot { --s: #FF453A; }\n",
+            ".bhq-delivery-open { margin-top:6px; padding:5px 9px; border:1px solid #ffffff30; border-radius:7px; color:#b7dbff; background:#ffffff0c; cursor:pointer; font:inherit; }\n"
+          ]
+        ],
+        [
+          271,
+          271,
+          [
+            ".office-ground-hint{margin:12px 0 0;font:500 11px/1.6 system-ui;color:var(--mid)}\n"
+          ]
+        ],
+        [
+          305,
+          305,
+          [
+            ".office-ground-view .bhq-member{padding-top:5px;padding-bottom:5px;gap:9px}\n",
+            ".office-ground-view .bhq-mname{font-size:12px}.office-ground-view .bhq-mstep{font-size:11px}\n"
+          ]
+        ],
+        [
+          621,
+          621,
+          [
+            ".bhq-phone .bhq-brand .bhq-live:not([data-connection=\"live\"]) { display: flex; }\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/ui/ui.js",
+      "destination": "office/ui/ui.js",
+      "source_sha256": "6b2be996bc38048d3a6eb48ddf8ee72cd5d4743908dfda4e978afa9f9304bee0",
+      "installed_sha256": "6674f547564072be5391f6da8b59db14252bbca2a64f9e2b8ce903a400b3dca6",
+      "edits": [
+        [
+          40,
+          46,
+          [
+            "  working: '工作中',\n",
+            "  idle: '休息中',\n",
+            "  waiting_user: '等待你',\n",
+            "  error: '錯誤',\n",
+            "  stuck: '停滯',\n",
+            "  done: '完成',\n"
+          ]
+        ],
+        [
+          48,
+          54,
+          [
+            "  working: '工作中',\n",
+            "  idle: '休息中',\n",
+            "  waiting_user: '等待你',\n",
+            "  error: '錯誤',\n",
+            "  stuck: '停滯',\n",
+            "  done: '完成',\n"
+          ]
+        ],
+        [
+          58,
+          64,
+          [
+            "  working: ['工作中', '工作中'],\n",
+            "  waiting_user: ['等待', '等待'],\n",
+            "  error: ['錯誤', '錯誤'],\n",
+            "  stuck: ['停滯', '停滯'],\n",
+            "  idle: ['休息中', '休息中'],\n",
+            "  done: ['完成', '完成'],\n"
+          ]
+        ],
+        [
+          485,
+          485,
+          [
+            "  const connectionLabel = h('span', { text: '連線中' });\n",
+            "  const connection = h('span', { class: 'bhq-live', 'data-connection': 'connecting', role: 'status' },\n",
+            "    h('i', { class: 'bhq-dot bhq-live-dot', 'aria-hidden': 'true' }), connectionLabel, ' · ', clock);\n"
+          ]
+        ],
+        [
+          487,
+          488,
+          [
+            "    h('b', { class: 'bhq-word', text: 'VIRTUAL OFFICE' }),\n"
+          ]
+        ],
+        [
+          489,
+          490,
+          [
+            "    connection);\n"
+          ]
+        ],
+        [
+          518,
+          519,
+          [
+            "  const right = h('div', { class: 'bhq-right' }, demo, usage);\n"
+          ]
+        ],
+        [
+          521,
+          522,
+          [
+            "  U.top = { root, clock, connection, connectionLabel, chips, summary, usage, usageLabel, meter, fill, pct, reset, demo };\n"
+          ]
+        ],
+        [
+          533,
+          534,
+          [
+            "  root.append(h('div', { class: 'bhq-fhead' }, h('span', { text: '樓層' }), count), fscroll);\n"
+          ]
+        ],
+        [
+          560,
+          560,
+          [
+            "  const teamHint = h('p', {class:'office-ground-hint',text:'所有已入駐 Agent · 狀態、對話與交付即時同步',hidden:true});\n"
+          ]
+        ],
+        [
+          573,
+          574,
+          [
+            "  const teamEmpty = h('p', { class: 'bhq-note', text: '目前沒有成員。只有你指定入駐的 Agent 才會顯示。', hidden: true });\n"
+          ]
+        ],
+        [
+          575,
+          575,
+          [
+            "  head.append(teamHint);\n"
+          ]
+        ],
+        [
+          615,
+          616,
+          [
+            "  const cta = h('button', { class: 'bhq-cta', type: 'button', text: '開啟對話／記錄', disabled: true, title: '正在載入記錄入口' });\n"
+          ]
+        ],
+        [
+          622,
+          623,
+          [
+            "  const workspace = h('button', {class:'office-workspace-edit',type:'button',text:'設定 Workspace',hidden:true});\n",
+            "  workspace.addEventListener('click', () => {\n",
+            "    const b = U.last.state?.bots?.[U.cardBot];\n",
+            "    if (b?.agent_id) window.dispatchEvent(new CustomEvent('office:workspace',{detail:{id:b.agent_id,name:b.name}}));\n",
+            "  });\n",
+            "  const more = h('div', { class: 'bhq-more bhq-surface bhq-glow bhq-glow--still' }, body, h('div', { class: 'bhq-card-foot' }, cta,workspace));\n"
+          ]
+        ],
+        [
+          629,
+          630,
+          [
+            "    root, team, tcard, teamHead: head, teamTitle, teamSub, teamHint, teamBig: big, nWait, nErr, rowWait, rowErr, lErr, list, teamEmpty,\n"
+          ]
+        ],
+        [
+          632,
+          633,
+          [
+            "      sSteps, sTasks, sHours, usageLabel, useBlock, fuel, fillBar, shareNum, hist, histSig: null, cta, workspace, fresh: true,\n"
+          ]
+        ],
+        [
+          648,
+          649,
+          [
+            "  const empty = h('p', { class: 'bhq-note', text: '未有活動。', hidden: true });\n"
+          ]
+        ],
+        [
+          744,
+          745,
+          [
+            "  const finished = dockCard('finished', '交付紀錄');\n"
+          ]
+        ],
+        [
+          748,
+          749,
+          [
+            "  const wempty = h('p', { class: 'bhq-note', text: '沒有待確認事項。', hidden: true });\n"
+          ]
+        ],
+        [
+          752,
+          753,
+          [
+            "  const fempty = h('p', { class: 'bhq-note', text: '尚未收到交付紀錄。', hidden: true });\n"
+          ]
+        ],
+        [
+          1116,
+          1116,
+          [
+            "  const connection = state.connection || { status: 'connecting', label: '等待連線' };\n",
+            "  setText(t.connectionLabel, connection.label);\n",
+            "  const brand = document.querySelector('.bhq-word');\n",
+            "  if (brand) setText(brand, state.brand || 'VIRTUAL OFFICE');\n",
+            "  setAttr(t.connection, 'data-connection', connection.status);\n",
+            "  setAttr(t.summary, 'title', connection.status === 'live' ? '目前同步狀態' : '目前保留最後一次狀態，等待同步恢復');\n"
+          ]
+        ],
+        [
+          1198,
+          1199,
+          [
+            "    setText(r.num, fl.kind==='overview'?'G/F':number);\n"
+          ]
+        ],
+        [
+          1216,
+          1217,
+          [
+            "    setAttr(r.btn, 'aria-label', (fl.kind==='overview'?'G/F':'Floor '+number) + ', ' + (fl.name || fl.id) + ': ' + ids.length + ' ' + plural(ids.length, 'bot', 'bots') + (summary ? ' (' + summary + ')' : ''));\n"
+          ]
+        ],
+        [
+          1335,
+          1335,
+          [
+            "  setHidden(p.teamHint, floor?.kind!=='overview');\n"
+          ]
+        ],
+        [
+          1402,
+          1402,
+          [
+            "  setHidden(c.workspace, !bot.agent_id);\n"
+          ]
+        ],
+        [
+          1452,
+          1453,
+          [
+            "  setAttr(c.cta, 'title', has ? '查看收到的任務、交付內容及來源對話' : '正在載入記錄入口');\n"
+          ]
+        ],
+        [
+          1655,
+          1656,
+          [
+            "    .filter((x) => x.e && (x.e.persisted || x.t == null || now - x.t <= DAY_MS))\n"
+          ]
+        ],
+        [
+          1661,
+          1662,
+          [
+            "  setHidden(d.fempty, items.length > 0 && state.history_ok !== false);\n",
+            "  setText(d.fempty, state.history_ok === false ? '交付記錄暫時未能更新；以下是已保存內容。' : '尚未收到交付紀錄。');\n"
+          ]
+        ],
+        [
+          1663,
+          1664,
+          [
+            "  const sig = items.map((x) => x.t + '|' + x.e.bot + '|' + x.e.step + '|' + x.e.url).join('\\n');\n"
+          ]
+        ],
+        [
+          1677,
+          1677,
+          [
+            "      if (x.e.url) {\n",
+            "        const open = h('button', { class: 'bhq-delivery-open', type: 'button', text: '查看交付' });\n",
+            "        open.addEventListener('click', () => openChat(x.e.bot, x.e.url));\n",
+            "        li.lastElementChild.append(open);\n",
+            "      }\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "web/wallpaper.js",
+      "destination": "office/wallpaper.js",
+      "source_sha256": "873a540695260ace7f4bb39fbb04dc8aa7bae4f14cb34ae9df04e303c0f346c4",
+      "installed_sha256": "02554bf9d5216440064dba6f1455b741867d2bf29660dc50397f93abf48c9d4e",
+      "edits": [
+        [
+          56,
+          56,
+          [
+            "  if (state.connection && state.connection.status !== 'live') {\n",
+            "    for (const s of Object.values(segs)) show(s.root, false);\n",
+            "    set(rest, state.connection.label);\n",
+            "    show(rest, true);\n",
+            "    show(el, true);\n",
+            "    return;\n",
+            "  }\n"
+          ]
+        ]
+      ]
+    },
+    {
+      "source": "assets/blobs/grok-bot.glb",
+      "destination": "assets/blobs/grok-bot.glb",
+      "source_sha256": "346b385a8901ad71e20c9f82d5aa189be57d4f1a7ce073aa8cd3fe5e52434584",
+      "installed_sha256": "346b385a8901ad71e20c9f82d5aa189be57d4f1a7ce073aa8cd3fe5e52434584"
+    },
+    {
+      "source": "assets/blobs/thumbs/grok-bot.png",
+      "destination": "assets/blobs/thumbs/grok-bot.png",
+      "source_sha256": "aa5208e10145455084724b2fe296ccfd0fdec26e4d2ccf61e289ac6d0c97770d",
+      "installed_sha256": "aa5208e10145455084724b2fe296ccfd0fdec26e4d2ccf61e289ac6d0c97770d"
+    }
+  ],
+  "overrides": [
+    {
+      "destination": "office/invite.js",
+      "sha256": "58934c824f431fbabc92662951f5af09513316ec5e245b168ade5888be903371"
+    },
+    {
+      "destination": "office/invite.css",
+      "sha256": "d7831e7fe889bae9096e918b4534476a064b43dd9e16def5cee2abc9675389dd"
+    },
+    {
+      "destination": "office/agent.css",
+      "sha256": "7736f10f1548f188042c189be6be8747efc0e9644957961a1a1ba6f36ddb209d"
+    },
+    {
+      "destination": "office/office-api.js",
+      "sha256": "600c16131a39ef0f97b8ea4d34848bb5c8739553f4b8ac89a865ddf4bdef0d2f"
+    },
+    {
+      "destination": "office/agent.html",
+      "sha256": "c14eade5d69bec752dbccffd48b010c1f2e00855ec012fd6dbfe2d69d5f1c105"
+    },
+    {
+      "destination": "office/workspaces.js",
+      "sha256": "ee86fc993e8721a639ab765ad470b7710b9578ff901f95f09a95bddee0fc40ca"
+    },
+    {
+      "destination": "office/overview.js",
+      "sha256": "4b988693de00b614f8da60936f2b1b335713008375065b7ebaf1786e194391ba"
+    },
+    {
+      "destination": "office/agent.js",
+      "sha256": "d7c1b952d6a246dd6dc8233998576fbfde10ead714b7fca822ab30dcd21a6146"
+    },
+    {
+      "destination": "office/scene/ground-hall.js",
+      "sha256": "96b355a3c0cd498fd11f0cb29c9bc4ee8cc9a7f316d044d878518d58f06db526"
+    },
+    {
+      "destination": "office/scene/dialogue.js",
+      "sha256": "07172bd62bf7db75adaa65c1168a6756317b76b486ed5cf7f43eef31350a244d"
+    },
+    {
+      "destination": "office/commands.js",
+      "sha256": "56dc75ec70bdb05660a824a7047c1191c681b54daa53055d6c7d2a1669c9a7dc"
+    },
+    {
+      "destination": "office/commands.css",
+      "sha256": "ff4812271bcea3dc8b67af0d5ea202fb83267f44ae4109b8d428bf9ee3c8c51b"
+    },
+    {
+      "destination": "office/index.html",
+      "sha256": "d195f703715356934478d758e6ab6a0802123a07b864dfa0e412034ddd96c083"
+    },
+    {
+      "destination": "office/app.js",
+      "sha256": "b70d2f539c38c0ed2854362457f904ff403317f3142a6e7a8edbed1673c6f0a3"
+    },
+    {
+      "destination": "office/simple-mode.js",
+      "sha256": "37a6aeed90b798f2fa49d195d56f9c001fd217b0d6e41da323aba567546eccfa"
+    },
+    {
+      "destination": "office/simple-mode.css",
+      "sha256": "c28609651837c398192cebf08ef75a56691b192589acb1d63086167b7d43c03c"
+    },
+    {
+      "destination": "office/office-controls.js",
+      "sha256": "d18cfdd061c06ce78b54c2c756648906869bc50259046fca1a7ca343989f3bb6"
+    },
+    {
+      "destination": "office/feed.js",
+      "sha256": "a345a8bb40efa24ccd4660c2014f5ca53f90b487579a9d029c55ea29e676dca7"
+    },
+    {
+      "destination": "office/seating.js",
+      "sha256": "43c51aea71d6c73bd9bdcceb8e4f95ac6306118bbd41842e28286790480dcfd1"
+    },
+    {
+      "destination": "office/scene/building.js",
+      "sha256": "c7f053ac8d637cd906a911c98a047fb2a3e7a0722afbbbb9658e77028eb69e97"
+    },
+    {
+      "destination": "office/scene/scene.js",
+      "sha256": "ba723e82508bdb2638de3421c13a1e4b1c39ab3fa78bee6154e3012fa4014263"
+    },
+    {
+      "destination": "office/scene/actor.js",
+      "sha256": "95559740b1d43e5015b9a2e61db2a0d43037c9b04e670b66917b4d371ddf5ccd"
+    },
+    {
+      "destination": "office/scene/scene.css",
+      "sha256": "2f58e80d863c4ab67f8f987909b46d8d70d58836240e8c82fdb16ab5594b581b"
+    },
+    {
+      "destination": "office/ui/ui.js",
+      "sha256": "97f3efe2fce87b21bfaf49092bb9f5adeeae50bc3e1902ebe1b1e17855c0f665"
+    },
+    {
+      "destination": "office/scene/daylight.js",
+      "sha256": "d4e23fdb7bd0d1cabff52373c51eefe1e183b677e81639e3ca323b5c5b521f17"
+    },
+    {
+      "destination": "office/scene/lighting-layout.js",
+      "sha256": "b4afa47349f58e736d4757f1d62c6c7f1e573bfe246caf59f0afc42899e04d2f"
+    },
+    {
+      "destination": "office/scene/platform-models.js",
+      "sha256": "a72f9a844a5762195fe394d32f6c84cb02d417c9379bfd5528ec7dbe35ae8b73"
+    },
+    {
+      "destination": "office/scene/platform-controller.js",
+      "sha256": "9c4310d26f1d75537c8a12e6631d22397508378c7585a3b2b31a897ece8b8fcc"
+    },
+    {
+      "destination": "office/platform-identity.js",
+      "sha256": "f26a4689a555a5014b34abdcc81b69939a9b21d153377d3f624ba2c36ff2f945"
+    },
+    {
+      "destination": "office/platform-icons/grok_bot.svg",
+      "sha256": "a11ff70d61ae90116f676e39cba190dd6e4389d42634405f65213af553d95312"
+    },
+    {
+      "destination": "office/platform-icons/SOURCES.json",
+      "sha256": "01861467bb53019afd897faa7ca1cc6ef437983f28af33dafebe68b9c7356344"
+    },
+    {
+      "destination": "office/platform-icons/cursor.svg",
+      "sha256": "5a46b8180dc3eed790c53025ebed0075600234755fff79201e3970d0366ed6e2"
+    },
+    {
+      "destination": "office/platform-icons/codex.svg",
+      "sha256": "48c5104ffdcff20eb484f60d90165da7484c3880c35cdfd6e7019d43825637d3"
+    },
+    {
+      "destination": "office/platform-icons/hermes.svg",
+      "sha256": "62268e7f415b5bc6ccfe055ebb3fd54b3a732820be9af7b540fd2c832a14136f"
+    },
+    {
+      "destination": "office/platform-palette.js",
+      "sha256": "22c589ef6553b218c9e19b515331ea85aaa8e0551784c02a25251695cb163512"
+    },
+    {
+      "destination": "office/grok-avatar.js",
+      "sha256": "5856a2df5db8933dbd25cc4f0134b5c5860889576a8f774876359d7a382aa5d8"
+    },
+    {
+      "destination": "office/scene/grok-colors.js",
+      "sha256": "9bd496c0ee2fad9b7ee0609a3113a1277f5f4701b1f3f7c3933d835a0080de88"
+    },
+    {
+      "destination": "office/subagent-view.js",
+      "sha256": "1cad55ffb56b725b5acdf7b6f9882698773ba4aaf1b4c06ec1acdbf6140c3d95"
+    },
+    {
+      "destination": "office/scene/dialogue-layout.js",
+      "sha256": "8518012f94caa2a466395a80a83bbe28f9bec882e90f8da7c60f42ca9b247283"
+    },
+    {
+      "destination": "office/grok-connection.js",
+      "sha256": "58693a058fffea94a5488db9d2f01b0c09f398ada0d36b8996c9cc3f1e7a289d"
+    }
+  ]
+}

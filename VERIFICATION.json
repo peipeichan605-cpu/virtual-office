@@ -1,0 +1,47 @@
+{
+  "release": "0.1.0-preview",
+  "verified_at_utc": "2026-11-11T08:22:10.686270+00:00",
+  "verification_scope": "Fresh relocated installation, automated tests and isolated empty-office HTTP smoke; not a new real-platform end-to-end test.",
+  "platform": "macOS",
+  "python_version": "3.9.6",
+  "node_version": "v22.23.2",
+  "python_tests": {
+    "passed": 495,
+    "failed": 0,
+    "duration_seconds": 81.63
+  },
+  "javascript_tests": {
+    "passed": 138,
+    "failed": 0
+  },
+  "fresh_install": {
+    "passed": true,
+    "upstream_commit": "76232f7af1a94d3cbd3d0b1cf05e460c85637acf",
+    "ui_files": 78,
+    "all_hashes_match": true,
+    "empty_roster": true,
+    "no_preconfigured_routes": true,
+    "external_feed_disabled": true,
+    "http_status": 200,
+    "temporary_process_stopped": true
+  },
+  "privacy_review": {
+    "passed": true,
+    "private_runtime_included": false,
+    "personal_paths_or_live_agent_ids_included": false,
+    "private_links_or_credentials_included": false,
+    "personal_screenshots_or_chats_included": false
+  },
+  "release_scope": {
+    "grok_webhook_retained": true,
+    "experimental_desktop_sender_included": false,
+    "github_pages_runtime": false
+  },
+  "limitations": [
+    "Grok Bot uses cooperative public reporting and a separately configured Webhook for background commands.",
+    "Cursor local App chats have no verified original-chat background delivery entrypoint.",
+    "Cursor Cloud App-origin complete sync and long-idle delivery remain unverified.",
+    "Other OS and platform versions require their own live checks."
+  ],
+  "third_party_notice": "See NOTICE.md; no blanket license is asserted for upstream assets or brand artwork."
+}
