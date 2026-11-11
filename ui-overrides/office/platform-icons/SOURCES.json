@@ -1,0 +1,48 @@
+{
+  "purpose": "Unaltered platform artwork on independent Office character badges",
+  "models": "Original Codex/Cursor/Hermes Office characters; Grok Bot uses upstream native Office avatars",
+  "sources": {
+    "cursor": {
+      "page": "https://cursor.com/brand",
+      "asset": "https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/brand/cursor-brand-assets.zip",
+      "zip_member": "General Logos/Cube/SVG/CUBE_2D_LIGHT.svg",
+      "sha256": "c483c02f78eb2619778fdd959e72a9adfac4844854472cd2653d4cbfd60e4d71",
+      "packaged_badge_sha256": "5a46b8180dc3eed790c53025ebed0075600234755fff79201e3970d0366ed6e2"
+    },
+    "hermes": {
+      "page": "https://hermes-agent.nousresearch.com/",
+      "asset": "https://web-assets.nousresearch.com/marketing/7ec1b5ac11bb063045384e22e47cdc9549b70af0/assets/hermes-landing/teams/hermes-wing.svg",
+      "sha256": "6ee276e9bff5a166c41bc8e80c6717c525cb9b9e81a1111348559452a711e8cd",
+      "packaged_badge_sha256": "62268e7f415b5bc6ccfe055ebb3fd54b3a732820be9af7b540fd2c832a14136f"
+    },
+    "codex": {
+      "page": "https://openai.com/codex/",
+      "asset": "Official installed OpenAI app product icon: icon-codex-light.png",
+      "sha256": "de7d43f3386105ab20952958c2c25beb0d903e2aeb6e1aef57c49a648c0d1c07",
+      "original_image_preserved": true,
+      "packaged_badge_sha256": "48c5104ffdcff20eb484f60d90165da7484c3880c35cdfd6e7019d43825637d3"
+    },
+    "grok_bot": {
+      "page": "https://grok.com/",
+      "asset": "https://grok.com/icon-512x512.png",
+      "sha256": "0e6652d4a3a88dae927e93a644e9f97a9d0efbdf2437e876c22e876f8f4322d5",
+      "scope": "Grok platform identity, not a Grok Bot exclusive mascot",
+      "packaged_badge_sha256": "a11ff70d61ae90116f676e39cba190dd6e4389d42634405f65213af553d95312",
+      "native_office_model": {
+        "url": "https://raw.githubusercontent.com/Bodila51/grokbot-wallpaper/76232f7af1a94d3cbd3d0b1cf05e460c85637acf/assets/blobs/grok-bot.glb",
+        "bytes": 88472,
+        "sha256": "346b385a8901ad71e20c9f82d5aa189be57d4f1a7ce073aa8cd3fe5e52434584"
+      },
+      "native_model_thumbnail": {
+        "url": "https://raw.githubusercontent.com/Bodila51/grokbot-wallpaper/76232f7af1a94d3cbd3d0b1cf05e460c85637acf/assets/blobs/thumbs/grok-bot.png",
+        "bytes": 48709,
+        "sha256": "aa5208e10145455084724b2fe296ccfd0fdec26e4d2ccf61e289ac6d0c97770d"
+      }
+    }
+  },
+  "active_character_badges": [
+    "codex",
+    "cursor",
+    "hermes"
+  ]
+}
