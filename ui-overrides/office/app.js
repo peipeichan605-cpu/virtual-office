@@ -6,14 +6,18 @@ import { initSound, sfx } from './audio/sound.js';
 import { selectionFloor,isGround,GROUND_ID } from './overview.js';
 import { initSimpleMode } from './simple-mode.js';
 import {officePost} from './office-api.js';
+import {isMobileAccess} from './mobile-access.js';
 import {controlError,chooseDesk} from './office-controls.js';
 import {canManageAgent} from './subagent-view.js';
+import {getGraphicsSettings,updateGraphicsSettings,subscribeGraphicsSettings,getGraphicsStatus,subscribeGraphicsStatus} from './graphics-settings.js';
+import {initGraphicsSettingsUI} from './graphics-settings-ui.js';
 
 const POLL_MS = 1000;
 const view = { currentFloor: null, selectedBot: null, simpleMode: false };
 let state = null;
 let ui = { initUI() {}, renderUI() {} };
 let demoTimer = null;
+let pendingCreatedSelection = null;
 
 // Wallpaper mode (?mode=wallpaper, for Lively): office full screen + one status line, no interaction except hover.
 //   &floor=<id>   pin the floor (default: the floor with the most bots)
@@ -43,17 +47,32 @@ initScene(document.getElementById('scene'), {
 });
 
 addEventListener('office:desk-moved',event=>{const bot=Object.values(state?.bots||{}).find(bot=>bot.agent_id===event.detail.agent_id);if(bot){bot.ground_desk_id=event.detail.desk_id;view.currentFloor=GROUND_ID;view.selectedBot=bot.id;render();requestAnimationFrame(()=>focusBot(bot.id));}});
-addEventListener('office:agent-logged-out',event=>{if(state?.bots[view.selectedBot]?.agent_id===event.detail.agent_id){view.selectedBot=null;render();}});
+addEventListener('office:agent-logged-out',event=>{if(pendingCreatedSelection===event.detail.agent_id)pendingCreatedSelection=null;if(state?.bots[view.selectedBot]?.agent_id===event.detail.agent_id){view.selectedBot=null;render();}});
+const focusCreatedConversation=event=>{
+  const agent=event.detail?.agent_id;
+  if(typeof agent!=='string')return;
+  pendingCreatedSelection=agent;
+  const bot=Object.values(state?.bots||{}).find(bot=>bot.agent_id===agent);
+  if(bot){pendingCreatedSelection=null;select(bot.id);}
+};
+addEventListener('office:cursor-sdk-created',focusCreatedConversation);
+addEventListener('office:codex-background-created',focusCreatedConversation);
 
 ui.initUI({
   onSelectBot: (id) => select(id),
   onSelectFloor: (id) => setFloor(id),
   onZoom: (dir) => { zoom(dir); sfx.zoom(dir); },
-  onOpenChat: (id, url) => { if (url) location.href = url; },
 });
 
 // music and sound effects (not on the wallpaper): the speaker button sits in the top bar's right group
+if (!WALLPAPER && !isMobileAccess()) {
+  const {initMobileOwner}=await import('./mobile-owner.js');initMobileOwner();
+}
 if (!WALLPAPER) initSound({ slot: document.querySelector('#topbar .bhq-right') });
+if (!WALLPAPER) initGraphicsSettingsUI({
+  getSettings:getGraphicsSettings,updateSettings:updateGraphicsSettings,subscribe:subscribeGraphicsSettings,
+  getStatus:getGraphicsStatus,subscribeStatus:subscribeGraphicsStatus,
+});
 if (!WALLPAPER) initSimpleMode((enabled) => {
   view.simpleMode = enabled;
   view.currentFloor = GROUND_ID;
@@ -117,7 +136,7 @@ if (cycleSec >= 5) {
 
 function render() {
   if (!state) return;
-  if (view.simpleMode && state.floors.some(f => f.id === GROUND_ID)) view.currentFloor = GROUND_ID;
+  if (view.simpleMode && !isMobileAccess() && state.floors.some(f => f.id === GROUND_ID)) view.currentFloor = GROUND_ID;
   if (!view.currentFloor || !state.floors.some((f) => f.id === view.currentFloor)) view.currentFloor = pickDefaultFloor();
   if (view.selectedBot && !state.bots[view.selectedBot]) view.selectedBot = null;
   if (view.selectedBot) view.currentFloor = selectionFloor(state,view.currentFloor,view.selectedBot);
@@ -172,13 +191,20 @@ const receiveState = (data) => {
   document.getElementById('enrollment-empty').hidden = !empty;
   document.body.classList.toggle('office-empty', empty);
   state = data;
+  let focusCreated = null;
+  if(pendingCreatedSelection){
+    const bot=Object.values(data.bots||{}).find(bot=>bot.agent_id===pendingCreatedSelection);
+    if(bot){view.selectedBot=bot.id;pendingCreatedSelection=null;view.currentFloor=GROUND_ID;focusCreated=bot.id;}
+  }
   document.title=(data.brand || 'Virtual Office')+' · 3D 辦公室';
   render();
+  if(focusCreated)requestAnimationFrame(()=>focusBot(focusCreated));
 };
 const { feedFromLink } = await import('./lib/feedbase.js');
-if (feedFromLink(location)) {
+if (isMobileAccess() || feedFromLink(location)) {
   const { feedFromHash, connectFeed } = await import('./feed.js');
-  connectFeed(feedFromHash(location.hash, location.search), receiveState);
+  const feed=await connectFeed(isMobileAccess()?{topic:'',servers:[]}:feedFromHash(location.hash, location.search), receiveState);
+  if(isMobileAccess())addEventListener('office:mobile-locked',()=>feed.close(),{once:true});
   addEventListener('hashchange', () => location.reload());
 } else {
   // An office without an invitation link is empty. Never inject demo agents.

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-Hant" class="office-mobile">
+<head>
+  <meta charset="utf-8"><meta name="office-access" content="mobile">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Virtual Office · 私人 3D 辦公室</title>
+  <meta name="description" content="私人 Agent 辦公室：即時對話、工作狀態與交付記錄。">
+  <!-- the link preview (Telegram, X, iMessage): the dashboard itself -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Virtual Office">
+  <meta property="og:title" content="Virtual Office">
+  <meta property="og:description" content="私人 Agent 辦公室：即時對話、工作狀態與交付記錄。">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Virtual Office">
+  <link rel="icon" type="image/png" href="/assets/brand/logo-mark.png">
+  <link rel="apple-touch-icon" href="/assets/brand/logo-mark.png">
+  <meta name="theme-color" content="#F3F4F6">
+  <link rel="stylesheet" href="/office/styles.css">
+  <link rel="stylesheet" href="/office/scene/scene.css">
+  <link rel="stylesheet" href="/office/ui/ui.css">
+  <link rel="stylesheet" href="/office/share/share.css">
+  <link rel="stylesheet" href="/office/commands.css">
+  <link rel="stylesheet" href="/office/simple-mode.css">
+  <link rel="stylesheet" href="/office/graphics-settings.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/assets/vendor/three/build/three.module.js",
+        "three/addons/": "/assets/vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+  <!-- the two big downloads start with the page, not after the scripts that ask for them (after the import map) -->
+  <link rel="modulepreload" href="/assets/vendor/three/build/three.module.js">
+  <link rel="preload" href="/assets/office/office.glb" as="fetch" crossorigin>
+<link rel="stylesheet" href="/office/mobile.css"></head>
+<body>
+  <main id="scene" aria-label="Office"><div class="hq-loading" role="status"><span class="hq-loading-label">Building the office</span><span class="hq-loading-track"><i></i></span></div></main>
+  <header id="topbar"></header>
+  <section id="enrollment-empty" aria-label="入駐說明" hidden>
+    <strong style="display:block;font-size:18px;margin-bottom:8px">這部手機尚未取得 Agent</strong>
+    <span style="font-size:14px;line-height:1.7">請在電腦 OFFICE「手機接入」選擇可以查看的 Agents。</span>
+  </section>
+  <nav id="floors" aria-label="Floors"></nav>
+  <aside id="panel" aria-label="Bot card and floor team"></aside>
+  <section id="feed" aria-label="Event feed"></section>
+  <script type="module" src="/office/mobile-entry.js"></script>
+
+</body>
+</html>

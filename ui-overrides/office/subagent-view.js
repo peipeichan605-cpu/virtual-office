@@ -1,9 +1,10 @@
 // Observed children are a visual projection of a selected member's native work.
 // Keep them outside StateStore: they never occupy a desk or create another floor.
+import {isMobileAccess} from './mobile-access.js';
 export const isObservedChild = bot => bot?.is_subagent === true;
 export const memberBots = bots => bots.filter(bot => !isObservedChild(bot));
 export const childVisualId = agent => 'subagent:' + String(typeof agent === 'string' ? agent : agent.id);
-export const canManageAgent = bot => !!bot?.agent_id && !isObservedChild(bot);
+export const canManageAgent = bot => !isMobileAccess() && !!bot?.agent_id && !isObservedChild(bot);
 export const childEvidenceLabel = bot => ({native_hook:'原生事件同步',native_metadata:'原生紀錄同步',parent_reported:'Agent 合作回報'}[bot?.evidence] || '');
 
 export function withObservedSubagents(state, agents, historyUrl) {
@@ -47,15 +48,16 @@ export function withObservedSubagents(state, agents, historyUrl) {
 // Pure position planning, independent of Three.js. Reuse each child's offset
 // while the root moves; avoid other actors and keep positions inside the floor.
 // Children stand beside their root, never on an allocated furniture seat.
-export function followerSlots(children, roots, bounds, previous = new Map(), furniture = [], selectedId = null) {
+export function followerSlots(children, roots, bounds, previous = new Map(), furniture = [], selectedId = null, obstacles = null) {
   const slots = new Map(), occupied = [];
   const margin = 0.65;
   const inside = point => point.x >= bounds.minX + margin && point.x <= bounds.maxX - margin &&
     point.z >= bounds.minZ + margin && point.z <= bounds.maxZ - margin;
-  const free = point => inside(point) && [...roots.values()].every(spot =>
+  const free = point => inside(point) && !obstacles?.blocks(point) && [...roots.values()].every(spot =>
     Math.hypot(point.x-spot.pos.x,point.z-spot.pos.z) >= 1.2) &&
     furniture.filter(spot=>spot?.pos).every(spot => Math.hypot(point.x-spot.pos.x,point.z-spot.pos.z) >= 0.8) &&
-    occupied.every(spot => Math.hypot(point.x-spot.x,point.z-spot.z) >= 1.05);
+    occupied.every(spot => Math.hypot(point.x-spot.x,point.z-spot.z) >= 1.05) &&
+    (!obstacles?.canStand || obstacles.canStand(point));
   const candidates = [];
   // Prefer the open space in front of the parent; later rings fit a larger team.
   for (let ring=0;ring<8;ring++) {
@@ -91,4 +93,53 @@ export function followerSlots(children, roots, bounds, previous = new Map(), fur
     for (const offset of candidates) if (reserve(bot,offset)) break;
   }
   return slots;
+}
+
+// Targets may change sides of a parent while it moves. Keep actual world
+// positions separate: a new reservation must never teleport a live child.
+export class FollowerMotion {
+  constructor(navigator) { this.navigator=navigator;this.states=new Map();this.moving=false; }
+  step(targets,dt=0,activeIds=null) {
+    const states=this.states,positions=new Map();this.moving=false;
+    const active=activeIds||new Set(targets.keys());let searches=0;
+    for(const id of states.keys())if(!active.has(id))states.delete(id);
+    for(const [id,target] of targets)if(!states.has(id))states.set(id,{x:target.x,z:target.z,route:[],attempt:null,meta:target});
+    for(const [id,state] of states){
+      const target=targets.get(id);
+      // Temporary reservation exhaustion cannot retire an existing child or
+      // replace its actual safe position with a later destination.
+      if(!target){
+        // Capacity/selection can intentionally hand this slot to a sibling.
+        // Hold only genuinely free space; the family menu/history still owns
+        // every unplaced child and can select it again later.
+        const reassigned=[...targets.values()].some(at=>Math.hypot(at.x-state.x,at.z-state.z)<1.05);
+        if(!reassigned)positions.set(id,{...state.meta,x:state.x,z:state.z});
+        else states.delete(id);
+        continue;
+      }
+      state.meta=target;
+      const beforeX=state.x,beforeZ=state.z,distance=Math.hypot(target.x-state.x,target.z-state.z),attempt=state.attempt;
+      if(distance<=.025){state.route=[];state.failed=false;state.attempt={x:target.x,z:target.z};}
+      const retry=!attempt||Math.hypot(target.x-attempt.x,target.z-attempt.z)>.7||(!state.route.length&&!state.failed);
+      if(distance>.025&&retry){
+        // Global per-step quota also bounds a large arriving family's CPU.
+        if(searches<2){
+          state.route=this.navigator.path(state,target);state.failed=!state.route.length;
+          state.attempt={x:target.x,z:target.z};searches++;
+        }else this.moving=true;
+      }
+      let budget=Math.max(0,Math.min(dt,.05))*3.5;
+      while(budget>0&&state.route.length){
+        const next=state.route[0],d=Math.hypot(next.x-state.x,next.z-state.z);
+        if(d<1e-5){state.route.shift();continue;}
+        const step=Math.min(d,budget),p={x:state.x+(next.x-state.x)*step/d,z:state.z+(next.z-state.z)*step/d};
+        if(!this.navigator.segment(state,p)){state.route=[];state.failed=true;break;}
+        state.x=p.x;state.z=p.z;budget-=step;
+        if(step>=d-1e-5){state.route.shift();break;}
+      }
+      if(Math.hypot(state.x-beforeX,state.z-beforeZ)>1e-5)this.moving=true;
+      positions.set(id,{...target,x:state.x,z:state.z});
+    }
+    return positions;
+  }
 }

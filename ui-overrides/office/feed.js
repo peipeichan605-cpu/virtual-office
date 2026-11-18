@@ -22,6 +22,7 @@
 import { StateStore, botIdFor } from './lib/state.js';
 import { FEED_BASE, feedFromLink } from './lib/feedbase.js';
 import { agentPageUrl, officeGet } from './office-api.js';
+import {isMobileAccess,mobileRequest} from './mobile-access.js';
 import { withGroundFloor } from './overview.js';
 import {GROK_DEFAULT_LOOK,isLegacyGrokPlaceholder} from './grok-avatar.js';
 import {isObservedChild,withObservedSubagents,childVisualId} from './subagent-view.js';
@@ -43,7 +44,8 @@ export function feedFromHash(hash, search = '') {
 
 /** Rebuild from cache + each mailbox's last 12 h, then follow them live. Calls onState(state) on every change. */
 export async function connectFeed({ topic, servers }, onState) {
-  const sources = servers.map((server) => ({ server, tag: server.startsWith(RELAY) ? 'relay' : 'ntfy', base: `${server}/${encodeURIComponent(topic)}`, lastId: null, connected: false }));
+  const mobile=isMobileAccess();
+  const sources = (mobile?[]:servers).map((server) => ({ server, tag: server.startsWith(RELAY) ? 'relay' : 'ntfy', base: `${server}/${encodeURIComponent(topic)}`, lastId: null, connected: false }));
   const usual = servers.length > 1;                      // the plain link: both mailboxes, one cache
   const cacheKey = usual ? `bothq.feed.${topic}` : `bothq.feed.${servers[0]}.${topic}`;
   const oldKey = `bothq.feed.${NTFY}.${topic}`;         // the cache of the first single-mailbox office (ntfy.sh only)
@@ -62,9 +64,9 @@ export async function connectFeed({ topic, servers }, onState) {
   globalThis.addEventListener?.('office:refresh',refreshOffice);
 
   await loadWork(false);
-  lines = cached(cacheKey).map((l) => ({ ...l, src: l.src || sources[0].tag }));
-  if (usual) lines.push(...cached(oldKey).map((l) => ({ ...l, src: l.src || 'ntfy' })));
-  await Promise.all((privateWork?.feed_enabled === false ? [] : sources).map(async (s) => {
+  lines = (mobile?[]:cached(cacheKey)).map((l) => ({ ...l, src: l.src || sources[0].tag }));
+  if (!mobile&&usual) lines.push(...cached(oldKey).map((l) => ({ ...l, src: l.src || 'ntfy' })));
+  await Promise.all((mobile||privateWork?.feed_enabled === false ? [] : sources).map(async (s) => {
     try {
       const response = await fetch(`${s.base}/json?poll=1&since=12h`, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
       if (!response.ok) throw new Error('History unavailable');
@@ -77,10 +79,10 @@ export async function connectFeed({ topic, servers }, onState) {
   for (const l of lines) ingest(l, true);
   for (const s of sources) s.lastId = lines.findLast((l) => l.src === s.tag)?.id ?? null;
   save();
-  if (usual) try { localStorage.removeItem(oldKey); } catch { /* private mode */ }
+  if (!mobile&&usual) try { localStorage.removeItem(oldKey); } catch { /* private mode */ }
   publish();
   // Private local deployment: no third-party analytics or relay.
-  if (privateWork?.feed_enabled !== false) for (const s of sources) follow(s);
+  if (!mobile&&privateWork?.feed_enabled !== false) for (const s of sources) follow(s);
   const tickTimer = setInterval(() => { const v = store.version, s = store.snapshot(); if (store.version !== v) onState(extras(s)); }, TICK_MS);
   const healthTimer = setInterval(checkHealth, HEALTH_MS);
   const workTimer = setInterval(loadWork, 2000);
@@ -140,7 +142,7 @@ export async function connectFeed({ topic, servers }, onState) {
     const status = health === null ? 'connecting' : !health.ok ? 'offline'
       : local ? (rootLive && !childrenPending ? 'live' : 'syncing')
       : !health.sync_ok || !sources.some((s) => s.connected) ? 'syncing' : 'live';
-    return { status, label: childrenPending ? '主 Agent 已同步 · 子 Agent 狀態待確認' : { connecting: '連線中', offline: '連線中斷・狀態未更新', syncing: '同步中・狀態待確認', live: local ? '本機即時同步' : '即時同步' }[status] };
+    return { status, label: childrenPending ? '主 Agent 已同步 · 子 Agent 狀態待確認' : { connecting: '連線中', offline: '連線中斷・狀態未更新', syncing: '同步中・狀態待確認', live: mobile ? '私人連線 · 即時同步' : local ? '本機即時同步' : '即時同步' }[status] };
   }
   function connectionChanged() {
     const key = JSON.stringify(connection());
@@ -150,9 +152,12 @@ export async function connectFeed({ topic, servers }, onState) {
     if (healthPending) return;
     healthPending = true;
     try {
-      const response = await fetch('/health', { cache: 'no-store', signal: AbortSignal.timeout(3500) });
-      if (!response.ok) throw new Error('Service unavailable');
-      health = await response.json();
+      if(mobile)health=await mobileRequest('/api/mobile/health');
+      else {
+        const response = await fetch('/health', { cache: 'no-store', signal: AbortSignal.timeout(3500) });
+        if (!response.ok) throw new Error('Service unavailable');
+        health = await response.json();
+      }
     } catch { health = { ok: false, sync_ok: false }; }
     finally { healthPending = false; connectionChanged(); }
   }
@@ -309,7 +314,7 @@ export async function connectFeed({ topic, servers }, onState) {
     return privateWork ? withGroundFloor(withObservedSubagents(s,privateWork.agents || [],id=>agentPageUrl(id,topic))) : s;
   }
   function publish() { store.commit(); onState(extras(store.snapshot())); }
-  function save() { try { localStorage.setItem(cacheKey, JSON.stringify(lines.slice(-KEEP))); } catch { /* private mode: not cached */ } }
+  function save() { if(mobile)return;try { localStorage.setItem(cacheKey, JSON.stringify(lines.slice(-KEEP))); } catch { /* private mode: not cached */ } }
 }
 
 /** Two anonymous pings for the private usage count: one when the office opens (a hash of the topic, never the topic; how

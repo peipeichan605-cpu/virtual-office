@@ -1,0 +1,23 @@
+/* Touch adjustments retain the same office scene and rendering pipeline. */
+.office-mobile .speech-move,.office-mobile .speech-logout,.office-mobile .office-workspace-edit,.office-mobile .command-approvals,.office-mobile .office-invite-button,.office-mobile #agent-management,.office-mobile #native{display:none!important}
+.office-mobile .office-command textarea{font-size:16px;min-height:76px}
+.office-mobile button,.office-mobile a.button{min-height:40px}
+/* Edge handles must retain their thin geometry instead of covering the header. */
+.office-mobile .speech-window-resize{min-width:0;min-height:0}
+.office-mobile.office-mobile-dialogue-open #panel,.office-mobile.office-mobile-dialogue-open .bhq-zoom{display:none!important}
+.office-mobile .speech-close{min-width:44px;min-height:44px}
+.office-mobile .speech-window-toggle{display:none}
+.office-mobile .speech-message p{font-size:14px}
+/* Compact mode still lets a phone move between its authorized workspaces. */
+.office-mobile.office-simple-mode #floors{display:block!important}
+.office-mobile #enrollment-empty{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);z-index:10;background:rgba(255,255,255,.94);color:#25342e;border-radius:18px;padding:18px 26px;text-align:center;max-width:440px;pointer-events:none}
+.mobile-pair-page{margin:0;background:#f3f4f6;color:#25342e;font:16px/1.6 system-ui,-apple-system,sans-serif;min-height:100dvh;display:grid;place-items:center;padding:24px;box-sizing:border-box}
+.mobile-pair-card{width:min(100%,420px);box-sizing:border-box;background:white;border:1px solid #dce3de;border-radius:24px;padding:28px;box-shadow:0 18px 55px #17302612}
+.mobile-pair-card h1{font-size:26px;margin:4px 0 12px}.mobile-pair-card .mobile-eyebrow{color:#536c60;letter-spacing:.12em;font-size:12px}.mobile-pair-card p{color:#526159}.mobile-pair-card label{display:block;margin-top:24px}.mobile-pair-card input{display:block;width:100%;box-sizing:border-box;font:16px system-ui;border:1px solid #b9c8bf;border-radius:10px;padding:12px;margin:8px 0 16px}.mobile-pair-card button{width:100%;background:#285c43;color:white;border:0;border-radius:10px;padding:12px;font:600 16px system-ui;cursor:pointer}.mobile-pair-card button:disabled{opacity:.6}.mobile-pair-card small{display:block;color:#64726b;margin-top:20px}.mobile-lock-notice{font:18px system-ui;text-align:center;padding:25vh 24px}
+@media(max-width:600px){.office-mobile .speech-detail{max-height:68dvh}.office-mobile .command-actions{gap:8px}.office-mobile .command-actions span{font-size:11px}.office-mobile .office-command{min-width:0}.office-mobile .bhq-top-brand{max-width:40vw}}
+
+.mobile-pair-card .mobile-pair-remember{display:flex;align-items:flex-start;gap:10px;font-weight:600;margin-top:14px}.mobile-pair-card .mobile-pair-remember input{display:inline-block;flex:none;width:20px;height:20px;padding:0;margin:3px 0;accent-color:#285c43}.mobile-pair-card .mobile-pair-remember-note{font-size:12px;margin:6px 0 18px}.mobile-pair-help{font-size:13px;margin:18px 0;padding:12px;border:1px solid #dce3de;border-radius:12px;background:#f7f9f6}.mobile-pair-help summary{cursor:pointer;font-weight:600}.mobile-pair-help ol{padding-left:20px}.mobile-pair-help li{margin:10px 0}.mobile-pair-help a{color:#285c43;text-underline-offset:3px}
+
+.office-mobile-login{position:static;flex:0 0 auto;border:1px solid #ffffff55;border-radius:10px;padding:8px 11px;background:#22392ce6;color:#fff;font:600 12px system-ui;cursor:pointer}
+.mobile-session-dialog{box-sizing:border-box;width:min(440px,calc(100vw - 28px));max-height:calc(100dvh - 32px);overflow:auto;border:1px solid #c7d5ce;border-radius:20px;padding:22px;color:#25342e;background:#f9fcfa;font:15px/1.6 system-ui}
+.mobile-session-dialog::backdrop{background:#10251cb0}.mobile-session-dialog h2{font-size:22px;margin:0 0 12px}.mobile-session-dialog p{margin:12px 0}.mobile-session-notice{min-height:24px;color:#285c43}.mobile-session-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.mobile-session-actions button{border:1px solid #b3c8bb;border-radius:10px;padding:10px 14px;background:white;color:#25342e;font:600 14px system-ui;cursor:pointer}.mobile-session-actions .mobile-session-primary{background:#285c43;color:#fff}.mobile-session-actions .mobile-session-revoke{color:#85423e}.mobile-session-actions button:disabled{opacity:.55;cursor:wait}

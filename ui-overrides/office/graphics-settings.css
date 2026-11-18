@@ -1,0 +1,59 @@
+.office-graphics-settings-launch {
+  position: static; order: 20; flex: none; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 10px 15px;
+  border: 1px solid #d7dfd9; border-radius: 24px; background: #fffefa; color: #20372b;
+  box-shadow: 0 3px 16px #17251c18; font: 650 13px system-ui, sans-serif; cursor: pointer;
+}
+.office-graphics-settings-launch:hover, .office-graphics-settings-launch[aria-expanded="true"] { background: #edf5ee; border-color: #97b59e; }
+.office-graphics-settings-launch:focus-visible, .office-graphics-settings-dialog :is(button,select,input):focus-visible { outline: 3px solid #49835e; outline-offset: 3px; }
+.graphics-settings-icon { font: 20px/1 system-ui, sans-serif; }
+/* All full-view actions share the top bar's right group. The centre status
+   strip may scroll on a narrow desktop, while actions retain their hit areas. */
+.office-graphics-ready:not(.bhq-phone) #topbar { grid-template-columns: max-content minmax(0, 1fr) minmax(0, max-content); }
+.office-graphics-ready:not(.bhq-phone) #topbar .bhq-summary { min-width: 0; max-width: 100%; translate: none; overflow-x: auto; scrollbar-width: none; }
+.office-graphics-ready:not(.bhq-phone) #topbar .bhq-right { min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.office-graphics-ready #topbar .bhq-summary > *, .office-graphics-ready #topbar .bhq-right > * { flex: none; }
+.office-graphics-ready #topbar .bhq-right { flex-wrap: nowrap; }
+.office-graphics-ready #topbar :is(.bhq-summary, .bhq-right)::-webkit-scrollbar { display: none; }
+/* Before the top bar loads, and in simple mode, use the same flow layout. */
+#office-header-actions {
+  position: fixed; z-index: 46; top: max(24px, env(safe-area-inset-top)); right: max(24px, env(safe-area-inset-right));
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px; width: max-content;
+  max-width: calc(100vw - max(24px, env(safe-area-inset-left)) - max(24px, env(safe-area-inset-right)));
+  overflow-x: auto; scrollbar-width: none; pointer-events: auto;
+}
+#office-header-actions > * { flex: none; }
+#office-header-actions #office-mode-toggle { position: static; inset: auto; order: 30; white-space: nowrap; }
+#office-header-actions::-webkit-scrollbar { display: none; }
+.office-graphics-settings-dialog {
+  position: fixed; inset: max(78px, calc(78px + env(safe-area-inset-top))) max(24px, env(safe-area-inset-right)) auto auto;
+  margin: 0; width: min(356px, calc(100vw - 48px)); max-height: calc(100dvh - 104px); overflow: auto;
+  padding: 20px; border: 1px solid #d5dfd5; border-radius: 22px; background: #fbfcf9; color: #22382c;
+  box-shadow: 0 18px 70px #10251c40; font: 14px/1.5 system-ui, sans-serif;
+}
+.office-graphics-settings-dialog::backdrop { background: #13271e24; }
+.office-graphics-settings-dialog *, .office-graphics-settings-launch { box-sizing: border-box; }
+.office-graphics-settings-dialog [hidden] { display: none !important; }
+.graphics-settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 5px; }
+.graphics-settings-heading h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+.graphics-settings-close { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: #eaf0e8; color: #556c5b; font: 25px/1 system-ui; cursor: pointer; }
+.graphics-settings-close:hover { background: #dde8dc; }
+.graphics-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 0; border-bottom: 1px solid #e2e8df; }
+.graphics-settings-label { min-width: 0; }
+.graphics-settings-label label { display: block; font-size: 13px; font-weight: 650; cursor: pointer; }
+.graphics-settings-label small { display: block; max-width: 170px; margin-top: 4px; color: #71816f; font-size: 11px; line-height: 1.5; }
+.graphics-settings-row select { width: 119px; min-width: 119px; min-height: 42px; padding: 8px 9px; border: 1px solid #cdd9cd; border-radius: 10px; background: #fff; color: #29412e; font: 600 12px system-ui; cursor: pointer; }
+.graphics-settings-toggle-hit { display: grid; place-items: center; width: 44px; height: 44px; cursor: pointer; flex: none; }
+.graphics-settings-row input[type="checkbox"] { width: 21px; height: 21px; margin: 0; accent-color: #346c48; cursor: pointer; }
+.graphics-settings-status { margin: 12px 0 0; padding: 9px 11px; border-radius: 10px; background: #edf2e8; color: #58704b; font-size: 11px; line-height: 1.6; }
+.graphics-settings-footer { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 14px; }
+.graphics-settings-footer small { color: #7b8879; font-size: 10px; }
+.graphics-settings-reset { padding: 5px 0; border: 0; background: none; color: #4d7656; font: 600 11px system-ui; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+@media (max-width: 1100px) {
+  .office-graphics-settings-launch { width: 44px; padding: 0; }
+  .graphics-settings-launch-text { display: none; }
+}
+@media (max-width: 700px) {
+  #office-header-actions { top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); max-width: calc(100vw - 28px - env(safe-area-inset-left) - env(safe-area-inset-right)); gap: 8px; }
+  .office-graphics-settings-dialog { inset: max(70px, calc(70px + env(safe-area-inset-top))) max(14px, env(safe-area-inset-right)) auto auto; width: min(356px, calc(100vw - 28px)); max-height: calc(100dvh - 90px); padding: 18px; }
+}
