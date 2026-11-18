@@ -1,0 +1,23 @@
+{
+  "package": "qrcode-generator",
+  "version": "2.0.4",
+  "license": "MIT",
+  "repository": "https://github.com/kazuhikoarase/qrcode-generator",
+  "release_tag": "js2.0.4",
+  "release_commit": "83b7e8fe3fddd3b0368dbafd6ce56995bd25e3c8",
+  "metadata_url": "https://registry.npmjs.org/qrcode-generator/2.0.4",
+  "tarball_url": "https://registry.npmjs.org/qrcode-generator/-/qrcode-generator-2.0.4.tgz",
+  "tarball_integrity": "sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==",
+  "tarball_sha256": "02e2e18a99a90b02dad940851f59b7c3c5fd1ab79cbdece8595cb06328878159",
+  "files": {
+    "qrcode.mjs": {
+      "source_path": "package/dist/qrcode.mjs",
+      "sha256": "ea91d7118a5395289170da848b7c6758b996163bfbccf312591ab65a4911b7c0"
+    },
+    "LICENSE": {
+      "source_url": "https://raw.githubusercontent.com/kazuhikoarase/qrcode-generator/83b7e8fe3fddd3b0368dbafd6ce56995bd25e3c8/LICENSE",
+      "sha256": "3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c"
+    }
+  },
+  "modifications": "None. Original package ES module and matching release MIT license copied without executing package or install scripts. The npm tarball does not include a standalone LICENSE; the license is copied from the release commit."
+}

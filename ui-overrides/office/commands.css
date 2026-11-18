@@ -18,3 +18,11 @@
 .command-pending p {display:flex; align-items:center; gap:8px; margin:8px 0;}
 .command-pending span {flex:1; min-width:0; overflow-wrap:anywhere;}
 .command-pending button {flex:none; padding:4px 8px; border:1px solid #c6cfc8; border-radius:6px; background:transparent; color:inherit; cursor:pointer;}
+.office-new-chat{display:block;width:100%;box-sizing:border-box;margin:0 0 10px;padding:10px 12px;border:1px solid #ffffff28;border-radius:12px;background:#ffffff15;color:inherit;font:650 12px system-ui;cursor:pointer}
+.office-new-chat:hover{background:#ffffff25}.office-new-chat:focus-visible{outline:2px solid #83b5ff;outline-offset:2px}
+.cursor-sdk-status{font-size:12px;line-height:1.6;padding:10px 12px;border-radius:12px;background:#ecf1e8;color:#446143}
+.cursor-sdk-create-folder{display:flex!important;align-items:center;gap:8px}.cursor-sdk-create-folder input{width:auto!important;margin:0!important;flex:none}
+.cursor-sdk-result{font-size:13px;line-height:1.65}.cursor-sdk-change-key{margin:4px 0}
+.codex-background-status{font-size:12px;line-height:1.6;padding:10px 12px;border-radius:12px;background:#ecf1e8;color:#446143}
+.codex-background-create-folder{display:flex!important;align-items:center;gap:8px}.codex-background-create-folder input{width:auto!important;margin:0!important;flex:none}
+.codex-background-result{font-size:13px;line-height:1.65}.office-platform-choices .invite-footnote{margin:8px 3px 20px}

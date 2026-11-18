@@ -1,0 +1,79 @@
+{
+  "repository": "https://github.com/RongleCat/grok-bot-sdk",
+  "commit": "42c75eb13f24630d1b689629502d4320c4219cdb",
+  "version": "0.78.1",
+  "license": "MIT",
+  "source_root": "https://raw.githubusercontent.com/RongleCat/grok-bot-sdk/42c75eb13f24630d1b689629502d4320c4219cdb/",
+  "files": {
+    "sdk.mjs": {
+      "sha256": "bae272e75beef4c4445142366100218acf81a3fa3134fcaea512282f452ec048",
+      "bytes": 45517
+    },
+    "core.mjs": {
+      "sha256": "43258a567323f1385d469499ca545b56bb1aff622b36fa144d359130c756dc08",
+      "bytes": 8939
+    },
+    "avatar.mjs": {
+      "sha256": "51b447ce0e84463e7c5c0c725e84970ff8a8d3dbc9bbfbb117804434271370b5",
+      "bytes": 3956
+    },
+    "errors.mjs": {
+      "sha256": "9c9ee482c54a7980430646d4057b4453d610664368207ff31dfec4463dd90baa",
+      "bytes": 743
+    },
+    "connect-stream.mjs": {
+      "sha256": "5f66e12b66bc1a7664706152543d219781f627f6a13a21b77b7cee95a6e4c74e",
+      "bytes": 1677
+    },
+    "sse.mjs": {
+      "sha256": "f64f56699d9704ed1355aca550f61d4d55154b3480deb0463003deb20f079734",
+      "bytes": 2160
+    },
+    "sdk.d.mts": {
+      "sha256": "5c54e4410ac13828ef715524e37596f4da5881bac72c6212be0c267e8ca07ba9",
+      "bytes": 16804
+    },
+    "avatar.d.mts": {
+      "sha256": "be0bfd5cfeb646b4b1fe85977d48ad8b2ee3abfb7e1107fd8d70fc90805c23a8",
+      "bytes": 1171
+    },
+    "LICENSE": {
+      "sha256": "11933965b0e61e754310ab3bbec2f30f8c96b085a4199205ac8830429c00548a",
+      "bytes": 1066
+    },
+    "README.md": {
+      "sha256": "99aa661029cfb97ef411fb40dbc1a3cc6e086cff24b01bb9eaa7f5733d35cac3",
+      "bytes": 10401
+    },
+    "CHANGELOG.md": {
+      "sha256": "70368c6685dd4f0c68ff51b570167531c7c91b2a9d297d8c97cff2a79351c679",
+      "bytes": 5277
+    },
+    "SECURITY.md": {
+      "sha256": "04051d58ab1b2216053271bfdbcc10e385eb6e1ab7171467ceca075d930a9549",
+      "bytes": 577
+    },
+    "docs/guide/auth.md": {
+      "sha256": "4354a609c44b8c50e5990af850f64d371c92e4ee6218f99b05ff47c33db9571f",
+      "bytes": 5657
+    },
+    "docs/guide/notes.md": {
+      "sha256": "ac9090d0014a5eef0c435b9a156db8409c7f9080eba73f2e163bb0d6c6637b54",
+      "bytes": 7954
+    },
+    "docs/api/client.md": {
+      "sha256": "388b14617aeaa33a8c10e157d4f03bfa0221d013fb663c27fff350bd00ab9868",
+      "bytes": 14496
+    },
+    "docs/api/events.md": {
+      "sha256": "1cfbe3cc3e82efdf9d1af90de1dc37853cba84eff440fa0f5a2f5793c50c309b",
+      "bytes": 4962
+    }
+  },
+  "local_patches": {
+    "sdk.mjs": {
+      "sha256": "7ab3450fab972dfc24abe6eed58fe1d978439982e8b5f9b76bfad65d3005da93",
+      "description": "Preserve validated lastTurnSettlement metadata from Grok Bot 1.0.1 native state; no other protocol changes."
+    }
+  }
+}

@@ -1,5 +1,7 @@
 # Cursor Desktop 接駁
 
+如要在 Cursor Desktop 與 OFFICE 使用同一隻 Agent，請選本頁的 **Cloud Agent** 接駁。Desktop 中的本機聊天使用另一套 Hook 觀察機制，背景收訊能力不同。由 OFFICE 管理的可選 SDK 純對話則見 [Cursor SDK 指引](CURSOR-SDK.md)。
+
 本機聊天可使用[共用收件箱](INBOX.md)保存留言，但本版尚未接通其原生背景入口，不會顯示「持續收訊已接通」。短期測試仍可明確啟動原 session 的等待工具；這不是免待命方案。下文的 Cloud Agent 路由可在回合結束後繼續接收 OFFICE 指示，兩者不能互相替代。
 
 ## 登出後重新入場
@@ -92,14 +94,19 @@ python3 office.py --config /absolute/path/to/config.json configure --cursor-publ
 
 這個 adapter 使用 Cursor 官方 Cloud Agents API v1。使用者從 Desktop 的 Agents 視窗選一個 Cloud Agent，OFFICE 向同一個 `bc-…` Agent 發送 follow-up，保留它的對話與工作環境。沒有另開 CLI session，沒有操作或彈出 Desktop 視窗。
 
+同一個連接也啟用 Python 背景觀察器：在 Cursor App 直接輸入而產生的新工作回合，會把原生狀態、公開 Prompt、公開回覆與最終交付同步到 OFFICE。觀察器只讀取你已選定的 Cloud Agent，與瀏覽器是否開著無關；OFFICE 服務及 Cursor API 仍需可用。同步由背景檢查及原生事件推進，會有短暫延遲，不是畫面逐幀更新。
+
 ## 一次安裝，自己選擇 Agent
 
 1. 在 OFFICE 按「＋ 邀請 Agent」，選「Cursor Desktop · Cloud Agent」。
 2. 填顯示名稱、該 Agent 的 `https://cursor.com/agents/bc-…` 連結；首次填自己的 Cursor API key。Key 請直接填在本機 OFFICE，毋須傳給開發者或貼進聊天。
 3. 按「接入這個 Cloud Agent」。OFFICE 只讀取指定 Agent 的資料，驗證 ID 及可用狀態，不掃描帳戶名單、不新增 Agent、不呼叫模型。
-4. 點角色頭頂對話，輸入第一項指示。公開文字會同步到 OFFICE，最終回覆與紀錄保存在本機。
+4. 點角色頭頂對話，查看 Cloud 對話同步狀態。初次讀取尚未完成或連線中斷時，介面會顯示準備中或重新連接，不能把入口保存成功當作實測完成。
+5. 可以在 OFFICE 輸入指示，也可以直接在 Cursor App 中向同一隻 Cloud Agent 發訊息。公開文字會同步到 OFFICE，最終回覆與紀錄保存在本機。
 
 同一個 OFFICE 安裝會重用已保存的帳戶 key；再選其他 Agent 時可留空 key。每位成員仍由使用者明確選定，毋須編輯 Python 或 JSON，亦不用重啟服務。原 Agent 的平台登入、權限及計費仍適用。
+
+首次成功觀察會建立基準，不把接入前已完成的全部聊天當成新工作匯入。已開始而未完成的工作與之後的新回合會按原生 run ID 追蹤。OFFICE 發出的回合與 App 發出的回合共用該 Agent 的對話與交付介面；同一個原生回合不會因兩個來源同時看見而重複入帳。登出後不再讀取該 Agent，已保存的本機紀錄保留。
 
 ## 支援邊界
 
@@ -107,7 +114,7 @@ python3 office.py --config /absolute/path/to/config.json configure --cursor-publ
 
 | Desktop 執行環境 | OFFICE 支援 |
 | --- | --- |
-| Cloud Agent，具有 `bc-…` ID，帳戶允許官方 API | 指示、背景執行、串流公開回覆、最終交付及歷史 |
+| Cloud Agent，具有 `bc-…` ID，帳戶允許官方 API | OFFICE 指示與回覆；同一 Agent 在 App 新開工作的狀態、公開對話、最終交付及歷史自動同步 |
 | Local／本機聊天，只有本機 conversation ID | 可設定上面的原生父子觀察 Hook；仍未有已驗證的原聊天背景指令入口 |
 | 本機子 Agent | 已驗證原生身份、狀態、公開進度、交付正文及歷史；追加工作由父 Agent 處理 |
 | Cloud 子 Agent，只允許父 Agent 操作 | 以官方 API 拒絕為準；應由使用者選父 Agent，不能以本機 Hook 驗證替代 Cloud 路由驗證 |
@@ -116,12 +123,16 @@ python3 office.py --config /absolute/path/to/config.json configure --cursor-publ
 
 ## 回覆與恢復
 
-指令以 `POST /v1/agents/{id}/runs` 發送，不改模型、模式或 MCP 設定。原生 run ID 落盤後才開始讀取該 run 的 SSE。只保存公開 assistant 文字與狀態；thinking、原始工具參數、工具結果及重複的 interaction stream 不寫入 OFFICE。
+指令以 `POST /v1/agents/{id}/runs` 發送，不改模型、模式或 MCP 設定。Cursor App 顯示使用者輸入的文字，不附帶 OFFICE 內部指令標記；本機用原生 run ID 對應接收與交付。原生 run ID 落盤後才開始讀取該 run 的 SSE。只保存公開使用者文字、assistant 文字與狀態，並按 OFFICE 規則遮蓋敏感內容；thinking、原始工具參數、工具結果及重複的 interaction stream 不寫入 OFFICE。
 
 重啟時只 GET 已記錄的原生 run，絕不重送 POST。SSE 不完整時讀取同一 run 的最終結果；仍未確定就保留未知狀態並擋住後續指令。Office 自己送出的同 Agent 工作會依序排隊；若平台正執行另一來源的工作而回傳 busy，此指令顯示未送達，不自動打斷或 steer。
 
-每個已選定 Cloud Agent 的 key 分別保存在 `.office/platform-secrets/cursor-*.json`，權限 0600；舊安裝的 `cursor.json` 僅作相容讀取，不會覆寫其他 Agent 的 key。公開 API 回應、UI、可攜包及測試報告不返回 key。OFFICE 只建立對官方 API 的出站 HTTPS 連線，沒有開放公網接收埠。
+App 新工作觀察同樣只使用讀取接口，不重送原 Prompt、不代替使用者取消工作。背景檢查進度與已識別的回合保存在本機；重啟後繼續讀取，已保存的公開訊息及交付按穩定身份去重。連線或授權失效時顯示同步恢復中，不能把未讀到活動當作原 Agent 已完成。
 
-驗證：本版已通過離線協議及 UI 測試，包括兩輪同 Agent、串流、去重、錯誤來源隔離、斷線與重啟恢復。曾在一個 Desktop App 內的 Cloud Agent 驗證 OFFICE 指示及回覆；App 直接發起工作後的完整自動同步、長時間閒置後收訊仍未完成驗證，因此不宣稱整體雙向功能已完整通過。
+若原生串流已過期或中途資料未能恢復，平台仍可能提供最終結果，但無法補齊整段公開對話。工作詳情會明示「部分公開對話未能恢復」，保留已取得的文字，不把最後答案當成完整對話。平台未提供原始 Prompt 時也會另行提示，不會用摘要、其他回合或推測內容補填。
 
-接口依據：[官方 Cloud Agents API](https://cursor.com/docs/cloud-agent/api/endpoints)。
+Key 保存在每個安裝自己的 `.office/platform-secrets/`，權限 0600；公開 API 回應、UI、可攜包及測試報告不返回 key。OFFICE 只建立對官方 API 的出站 HTTPS 連線，沒有開放公網接收埠。
+
+驗證時應分別確認：從 OFFICE 發出、從 Cursor App 發出、閒置後再發出，以及每次相配的原生回合、公開文字和最終交付。入口已保存或同步觀察器已連線，都不能單獨證明這幾項已實測完成；具體結果以該版本的驗證報告為準。
+
+接口依據：[官方 Cloud Agents API](https://cursor.com/docs/cloud-agent/api/endpoints)。Cloud 原生收發整合參考 [dominicliu69 的 Virtual Office](https://github.com/dominicliu69/virtual-office)；本版另外按已選成員觀察 App 發起的新工作。

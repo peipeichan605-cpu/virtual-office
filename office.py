@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Portable, explicit enrollment and lifecycle CLI. Python standard library only."""
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -8,18 +9,43 @@ from pathlib import Path
 import secrets
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import time
 import urllib.request
 import uuid
 from configuration import DEFAULT_CONFIG, ROOT, PROVIDERS, initialize, load_config, save_config
+from security_keys import owner_key, upgrade_security, upgraded_security
 
 
 def request(config,path,body=None):
     req=urllib.request.Request('http://127.0.0.1:'+str(config['port'])+path,data=body,
-                               headers={'X-Office-Key':config['topic'],'Content-Type':'application/json'})
+                               headers={'X-Office-Key':owner_key(config),'Content-Type':'application/json'})
     with urllib.request.urlopen(req,timeout=3) as response:return json.load(response)
+
+
+def require_offline(config):
+    """Fail closed before security-sensitive config changes to a live service.
+
+    Probe only this installation's configured loopback listeners. This check
+    requires exclusive operator control of startup; it is not a lifecycle lock.
+    """
+    ports = {config['port']}
+    mobile = config.get('mobile', {})
+    if isinstance(mobile, dict) and mobile.get('port') is not None:
+        ports.add(mobile['port'])
+    for port in ports:
+        if type(port) is not int or not 1024 <= port <= 65535:
+            raise ValueError('Invalid Office listener port')
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+                connection.settimeout(.5)
+                result = connection.connect_ex(('127.0.0.1', port))
+        except OSError:
+            raise ValueError('Could not verify Office is stopped; no configuration changed') from None
+        if result != errno.ECONNREFUSED:
+            raise ValueError('Stop Office before changing security or mobile settings; no configuration changed')
 
 
 def main():
@@ -38,10 +64,33 @@ def main():
     hermes.add_argument('--name',required=True);hermes.add_argument('--workspace',required=True)
     hermes.add_argument('--session');hermes.add_argument('--hermes-home');hermes.add_argument('--binary')
     hermes.add_argument('--launch-file',help='Optional local JSON argv for an existing Hermes ACP launcher')
-    args=parser.parse_args();path=Path(args.config).expanduser().resolve()
+    sdk=sub.add_parser('setup-cursor-sdk',help='Install the optional pinned Cursor SDK in this installation private environment')
+    sdk.add_argument('--python',help='Existing healthy Python 3.10+ executable')
+    sdk.add_argument('--download-python',action='store_true',help='Use installed uv to download an isolated Python if none is usable')
+    sub.add_parser('security-upgrade',help='Separate owner/feed/internal credentials and disable legacy external feed; restart required')
+    mobile=sub.add_parser('mobile-configure',help='Configure the private loopback phone gateway; Tailscale policy is configured separately')
+    mobile.add_argument('--origin',required=True);mobile.add_argument('--identity',required=True);mobile.add_argument('--port',type=int)
+    mobile.add_argument('--enabled',action='store_true')
+    args=parser.parse_args();path=Path(args.config).expanduser().absolute()
     if args.command=='init':
         initialize(path,args.port);print(json.dumps({'initialized':True,'config':str(path),'agents':0}));return
     config=load_config(path)
+    if args.command=='security-upgrade':
+        require_offline(config)
+        migrated=upgrade_security(config);save_config(path,migrated)
+        print(json.dumps({'upgraded':upgraded_security(migrated),'legacy_feed_enabled':bool(migrated.get('feed')),'restart_required':True}));return
+    if args.command=='mobile-configure':
+        from mobile_gateway import settings as mobile_settings
+        require_offline(config)
+        if not upgraded_security(config):raise ValueError('Run security-upgrade first')
+        config['mobile']={'enabled':args.enabled,'public_origin':args.origin,'identity':args.identity,'port':args.port or config['port']+1}
+        mobile_settings(config);save_config(path,config)
+        print(json.dumps({'mobile_configured':True,'enabled':args.enabled,'loopback_only':True,'restart_required':True}));return
+    if args.command=='setup-cursor-sdk':
+        from cursor_sdk_setup import setup_environment
+        result=setup_environment(config,args.python,args.download_python,
+                                 on_started=lambda data:print(json.dumps(data),flush=True))
+        print(json.dumps(result),flush=True);return
     if args.command=='connect-hermes':
         from hermes_acp import connect_session, AcpError
         from configuration import agent_name
@@ -103,7 +152,7 @@ def main():
         save_config(path,config)
         print(json.dumps({'agent':args.agent,'commands_enabled':args.command=='enable-commands','restart_required':True}));return
     if args.command=='url':
-        print('http://127.0.0.1:'+str(config['port'])+'/office/#'+config['topic']);return
+        print('http://127.0.0.1:'+str(config['port'])+'/office/#'+owner_key(config));return
     if args.command=='configure':
         if args.cursor_public_db:
             args.cursor_public_db = str(Path(args.cursor_public_db).expanduser().absolute())
@@ -155,7 +204,9 @@ def main():
         print(json.dumps(request(config,'/api/office/shutdown',b'{}')))
         return
     if args.command=='serve':
-        os.execv(sys.executable,[sys.executable,str(ROOT/'dashboard.py'),'--config',str(path)])
+        from cursor_sdk_setup import service_python
+        binary=service_python(config)
+        os.execv(binary,[binary,str(ROOT/'dashboard.py'),'--config',str(path)])
     if args.command=='start':
         try:
             request(config,'/api/office/work');print('Office already running.');return
@@ -164,8 +215,10 @@ def main():
         run=Path(config['data_dir'])/'runs'/run_id;run.mkdir(parents=True,mode=0o700)
         config['run_id']=run_id;config['run_dir']=str(run);save_config(path,config)
         (run/'request.json').write_text(json.dumps({'action':'start','run_id':run_id,'config':str(path)}))
+        from cursor_sdk_setup import service_python
+        binary=service_python(config)
         with (run/'stdout.log').open('ab',buffering=0) as log:
-            child=subprocess.Popen([sys.executable,str(ROOT/'dashboard.py'),'--config',str(path)],cwd=ROOT,
+            child=subprocess.Popen([binary,str(ROOT/'dashboard.py'),'--config',str(path)],cwd=ROOT,
                                    stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
         print(json.dumps({'run_id':run_id,'pid':child.pid,'log':str(run/'stdout.log'),'stop_command':'python3 office.py --config '+shlex.quote(str(path))+' stop'}),flush=True)
         for _ in range(40):

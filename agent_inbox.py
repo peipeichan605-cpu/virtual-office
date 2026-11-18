@@ -149,6 +149,14 @@ class Inbox:
     def ensure(self, agent_id):
         agent = self.bridge.definitions.get(agent_id)
         if not agent:raise InboxError('agent_not_selected', 404)
+        if agent.get('driver')=='grok_sdk':
+            # The selected native SDK session has its own owner login and
+            # observer. Never create a cooperative Webhook onboarding flow or
+            # a second receiver credential for this route.
+            return {'agent_id':agent_id,'credential_path':None,'guide_path':None,
+                'prompt':'這位 Agent 使用 Grok Bot SDK 實驗模式。請在 OFFICE 的 SDK 設定登入原帳戶；毋須貼入場 Prompt、設定 Webhook 或執行等待工具。',
+                'capability':self.commands.capability(agent_id),
+                'reporting':{'method':'native_sdk','state':'not_required'}}
         folder = self.root / hashlib.sha256(agent_id.encode()).hexdigest()
         credential, guide = folder / 'credential.json', folder / 'receive-guide.txt'
         with self.commands.lock:
@@ -317,12 +325,15 @@ class Inbox:
                     if previous:
                         if previous['receiver_id']!=receiver:raise InboxError('request_id_conflict',409)
                         row=self.commands.db.execute('SELECT * FROM commands WHERE id=?',(previous['command_id'],)).fetchone()
-                        if row['state']=='queued' and row['payload'] is not None:return self.delivery(row,previous)
+                        if row['state']=='queued' and row['payload'] is not None:
+                            if self.commands.validate_mobile_delivery(row):return self.delivery(row,previous)
+                            row=self.commands.db.execute('SELECT * FROM commands WHERE id=?',(row['id'],)).fetchone()
                         return {'state':'already_started','command_id':row['id'],'command_state':row['state']}
                     active=self.commands.db.execute("SELECT 1 FROM commands WHERE agent_id=? AND state IN ('sending','queued','running','waiting_user','delivery_unknown') LIMIT 1",(agent_id,)).fetchone()
                     if active:return {'state':'unresolved_delivery'}
                     row=self.commands.db.execute("SELECT * FROM commands WHERE agent_id=? AND adapter='agent_inbox' AND state='pending' ORDER BY created_at,id LIMIT 1",(agent_id,)).fetchone()
                     if row:
+                        if not self.commands.validate_mobile_delivery(row):continue
                         receipt=str(uuid.uuid4())
                         with self.commands.db:
                             self.commands.db.execute('INSERT INTO inbox_deliveries VALUES (?,?,?,?,?,?)',(row['id'],agent_id,receiver,request,receipt,timestamp()))
@@ -357,6 +368,8 @@ class Inbox:
             if action=='start':
                 if row['state']!='queued':return {'accepted':True,'execute':False,'duplicate':True,'state':row['state']}
                 if not self.commands.allowed(agent_id):raise InboxError('dispatch_disabled',503)
+                if not self.commands.validate_mobile_delivery(row):
+                    return {'accepted':True,'execute':False,'duplicate':False,'state':'cancelled'}
                 self.commands.db.execute("UPDATE commands SET state='running',run_id=id,payload=NULL,updated_at=? WHERE id=?",(timestamp(),command));self.commands.db.commit()
                 history.record(agent_id,agent['provider'],agent['name'],command,'working',prompt=row['preview'],source_kind='agent_inbox')
                 history.message(agent_id,command,'user','prompt',row['preview'],event_id='inbox:'+command+':prompt')
@@ -365,7 +378,7 @@ class Inbox:
             fingerprint=self.commands.fingerprint(agent_id,json.dumps(data,sort_keys=True,ensure_ascii=False))
             previous=self.commands.db.execute('SELECT fingerprint FROM inbox_events WHERE agent_id=? AND event_id=?',(agent_id,data['event_id'])).fetchone()
             if previous:
-                if not hmac.compare_digest(previous['fingerprint'],fingerprint):raise InboxError('event_conflict',409)
+                if not self.commands.matches_fingerprint(agent_id,json.dumps(data,sort_keys=True,ensure_ascii=False),previous['fingerprint']):raise InboxError('event_conflict',409)
                 return {'accepted':True,'duplicate':True,'state':row['state']}
             if row['state']!='running':raise InboxError('command_not_running',409)
             terminal={'complete':('completed','done'),'fail':('failed','error'),'cancel':('cancelled','cancelled')}.get(action)

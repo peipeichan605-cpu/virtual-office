@@ -1,8 +1,11 @@
-import { officeGet, agentPageUrl } from '../office-api.js';
+import { officeGet } from '../office-api.js';
 import { CommandComposer } from '../commands.js';
 import {logoutAgent,chooseDesk} from '../office-controls.js';
 import {canManageAgent,childEvidenceLabel} from '../subagent-view.js';
 import {SingleHeadPanel,headStatus} from './dialogue-layout.js';
+import {DialogueWindow} from './dialogue-window.js';
+import {observePublicDialogue} from './idle-render.js';
+import {isMobileAccess} from '../mobile-access.js';
 
 const activePanel = new SingleHeadPanel();
 
@@ -40,13 +43,13 @@ export function dialoguePlacement(anchorY, viewportHeight, chromeHeight) {
     (useBelow ? below : above) - chromeHeight - 12))) };
 }
 
-/** DOM stays anchored to the actor through CSS2DObject; no message text becomes HTML. */
+/** One reader/composer, anchored to the actor or moved intact into a floating window. */
 export class DialogueBubble {
   constructor(onSelect, onOpenChild) {
-    this.onSelect=onSelect;this.rows=[];this.cursor=0;this.before=null;this.open=false;this.pending=false;this.signature='';this.nodes=new Map();this.requestEpoch=0;this.pendingRequest=null;
+    this.onSelect=onSelect;this.rows=[];this.cursor=0;this.before=null;this.open=false;this.pending=false;this.signature='';this.nodes=new Map();this.requestEpoch=0;this.pendingRequest=null;this.readingPosition=null;
     this.onOpenChild=onOpenChild;this.children=[];this.teamOpen=false;this.teamSignature='';
     this.element=document.createElement('div');this.element.className='office-speech';
-    this.element.innerHTML='<button class="speech-peek" type="button" aria-expanded="false"><span class="speech-name"></span><span class="speech-meta"></span><span class="speech-preview"></span></button><section class="speech-detail" hidden><div class="speech-toolbar"><span role="status">公開對話</span><button type="button" class="speech-close" aria-label="收起對話">×</button></div><button type="button" class="speech-older" hidden>較早訊息</button><div class="speech-messages" role="log" aria-live="polite" aria-relevant="additions"></div><a class="speech-history">工作與交付記錄 ↗</a></section><span class="speech-tail"></span>';
+    this.element.innerHTML='<button class="speech-peek" type="button" aria-expanded="false"><span class="speech-name"></span><span class="speech-meta"></span><span class="speech-preview"></span></button><section class="speech-detail" hidden><div class="speech-toolbar"><span role="status">公開對話</span><button type="button" class="speech-close" aria-label="收起對話">×</button></div><button type="button" class="speech-older" hidden>較早訊息</button><div class="speech-messages" role="log" aria-live="polite" aria-relevant="additions"></div></section><span class="speech-tail"></span>';
     this.peek=this.element.querySelector('.speech-peek');this.detail=this.element.querySelector('.speech-detail');
     this.status=document.createElement('span');this.status.className='speech-state';this.peek.prepend(this.status);
     this.team=document.createElement('button');this.team.type='button';this.team.className='speech-team';this.team.hidden=true;
@@ -55,9 +58,7 @@ export class DialogueBubble {
     this.family=document.createElement('section');this.family.className='speech-family';this.family.hidden=true;
     this.family.setAttribute('aria-label','子 Agent 名單');this.family.setAttribute('role','group');
     this.element.insertBefore(this.family,this.detail);
-    const history=this.element.querySelector('.speech-history');history.textContent='記錄 ↗';history.setAttribute('aria-label','工作與交付記錄');
-    this.element.querySelector('.speech-toolbar').insertBefore(history,this.element.querySelector('.speech-close'));
-    this.move=document.createElement('button');this.move.type='button';this.move.className='speech-move';this.move.textContent='⇄ 移位';this.move.title='拖曳到休息位或辦公室工作台；點一下可選擇位置';
+    this.move=document.createElement('button');this.move.type='button';this.move.className='speech-move';this.move.textContent='⇄ 搬座位';this.move.title='移動 Agent：拖曳到休息位或辦公室工作台；點一下可選擇位置';
     this.logout=document.createElement('button');this.logout.type='button';this.logout.className='speech-logout';this.logout.textContent='登出';
     this.element.querySelector('.speech-toolbar').insertBefore(this.move,this.element.querySelector('.speech-close'));
     this.element.querySelector('.speech-toolbar').insertBefore(this.logout,this.element.querySelector('.speech-close'));
@@ -66,16 +67,26 @@ export class DialogueBubble {
     this.logout.addEventListener('click',()=>logoutAgent(this.bot));
     this.composer=new CommandComposer();this.detail.append(this.composer.element);
     this.list=this.element.querySelector('.speech-messages');this.notice=this.element.querySelector('[role=status]');this.older=this.element.querySelector('.speech-older');
+    this.windowHeader=document.createElement('div');this.windowHeader.className='speech-window-header';
+    this.windowHandle=document.createElement('div');this.windowHandle.className='speech-window-handle';this.windowHandle.tabIndex=0;this.windowHandle.setAttribute('role','button');
+    this.windowHandle.title='拖曳移動對話框；亦可用方向鍵移動';
+    this.windowToggle=document.createElement('button');this.windowToggle.type='button';this.windowToggle.className='speech-window-toggle';this.windowToggle.textContent='浮動';
+    this.windowToggle.addEventListener('click',()=>this.window.floating?this.window.dock():this.window.float());
+    this.windowHeader.append(this.windowHandle,this.windowToggle,this.element.querySelector('.speech-close'));
+    this.detail.prepend(this.windowHeader);
+    this.window=new DialogueWindow({element:this.detail,handle:this.windowHandle,home:this.element,list:this.list,onChange:()=>this.syncPanelPresentation()});
     this.peek.addEventListener('click',()=>{this.setOpen(!this.open);if(this.open)this.onSelect?.();});
     this.element.querySelector('.speech-close').addEventListener('click',()=>{this.setOpen(false);this.peek.focus({preventScroll:true});});
     this.older.addEventListener('click',()=>this.refresh(true));
-    for(const type of ['pointerdown','pointerup','click','wheel','touchstart','touchmove'])this.element.addEventListener(type,event=>event.stopPropagation());
+    for(const target of [this.element,this.detail])for(const type of ['pointerdown','pointerup','click','wheel','touchstart','touchmove'])target.addEventListener(type,event=>event.stopPropagation());
   }
   update(bot, selected) {
     if(this.bot?.agent_id&&this.bot.agent_id!==bot.agent_id){
-      this.setOpen(false);this.rows=[];this.cursor=0;this.before=null;this.signature='';this.nodes.clear();this.list.replaceChildren();this.older.hidden=true;
+      this.setOpen(false);this.rows=[];this.cursor=0;this.before=null;this.signature='';this.nodes.clear();this.list.replaceChildren();this.older.hidden=true;this.readingPosition=null;
     }
     this.bot=bot;
+    if(this.windowHandle)this.windowHandle.textContent='⠿ '+bot.name;
+    this.window?.label(bot.name);
     this.element.dataset.status=bot.effective_status||bot.status||'waiting_user';
     this.element.classList.toggle('is-subagent',!!bot.is_subagent);
     this.composer.bind(bot.agent_id,bot.command_capability);
@@ -90,13 +101,30 @@ export class DialogueBubble {
     this.move.setAttribute('aria-label','移動 '+bot.name+' 的位置');this.logout.setAttribute('aria-label','登出 '+bot.name);
     this.element.querySelector('.speech-meta').textContent=bot.is_subagent?relation:bot.latest_message ? roleLabel(bot.latest_message,bot) : bot.child_count?`子 Agent · ${bot.child_count}`:'即時對話';
     this.element.querySelector('.speech-preview').textContent=previewText(bot.latest_message)||'等待公開訊息…';
-    this.element.querySelector('.speech-history').href=bot.chat_url || '#';
     if(this.selected && !selected)this.closePanels();
     this.selected=selected;
     this.visible=!!bot.agent_id;
     if(this.open)this.refresh();
   }
   get expanded(){return this.open||this.teamOpen;}
+  get headExpanded(){return (this.open&&!this.window?.floating)||this.teamOpen;}
+  syncPanelPresentation(){
+    // Selection remains intact while the phone reader is open. Hide competing
+    // cards with presentation state rather than deselecting (which closes it).
+    globalThis.document?.documentElement?.classList?.toggle('office-mobile-dialogue-open',isMobileAccess()&&activePanel.current?.open===true);
+    this.element.classList.toggle('expanded',this.headExpanded);
+    this.element.classList.toggle('has-floating-dialogue',!!this.window?.floating);
+    this.measureKey=null;this.fitHeight=null;
+    if(this.window?.floating&&!this.floatingObserver){
+      this.floatingObserver=observePublicDialogue(this.detail,()=>window.dispatchEvent(new CustomEvent('office:dialogue-activity')));
+    }else if(!this.window?.floating&&this.floatingObserver){
+      this.floatingObserver.disconnect();this.floatingObserver=null;
+    }
+    if(this.windowToggle){
+      this.windowToggle.textContent=this.window.floating?'回到頭頂':'浮動';
+      this.windowToggle.title=this.window.floating?'將對話框放回 Agent 頭頂':'將對話框移到獨立浮動視窗';
+    }
+  }
   closePanels(){this.setOpen(false);this.setTeamOpen(false);}
   setChildren(children) {
     this.children=children;
@@ -130,15 +158,31 @@ export class DialogueBubble {
     if(value&&!this.children.length)return;
     if(value){this.setOpen(false);activePanel.claim(this);}
     this.teamOpen=value;this.family.hidden=!value;this.team.setAttribute('aria-expanded',String(value));
-    this.element.classList.toggle('expanded',this.expanded);
+    this.syncPanelPresentation();
     if(value)this.onSelect?.();
     if(!this.expanded)activePanel.release(this);
   }
   setOpen(value) {
     if(value&&this.disabled)return;
+    const reopening=value&&!this.open;
+    // Capture before hiding: display:none and portal reparenting have no
+    // reliable scroll geometry. Repeated close calls must retain this bookmark.
+    if(!value&&this.open)this.readingPosition={top:this.list.scrollTop,
+      bottom:this.list.scrollHeight-this.list.scrollTop-this.list.clientHeight<48,outerTop:this.detail.scrollTop};
     if(value){this.setTeamOpen(false);activePanel.claim(this);}
     else this.invalidateRequests();
-    this.open=value;this.detail.hidden=!value;this.peek.setAttribute('aria-expanded',String(value));this.element.classList.toggle('expanded',this.expanded);
+    this.open=value;this.detail.hidden=!value;this.peek.setAttribute('aria-expanded',String(value));
+    if(value){
+      this.window?.open();
+      // Portalling keeps the entire composer above the phone Bot card and lets
+      // the existing visualViewport handler accommodate the software keyboard.
+      if(isMobileAccess())this.window?.float({persist:false});
+    }else this.window?.close();
+    this.syncPanelPresentation();
+    if(reopening&&this.readingPosition){
+      this.list.scrollTop=this.readingPosition.bottom?this.list.scrollHeight:this.readingPosition.top;
+      this.detail.scrollTop=this.readingPosition.outerTop;
+    }
     if(value){this.refresh();this.timer ||= setInterval(()=>this.refresh(),2000);}
     else{clearInterval(this.timer);this.timer=null;this.element.classList.remove('below');}
     if(!this.expanded)activePanel.release(this);
@@ -151,7 +195,7 @@ export class DialogueBubble {
       ticket.agent===this.bot?.agent_id&&this.open&&!this.disabled;
   }
   fitViewport(anchorY, viewportHeight) {
-    if(!this.expanded)return false;
+    if(!this.headExpanded)return false;
     const above=anchorY-Math.min(76,viewportHeight*.12),below=viewportHeight-12-anchorY;
     const available=Math.max(90,Math.min(viewportHeight-Math.min(76,viewportHeight*.12)-12,Math.max(above,below)-24));
     const bodyHeight=Math.max(45,available-(this.peek.offsetHeight||60)-12);
@@ -218,5 +262,5 @@ export class DialogueBubble {
     this.disabled=true;this.closePanels();this.composer?.dispose?.();
     this.element.inert=true;this.element.setAttribute('aria-hidden','true');this.element.style.display='none';
   }
-  dispose(){this.disable();this.element.remove();}
+  dispose(){this.disable();this.window?.dispose();this.element.remove();}
 }

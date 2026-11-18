@@ -1,4 +1,5 @@
 """Real local HTTP/CLI transport tests; no model or vendor account is used."""
+from security_keys import owner_key
 import json
 from pathlib import Path
 import socket
@@ -40,7 +41,7 @@ class InboxTests(unittest.TestCase):
         self.bridge.commands.close();self.bridge.history.close();self.temp.cleanup()
     def call(self,path,body=None,agent=None,headers=None):
         h={'Content-Type':'application/json'}
-        if agent is None:h['X-Office-Key']=self.bridge.config['topic']
+        if agent is None:h['X-Office-Key']=owner_key(self.bridge.config)
         else:
             c=json.loads(self.credentials[agent].read_text());h.update({'X-Agent-Id':c['agent_id'],'Authorization':'Bearer '+c['token']})
         h.update(headers or {})

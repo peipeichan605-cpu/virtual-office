@@ -1,4 +1,5 @@
 """Actual loopback round trips; these fixtures do not contact a vendor or model."""
+from security_keys import owner_key
 import io
 import json
 from pathlib import Path
@@ -112,7 +113,7 @@ class ConnectionAssistantHTTPTests(unittest.TestCase):
     def request(self, path, body=None, owner=True, headers=None):
         outgoing = {'Content-Type': 'application/json'}
         if owner:
-            outgoing['X-Office-Key'] = self.bridge.config['topic']
+            outgoing['X-Office-Key'] = owner_key(self.bridge.config)
         outgoing.update(headers or {})
         request = urllib.request.Request(self.base + path,
             data=json.dumps(body).encode() if body is not None else None, headers=outgoing)

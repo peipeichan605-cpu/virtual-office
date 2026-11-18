@@ -1,12 +1,14 @@
 # Grok Bot 接入
 
-一般接入會提供[持續收訊指引](INBOX.md)。Bot 完成首次回報後建立自己的原生 Webhook 入口，正常結束回合；之後 OFFICE 的指示可喚醒指定 Bot，毋須重新待命或受一小時限制。入口尚未完成時只保存留言。
+本頁說明原有 **Webhook／合作回報** 路徑。另有可選的 [Grok Bot SDK 實驗模式](GROK-SDK.md)，由擁有人登入後選擇現有 Bot 及原生聊天；兩種方式分開設定，SDK 不會取代或自動更改既有 Webhook。
+
+Webhook 接入會提供[持續收訊指引](INBOX.md)。Bot 完成首次回報後建立自己的原生 Webhook 入口，正常結束回合；之後 OFFICE 的指示可喚醒指定 Bot，毋須重新待命或受一小時限制。入口尚未完成時只保存留言。
 
 ## 使用連接助手
 
 日常接駁不用理解 Webhook、URL 或金鑰。這套助手適用於每個安裝、每位擁有人自己選定的 Grok Bot；不會替你掃描或加入其他 Bot。
 
-1. 在 OFFICE 按「＋ 邀請 Agent」，主動選擇 Grok Bot，再把邀請 Prompt 貼給你選定的 Bot 一次。首頁及其他平台不會顯示 Grok 接駁。
+1. 在 OFFICE 按「＋ 邀請 Agent」，選「接入現有 App／Cloud Agent」再選 Grok Bot，把邀請 Prompt 貼給你選定的 Bot 一次。首頁及其他平台不會顯示 Grok 接駁。
 2. Bot 完成入場後會回覆「OFFICE 連接卡」，列出實際流程名稱及可用的原生開啟入口。需要新建時，名稱使用「OFFICE 收訊 · Agent 名稱 · 識別碼」；已有有效入口則沿用原流程，不因改名重建。連接卡若讀得到不含秘密的實際收訊地址（Webhook URL），會直接列出；讀不到時清楚說明。Grok 的列表只顯示流程名稱，打開該項後才看到 Webhook／POST 到 欄位。
 3. 在同一個 OFFICE 邀請視窗跟「Grok 連接助手」操作：貼上收訊地址，再從同一流程複製連接金鑰貼回 OFFICE。金鑰不貼聊天；不能讀取剪貼簿時，可手動貼到同一欄。
 4. 按「連接並測試」。按鈕會明確說明將發送一則簡短測試；之前待處理的留言亦可能開始交付。有工作正在處理時，完成後再按「測試連接」。
@@ -22,11 +24,11 @@
 
 「已連接」驗證的是 OFFICE 發出指示後，Bot 收到並回覆。它不代表 OFFICE 已訂閱 Grok App 的所有對話。
 
-一般帳戶目前使用 **Agent 合作上報**：新邀請的同一份指引會要求已入選 Bot 記住自己的公開回報規則，在 App 直接收到工作時也回報任務、公開進度和交付。這仍由 Bot 執行；記憶或技能保存成功不是 Python 原生觀察器，亦不能當作每次工作都已同步的證據。已有 Bot 沿用自己的身份及憑證，讀取更新後的收訊指引；不重新加入、不改其他 Bot。
+這條 Webhook 路徑使用 **Agent 合作上報**：新邀請的同一份指引會要求已入選 Bot 記住自己的公開回報規則，在 App 直接收到工作時也回報任務、公開進度和交付。這仍由 Bot 執行；記憶或技能保存成功不是 Python 原生觀察器，亦不能當作每次工作都已同步的證據。已有 Bot 沿用自己的身份及憑證，讀取更新後的收訊指引；不重新加入、不改其他 Bot。
 
 只有 Agent 真正送出的公開事件會出現在 OFFICE。未收到事件時，OFFICE 不猜測工作或交付。Bot 的並行聊天缺少獨立原生事件範圍，不能宣稱完整覆蓋；有已回報的 App 工作進行時，新 OFFICE 指示及測試會等待它真正結束，不覆蓋原工作。
 
-官方支援以聊天記住 Bot 規則及保存可重用技能，但未把它們定義為每回合必定執行的本機 Hook。[Bot 規則與記憶](https://docs.x.ai/grok-bot/bots#edit-a-bot)、[技能與 routine](https://docs.x.ai/grok-bot/skills-routines-and-automations)。企業版另有須管理員開啟的公開對話事件匯出；本機通用版未安裝或啟用該服務。[官方 OpenTelemetry 匯出](https://cursor.com/docs/enterprise/opentelemetry-export#conversation-content)
+官方支援以聊天記住 Bot 規則及保存可重用技能，但未把它們定義為每回合必定執行的本機 Hook。[Bot 規則與記憶](https://docs.x.ai/grok-bot/bots#edit-a-bot)、[技能與 routine](https://docs.x.ai/grok-bot/skills-routines-and-automations)。
 
 ### 入場時完成持續合作回報
 
@@ -40,7 +42,7 @@
 
 本版加入官方 Webhook routine adapter。整套流程適用於每個人的 OFFICE 安裝，沒有固定開發者帳戶、Bot 名稱、路徑或名單：
 
-1. 在 OFFICE 按「＋ 邀請 Agent」，選 Grok Bot，填名稱並產生 Prompt。
+1. 在 OFFICE 按「＋ 邀請 Agent」，選「接入現有 App／Cloud Agent」再選 Grok Bot，填名稱並產生 Prompt。
 2. 把 Prompt 給你選定的 Bot。它按本機指引完成首次回報，需要新入口時再依本邀請的完整名稱建立自己的 Webhook routine；已有已核對入口則沿用，不建立定時輪詢。
 3. Bot 依 `conversation.guide_path`，用自己的憑證及 `connect.py grok --details-stdin` 將 **POST to** 和 **key** 直接交回本機 OFFICE。若平台只向人類顯示這兩項資料，這一步仍須擁有人完成一次：在你主動開啟的 Grok 邀請視窗內，跟連接助手逐步帶回兩項資料，再按「連接並測試」。技術欄位預設收起；關閉後可從指定 Grok Agent 的連接按鈕繼續，舊邀請連結不會在首頁自動彈窗。單憑首次回報不代表 routine 已建立；未完成前可繼續等待 Bot 的實際結果。Key 不貼聊天、不放 shell 參數；既有 Agent 的頭頂入口只供補接。
 4. 在 OFFICE 傳送一項簡短指示。Webhook 接收、Bot 開始、公開進度及完成回報分別顯示；交付保存在本機歷史。
@@ -96,13 +98,13 @@ Grok Bot 的真正 Task 子 Agent 可以使用同一套 OFFICE 父子資料、3D
 - 本機 CLI／協議測試不等於原生 App 端到端驗證。已在 macOS Grok Bot 0.78.5 的兩個實際 Bot 驗證三位 Task 子 Agent：一輪由原 App 下指示，一輪經已綁定的 OFFICE Webhook 派工並同時開兩位子 Agent。實際接收、公開進度及三份交付已讀回；子 Agent 完成時父任務仍工作，約三十秒退場後歷史保留，父指令亦由自己的完成事件正常結束。這只驗證合作回報路徑，不宣稱能獨立、自動觀察 Grok Bot 的所有子 Agent；其他機器、版本及帳戶需自行驗證。
 - 角色退場及唯讀規則與其他來源一致；詳見 [通用主／子 Agent 機制](SUBAGENTS.md)。
 
-官方文件把 Grok Bot 的本機執行與雲端工作分開；Enterprise 的 Action Recording／OpenTelemetry 亦是另一項接駁，沒有在此安裝流程啟用。[本機執行](https://docs.x.ai/grok-bot/security#local-execution)、[官方事件匯出](https://cursor.com/docs/enterprise/opentelemetry-export)。
+官方文件把 Grok Bot 的本機執行與雲端工作分開；雲端環境不能直接當作使用者的本機 OFFICE。[本機執行](https://docs.x.ai/grok-bot/security#local-execution)。
 
 ## 只同步狀態與公開訊息
 
 這是通用上報方式，適用於能在 OFFICE 所在電腦執行 Python 命令的 Grok Bot。它不要求使用者提供 Grok 登入憑證，也不會遍歷帳戶的 Bot。
 
-一般使用者：在 OFFICE 按「＋ 邀請 Agent」，選 Grok Bot、填名字，再把自動產生的 Prompt 貼給它。身份、程式路徑及專用接入資料都會自動準備；它實際回報後，邀請視窗會顯示「已收到 Agent 回報」。不需要先由開發者登記或重啟服務。
+一般使用者：在 OFFICE 按「＋ 邀請 Agent」，選「接入現有 App／Cloud Agent」再選 Grok Bot、填名字，把自動產生的 Prompt 貼給它。身份、程式路徑及專用接入資料都會自動準備；它實際回報後，邀請視窗會顯示「已收到 Agent 回報」。不需要先由開發者登記或重啟服務。
 
 以下是供自訂執行器使用的進階手動方式：由擁有人用 `office.py enroll --provider grok_bot ...` 選定一位 Bot。將程式位置及該 Bot 的憑證檔位置填入下列指引；憑證內容不要放進聊天。
 

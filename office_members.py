@@ -1,15 +1,18 @@
 """Owner-controlled Office membership and durable, provider-neutral G/F seats."""
 import hashlib
+import hmac
+import json
 from pathlib import Path
 import re
 import uuid
 from configuration import load_config, save_config
 from history import timestamp
+from security_keys import integrity_fingerprint
 
 
 class MemberError(ValueError):
-    def __init__(self, code, status=400):
-        self.code, self.status = code, status
+    def __init__(self, code, status=400, details=None):
+        self.code, self.status, self.details = code, status, details or {}
         super().__init__(code)
 
 
@@ -64,7 +67,13 @@ class OfficeMembers:
             if changed:self._changed()
             # Complete a logout interrupted after the atomic config update.
             retired=set(config.get('logged_out_agent_ids',[]))-selected
-            for agent in retired:self._retire_credentials(agent)
+            for agent in retired:
+                # Repair an interrupted logout after the atomic configuration
+                # retirement. Uncertain native work remains uncertain forever
+                # unless separately reconciled from actual native evidence.
+                b.commands.detach_unconfirmed(agent,commit=False)
+                if hasattr(b,'mobile'):b.mobile.invalidate_agent(agent)
+                self._retire_credentials(agent)
             for ident in config.get('revoked_invitation_ids',[]):
                 b.history.db.execute("UPDATE invitations SET state='revoked' WHERE id=?",(ident,))
         # This also commits commands.sqlite3 credential revocations, including
@@ -105,8 +114,33 @@ class OfficeMembers:
             b.commands.db.commit()
             return len(rows)
 
+    def _fence_retired_member(self, config, agent):
+        """No I/O: authority ends as soon as atomic retirement is on disk.
+
+        A later database or cleanup error must not leave a fallback inbox,
+        reporter credential or selected identity active in this process.
+        """
+        b=self.bridge;ident=agent['id'];name=agent['name']
+        for key in ('agents','command_bindings','logged_out_agent_ids','revoked_invitation_ids','disabled_command_agents'):
+            value=config.get(key,{} if key=='command_bindings' else [])
+            b.config[key]=value
+            b.commands.config[key]=value
+        b.commands.bindings=b.config['command_bindings']
+        b.definitions={key:value for key,value in b.definitions.items() if key!=ident}
+        b.agents={key:value for key,value in b.agents.items() if key!=ident}
+        b.allowed_names.discard(name)
+        b.sources.pop(name,None);b.last.pop(name,None)
+
     def logout(self, data):
-        if not isinstance(data,dict) or set(data)!={'agent_id'} or not isinstance(data['agent_id'],str):raise MemberError('invalid_logout')
+        if (not isinstance(data,dict) or not {'agent_id'}<=set(data)
+                or set(data)-{'agent_id','acknowledge_unconfirmed','logout_token'}
+                or not isinstance(data['agent_id'],str)):
+            raise MemberError('invalid_logout')
+        acknowledgement=data.get('acknowledge_unconfirmed',False)
+        if type(acknowledgement) is not bool or ('logout_token' in data and not acknowledgement):
+            raise MemberError('invalid_logout')
+        if acknowledgement and (not isinstance(data.get('logout_token'),str) or not re.fullmatch(r'[0-9a-f]{64}',data['logout_token'])):
+            raise MemberError('invalid_logout')
         b=self.bridge;agent_id=data['agent_id']
         with b.commands.lock,b.history.lock:
             config=load_config(b.config['config_path'])
@@ -116,8 +150,20 @@ class OfficeMembers:
                     b.refresh_connections(config)
                     return {'logged_out':True,'agent_id':agent_id,'duplicate':True,'history_preserved':True,'native_session_stopped':False}
                 raise MemberError('agent_not_selected',404)
-            active=b.commands.db.execute("SELECT 1 FROM commands WHERE agent_id=? AND (state IN ('sending','queued','running','waiting_user','delivery_unknown') OR (state='pending' AND (native_message_id IS NOT NULL OR run_id IS NOT NULL))) LIMIT 1",(agent_id,)).fetchone()
+            active=b.commands.db.execute("SELECT 1 FROM commands WHERE agent_id=? AND (state IN ('sending','queued','running','waiting_user') OR (state='pending' AND (native_message_id IS NOT NULL OR run_id IS NOT NULL))) AND id NOT IN (SELECT command_id FROM command_detachments) LIMIT 1",(agent_id,)).fetchone()
             if active:raise MemberError('agent_has_active_commands',409)
+            unknown=b.commands.db.execute("SELECT id,state,native_message_id,run_id FROM commands WHERE agent_id=? AND state='delivery_unknown' AND id NOT IN (SELECT command_id FROM command_detachments) ORDER BY id",(agent_id,)).fetchall()
+            if unknown or acknowledgement:
+                epoch=b.history.db.execute('SELECT event_id FROM office_membership_events WHERE agent_id=? ORDER BY rowid DESC LIMIT 1',(agent_id,)).fetchone()
+                binding=config.get('command_bindings',{}).get(agent_id)
+                settings=config.get('command_adapters',{}).get((binding or {}).get('adapter'),{}).get('sessions',{}).get((binding or {}).get('session_id'))
+                scope=json.dumps({'agent':agent,'binding':binding,'settings':settings,'epoch':epoch['event_id'] if epoch else None,
+                                  'commands':[dict(row) for row in unknown]},sort_keys=True,separators=(',',':'))
+                token=integrity_fingerprint(config, ('office-logout\0'+scope).encode())
+                if not acknowledgement or not hmac.compare_digest(token,data['logout_token']):
+                    if unknown:
+                        raise MemberError('agent_has_unconfirmed_commands',409,{'logout_token':token,'unconfirmed_commands':len(unknown)})
+                    raise MemberError('logout_scope_changed',409)
             revoked=[r[0] for r in b.history.db.execute('SELECT id FROM invitations WHERE provider=? AND source_id=?',(agent['provider'],agent['source_id']))]
             if hasattr(b,'get_connection_checks'):
                 b.get_connection_checks().route_changed(agent_id)
@@ -130,11 +176,24 @@ class OfficeMembers:
             config['logged_out_agent_ids']=sorted(set(config.get('logged_out_agent_ids',[]))|{agent_id})
             config['revoked_invitation_ids']=sorted(set(config.get('revoked_invitation_ids',[]))|set(revoked))
             # Atomic on-disk removal fences old invitations across a crash.
-            save_config(config['config_path'],config)
+            # Stage the command fence before the atomic config write. A failed
+            # write rolls it back. A crash after the write is repaired by sync.
+            b.commands.detach_unconfirmed(agent_id,commit=False)
+            try:
+                save_config(config['config_path'],config)
+            except Exception:
+                b.commands.db.rollback()
+                raise
+            # Even a later commit/cleanup failure cannot keep authority through
+            # a stale selected identity or fallback inbox in this process.
+            self._fence_retired_member(config,agent)
+            if hasattr(b,'mobile'):b.mobile.invalidate_agent(agent_id)
+            b.commands.db.commit()
             cancelled=b.commands.db.execute("SELECT COUNT(*) FROM commands WHERE agent_id=? AND state='pending' AND native_message_id IS NULL AND run_id IS NULL",(agent_id,)).fetchone()[0]
             b.refresh_connections(config)
             with b.history.db:
                 b.history.db.execute('INSERT INTO office_membership_events VALUES (?,?,?,?)',(uuid.uuid4().hex,agent_id,'logged_out',timestamp()))
             b.commands.db.commit()
             return {'logged_out':True,'agent_id':agent_id,'duplicate':False,'history_preserved':True,
-                'pending_commands_cancelled':cancelled,'native_session_stopped':False}
+                'pending_commands_cancelled':cancelled,'unconfirmed_commands_preserved':len(unknown),
+                'native_session_stopped':False}

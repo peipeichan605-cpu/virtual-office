@@ -50,7 +50,6 @@ export const headStatus = status => ({working:'工作中',idle:'休息',waiting_
 
 export function headOpenAction(bot, hasActor) {
   if(hasActor)return {mode:'head'};
-  // Existing local history remains a safe fallback if no 3D standing slot fits.
-  return typeof bot?.chat_url==='string'&&bot.chat_url.startsWith('/office/agent.html?')?
-    {mode:'history',url:bot.chat_url}:{mode:'unavailable'};
+  // Selection stays in the Office; opening a head never navigates away.
+  return {mode:'unavailable'};
 }

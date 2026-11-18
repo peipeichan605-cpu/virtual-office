@@ -1358,164 +1358,368 @@
   ],
   "overrides": [
     {
-      "destination": "office/invite.js",
-      "sha256": "58934c824f431fbabc92662951f5af09513316ec5e245b168ade5888be903371"
+      "destination": "assets/vendor/three/LICENSE",
+      "sha256": "4c40a1ef62450b857c3b2aaf294936304cd552d965fbcd9d32d4c5bcf4ba4454"
     },
     {
-      "destination": "office/invite.css",
-      "sha256": "d7831e7fe889bae9096e918b4534476a064b43dd9e16def5cee2abc9675389dd"
+      "destination": "assets/vendor/three/PROVENANCE.json",
+      "sha256": "071898386e4a1bf6dc14f34b2cc24b99769998a0f380a5fc15d77b34effacc72"
+    },
+    {
+      "destination": "assets/vendor/three/build/three.module.js",
+      "sha256": "ce1fa418de16a19495a9f72495580e3015d7745c296d3ce0485897f902ddedfb"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/environments/RoomEnvironment.js",
+      "sha256": "85869bdd22f7cf0b22e68dcefe6cb710480af0f5c901a76f7a7764fd07fc8014"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/geometries/RoundedBoxGeometry.js",
+      "sha256": "d20aeaf7077c459a8d952d215738d7b44fba028440bb862d84b622a34f0c80bb"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/loaders/GLTFLoader.js",
+      "sha256": "45139faddd5aaf48ed2d62203d976e5cbd703db1a592de40527f9f6cf58abd44"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/postprocessing/EffectComposer.js",
+      "sha256": "d234e578618fa816955ebdc059c049c577e203e650e33cf22bde3f232c29e669"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/postprocessing/MaskPass.js",
+      "sha256": "328cf7db0da5d9be83ffe39d54b01d5ac1fddf108cc98182ddbb056f5c8b537f"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/postprocessing/OutputPass.js",
+      "sha256": "32f879d2179087676631c799857a885586b3cdd13b9731bd3b13f06428bd58b7"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/postprocessing/Pass.js",
+      "sha256": "b3c6128340eaa37e40a6a2f1b738e894c855239417d50959759b34a2b5e89f92"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/postprocessing/RenderPass.js",
+      "sha256": "6c9b8a539ea16e898f65e4760f14937ef9ea94043bd9842c141e0301f41903e8"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/postprocessing/ShaderPass.js",
+      "sha256": "3b28a1ee27e0eb96c0eab137a1f442ccf127a926904eced2d51e125ec44af781"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/renderers/CSS2DRenderer.js",
+      "sha256": "7de0bb70e3c1d6da58416353ed7140a7a7743ece99d73b56eb62bc2dd79bfed5"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/shaders/CopyShader.js",
+      "sha256": "4e3346db194db56a596cd074e9bdb39fb5eb52040c333e0d29dc4eb1324d3b1d"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/shaders/OutputShader.js",
+      "sha256": "4944cecd49c0d4d1520a4d927bde8a590fd43f041ee913252b9451855a01d0f0"
+    },
+    {
+      "destination": "assets/vendor/three/examples/jsm/utils/BufferGeometryUtils.js",
+      "sha256": "c25b7930e570e9ec56173cd3b866ec8d2e10016630db3937efb439daf1cedbf6"
+    },
+    {
+      "destination": "office/agent-management.js",
+      "sha256": "71408cde3da3afd707f2ca5f72d5db4474b4142ece00fa4cdf95a9ea2b1bcab1"
     },
     {
       "destination": "office/agent.css",
-      "sha256": "7736f10f1548f188042c189be6be8747efc0e9644957961a1a1ba6f36ddb209d"
-    },
-    {
-      "destination": "office/office-api.js",
-      "sha256": "600c16131a39ef0f97b8ea4d34848bb5c8739553f4b8ac89a865ddf4bdef0d2f"
+      "sha256": "9984e1a088ce2201c769fbc7b11e82ae9c3cf2b8bcb239e6a12f8f2e3f45418f"
     },
     {
       "destination": "office/agent.html",
-      "sha256": "c14eade5d69bec752dbccffd48b010c1f2e00855ec012fd6dbfe2d69d5f1c105"
-    },
-    {
-      "destination": "office/workspaces.js",
-      "sha256": "ee86fc993e8721a639ab765ad470b7710b9578ff901f95f09a95bddee0fc40ca"
-    },
-    {
-      "destination": "office/overview.js",
-      "sha256": "4b988693de00b614f8da60936f2b1b335713008375065b7ebaf1786e194391ba"
+      "sha256": "6280e751f544a1be553abc00fa850addcccd96897028fdf6045b9fdc25ae36aa"
     },
     {
       "destination": "office/agent.js",
-      "sha256": "d7c1b952d6a246dd6dc8233998576fbfde10ead714b7fca822ab30dcd21a6146"
-    },
-    {
-      "destination": "office/scene/ground-hall.js",
-      "sha256": "96b355a3c0cd498fd11f0cb29c9bc4ee8cc9a7f316d044d878518d58f06db526"
-    },
-    {
-      "destination": "office/scene/dialogue.js",
-      "sha256": "07172bd62bf7db75adaa65c1168a6756317b76b486ed5cf7f43eef31350a244d"
-    },
-    {
-      "destination": "office/commands.js",
-      "sha256": "56dc75ec70bdb05660a824a7047c1191c681b54daa53055d6c7d2a1669c9a7dc"
-    },
-    {
-      "destination": "office/commands.css",
-      "sha256": "ff4812271bcea3dc8b67af0d5ea202fb83267f44ae4109b8d428bf9ee3c8c51b"
-    },
-    {
-      "destination": "office/index.html",
-      "sha256": "d195f703715356934478d758e6ab6a0802123a07b864dfa0e412034ddd96c083"
+      "sha256": "690b31297e7d5ec8a62d616e4740a51d83c0e00e9e2e1eb411a21e432f0b740a"
     },
     {
       "destination": "office/app.js",
-      "sha256": "b70d2f539c38c0ed2854362457f904ff403317f3142a6e7a8edbed1673c6f0a3"
+      "sha256": "5dc0a91dea64a27b72812f1c3a8802862fc65e8904e17dbebd223920f330c755"
     },
     {
-      "destination": "office/simple-mode.js",
-      "sha256": "37a6aeed90b798f2fa49d195d56f9c001fd217b0d6e41da323aba567546eccfa"
+      "destination": "office/codex-background-ui.js",
+      "sha256": "62435496c1503a981084c44e7ac981bb9d08734611e58b51b7b9eba3ec42a512"
     },
     {
-      "destination": "office/simple-mode.css",
-      "sha256": "c28609651837c398192cebf08ef75a56691b192589acb1d63086167b7d43c03c"
+      "destination": "office/codex-model-ui.js",
+      "sha256": "2b4b26fddde8fab280da7d086a183678a099023c826aae01b01e383613414855"
     },
     {
-      "destination": "office/office-controls.js",
-      "sha256": "d18cfdd061c06ce78b54c2c756648906869bc50259046fca1a7ca343989f3bb6"
+      "destination": "office/commands.css",
+      "sha256": "8608117aacaf0966d1a6747789c2029577e6a6d43fd51684d78ca73dbefe39d0"
+    },
+    {
+      "destination": "office/commands.js",
+      "sha256": "995101ed7f83177ee88eb331f90d7dd3ee2234b2b3ff4f458dad9fb03ab06701"
+    },
+    {
+      "destination": "office/cursor-sdk-ui.js",
+      "sha256": "6c9a3e6dca1874dbf8bdc1dd0c50a33c49d560caee01d49fd0520a6a654bbbf3"
     },
     {
       "destination": "office/feed.js",
-      "sha256": "a345a8bb40efa24ccd4660c2014f5ca53f90b487579a9d029c55ea29e676dca7"
+      "sha256": "164307db3ffd970378711119d1508749fca24d9429746f9b1b765e230defba0b"
     },
     {
-      "destination": "office/seating.js",
-      "sha256": "43c51aea71d6c73bd9bdcceb8e4f95ac6306118bbd41842e28286790480dcfd1"
+      "destination": "office/graphics-settings-ui.js",
+      "sha256": "cfcc930c8705a0d255cca61e02ffc36bdbd345308496fa7193a580251e1ae552"
     },
     {
-      "destination": "office/scene/building.js",
-      "sha256": "c7f053ac8d637cd906a911c98a047fb2a3e7a0722afbbbb9658e77028eb69e97"
+      "destination": "office/graphics-settings.css",
+      "sha256": "0bce333680f1fb0a30be69ba5573874f14eeb465fd114faf84cddbacce4e8874"
     },
     {
-      "destination": "office/scene/scene.js",
-      "sha256": "ba723e82508bdb2638de3421c13a1e4b1c39ab3fa78bee6154e3012fa4014263"
-    },
-    {
-      "destination": "office/scene/actor.js",
-      "sha256": "95559740b1d43e5015b9a2e61db2a0d43037c9b04e670b66917b4d371ddf5ccd"
-    },
-    {
-      "destination": "office/scene/scene.css",
-      "sha256": "2f58e80d863c4ab67f8f987909b46d8d70d58836240e8c82fdb16ab5594b581b"
-    },
-    {
-      "destination": "office/ui/ui.js",
-      "sha256": "97f3efe2fce87b21bfaf49092bb9f5adeeae50bc3e1902ebe1b1e17855c0f665"
-    },
-    {
-      "destination": "office/scene/daylight.js",
-      "sha256": "d4e23fdb7bd0d1cabff52373c51eefe1e183b677e81639e3ca323b5c5b521f17"
-    },
-    {
-      "destination": "office/scene/lighting-layout.js",
-      "sha256": "b4afa47349f58e736d4757f1d62c6c7f1e573bfe246caf59f0afc42899e04d2f"
-    },
-    {
-      "destination": "office/scene/platform-models.js",
-      "sha256": "a72f9a844a5762195fe394d32f6c84cb02d417c9379bfd5528ec7dbe35ae8b73"
-    },
-    {
-      "destination": "office/scene/platform-controller.js",
-      "sha256": "9c4310d26f1d75537c8a12e6631d22397508378c7585a3b2b31a897ece8b8fcc"
-    },
-    {
-      "destination": "office/platform-identity.js",
-      "sha256": "f26a4689a555a5014b34abdcc81b69939a9b21d153377d3f624ba2c36ff2f945"
-    },
-    {
-      "destination": "office/platform-icons/grok_bot.svg",
-      "sha256": "a11ff70d61ae90116f676e39cba190dd6e4389d42634405f65213af553d95312"
-    },
-    {
-      "destination": "office/platform-icons/SOURCES.json",
-      "sha256": "01861467bb53019afd897faa7ca1cc6ef437983f28af33dafebe68b9c7356344"
-    },
-    {
-      "destination": "office/platform-icons/cursor.svg",
-      "sha256": "5a46b8180dc3eed790c53025ebed0075600234755fff79201e3970d0366ed6e2"
-    },
-    {
-      "destination": "office/platform-icons/codex.svg",
-      "sha256": "48c5104ffdcff20eb484f60d90165da7484c3880c35cdfd6e7019d43825637d3"
-    },
-    {
-      "destination": "office/platform-icons/hermes.svg",
-      "sha256": "62268e7f415b5bc6ccfe055ebb3fd54b3a732820be9af7b540fd2c832a14136f"
-    },
-    {
-      "destination": "office/platform-palette.js",
-      "sha256": "22c589ef6553b218c9e19b515331ea85aaa8e0551784c02a25251695cb163512"
+      "destination": "office/graphics-settings.js",
+      "sha256": "3c27485303a5b35997b9302eb59a6a4e2f08e616b8768f0924331396faddedac"
     },
     {
       "destination": "office/grok-avatar.js",
       "sha256": "5856a2df5db8933dbd25cc4f0134b5c5860889576a8f774876359d7a382aa5d8"
     },
     {
+      "destination": "office/grok-connection.js",
+      "sha256": "58693a058fffea94a5488db9d2f01b0c09f398ada0d36b8996c9cc3f1e7a289d"
+    },
+    {
+      "destination": "office/grok-sdk-ui.js",
+      "sha256": "ffc4062a8a12c4c001d342e829280070091e7a98a58c4559f6c47a2019aaa6cb"
+    },
+    {
+      "destination": "office/header-actions.js",
+      "sha256": "ed0788c0f67c635adc3ecc8b3736a00809eb2fb0abc10277dc1d10c9c82b612d"
+    },
+    {
+      "destination": "office/history-detail.js",
+      "sha256": "4107fcf5fde8f5afc6bef56ec54875c801fae93cbfb4df031d2e9cbd65bb122b"
+    },
+    {
+      "destination": "office/index.html",
+      "sha256": "2c5b5c79c38d79ca3b6ad3a52f4b9384dc7a80994b24445c29f988052e4e4feb"
+    },
+    {
+      "destination": "office/invite.css",
+      "sha256": "2aa80915832a68adc36e4b70a7655a9b3d10e036005dee86c2bda63031f4248d"
+    },
+    {
+      "destination": "office/invite.js",
+      "sha256": "5476d97f3062b7411804d8d7346d52f158a4badc33287f11452bed63d3bcd5dc"
+    },
+    {
+      "destination": "office/mobile-access.js",
+      "sha256": "3b69aee9c547cad6a26b492cec3bf668c014d53809f4c7d1716d9bee67e8e69b"
+    },
+    {
+      "destination": "office/mobile-agent.html",
+      "sha256": "47d020ddb9da3015493c4ca9b6949905fa0f060a5aa0ca98928c92d0762d5b72"
+    },
+    {
+      "destination": "office/mobile-entry.js",
+      "sha256": "46a03a446078c18ed0bbb95f3901a61b16e80bd9ac3044d45afbf110cf91f907"
+    },
+    {
+      "destination": "office/mobile-owner.css",
+      "sha256": "1be32de831db12a65d9f5b097e7d46846e56760ef733279e594146bda6e1f804"
+    },
+    {
+      "destination": "office/mobile-owner.js",
+      "sha256": "e22dd0b7cd2176ac9fa48c879874bb4f685e64eddce6fed84b7287c9251f0204"
+    },
+    {
+      "destination": "office/mobile-pair.html",
+      "sha256": "98af4bcdcec12e560684400fdf57ef21d00dfb24e28d9d443bf26be369bd52c1"
+    },
+    {
+      "destination": "office/mobile-pair.js",
+      "sha256": "6a09e6a5a6d996e5b415eaf7a35e3abf9c342a6e2110a7f0deedc7d7a8947f62"
+    },
+    {
+      "destination": "office/mobile-session-controls.js",
+      "sha256": "962a4874add6f3210cb7c10f16ff20fe35febf3628e07f1fc1f8c01f9f111f62"
+    },
+    {
+      "destination": "office/mobile.css",
+      "sha256": "34fdb4c878db1d7bfddc875cb46d683fe9b9af69ca8edd055790ee86c155ab86"
+    },
+    {
+      "destination": "office/mobile.html",
+      "sha256": "1c2d36c957fd7422ddf0707b5e820fc21e42bad48f4b7b27662d7b09e3b7f7d7"
+    },
+    {
+      "destination": "office/new-conversation-ui.js",
+      "sha256": "42ba098226f6eec1fd7c1c08fb533de29d23da0154eedbf5fac1528516ccb404"
+    },
+    {
+      "destination": "office/office-api.js",
+      "sha256": "0b25000ac9472935dbd5c192fb2953ec136300bdf59f385005e23001636b09bc"
+    },
+    {
+      "destination": "office/office-controls.js",
+      "sha256": "7dfce000303569f955da284892bd7d50e5b83eee820bbf923b4bbd30319bf3bd"
+    },
+    {
+      "destination": "office/overview.js",
+      "sha256": "4b988693de00b614f8da60936f2b1b335713008375065b7ebaf1786e194391ba"
+    },
+    {
+      "destination": "office/platform-icons/SOURCES.json",
+      "sha256": "01861467bb53019afd897faa7ca1cc6ef437983f28af33dafebe68b9c7356344"
+    },
+    {
+      "destination": "office/platform-icons/codex.svg",
+      "sha256": "48c5104ffdcff20eb484f60d90165da7484c3880c35cdfd6e7019d43825637d3"
+    },
+    {
+      "destination": "office/platform-icons/cursor.svg",
+      "sha256": "5a46b8180dc3eed790c53025ebed0075600234755fff79201e3970d0366ed6e2"
+    },
+    {
+      "destination": "office/platform-icons/grok_bot.svg",
+      "sha256": "a11ff70d61ae90116f676e39cba190dd6e4389d42634405f65213af553d95312"
+    },
+    {
+      "destination": "office/platform-icons/hermes.svg",
+      "sha256": "62268e7f415b5bc6ccfe055ebb3fd54b3a732820be9af7b540fd2c832a14136f"
+    },
+    {
+      "destination": "office/platform-identity.js",
+      "sha256": "f26a4689a555a5014b34abdcc81b69939a9b21d153377d3f624ba2c36ff2f945"
+    },
+    {
+      "destination": "office/platform-palette.js",
+      "sha256": "22c589ef6553b218c9e19b515331ea85aaa8e0551784c02a25251695cb163512"
+    },
+    {
+      "destination": "office/scene/actor.js",
+      "sha256": "73a52002d8088fc143f1864666d7e353f703679722184b50087399a2fc004625"
+    },
+    {
+      "destination": "office/scene/aura-cache.js",
+      "sha256": "98a0bfb0959c03c5677173d76b91cdd0267b71340edb0593ac916dea06912011"
+    },
+    {
+      "destination": "office/scene/building.js",
+      "sha256": "c7f053ac8d637cd906a911c98a047fb2a3e7a0722afbbbb9658e77028eb69e97"
+    },
+    {
+      "destination": "office/scene/daylight.js",
+      "sha256": "72be9b3d22ad3cc594d78019efd4732a2deda91b53bf059c05675abc044676dc"
+    },
+    {
+      "destination": "office/scene/dialogue-layout.js",
+      "sha256": "b5d263440c1eccc2a6b96720552665553afc6ebd3475ee19d87d822de99f897b"
+    },
+    {
+      "destination": "office/scene/dialogue-window.js",
+      "sha256": "0954e310f07731e64a3636a05119b951afa8f84c04b7eb6265c95ba17c76a494"
+    },
+    {
+      "destination": "office/scene/dialogue.js",
+      "sha256": "3b953f183f2cdc44937ecd287b0781c2f98f4622422128c7e7a6488fc045d75f"
+    },
+    {
+      "destination": "office/scene/follower-obstacles.js",
+      "sha256": "840bf2e753d6573857d2c771611da264996ed7f954166c0aae74d7cf7867e226"
+    },
+    {
+      "destination": "office/scene/frame-pacer.js",
+      "sha256": "02562ae0d14d5e8fdf8e3bab45d3b7f30e0f64e4edbee3feee6b668b91fe3f7c"
+    },
+    {
+      "destination": "office/scene/gaussian-kernel.js",
+      "sha256": "15ab7170320f703765850ea206694f5a35eac30b352b0c734f647d71327d3677"
+    },
+    {
       "destination": "office/scene/grok-colors.js",
       "sha256": "9bd496c0ee2fad9b7ee0609a3113a1277f5f4701b1f3f7c3933d835a0080de88"
     },
     {
+      "destination": "office/scene/ground-hall.js",
+      "sha256": "275f949c9dc97abb7b74412e3ace8a41a624c8cef24ca1e483d8a0f407ac5199"
+    },
+    {
+      "destination": "office/scene/idle-render.js",
+      "sha256": "db2d5d9473c11ba636c99704aa852c8ab81c7b91c523c00b11692863eb043146"
+    },
+    {
+      "destination": "office/scene/lighting-layout.js",
+      "sha256": "b4afa47349f58e736d4757f1d62c6c7f1e573bfe246caf59f0afc42899e04d2f"
+    },
+    {
+      "destination": "office/scene/mesh-bounds.js",
+      "sha256": "4e43188cbf4a37f1bdfc0597b040af573d3f88b2e0cf98361ac005281824142a"
+    },
+    {
+      "destination": "office/scene/platform-controller.js",
+      "sha256": "9c4310d26f1d75537c8a12e6631d22397508378c7585a3b2b31a897ece8b8fcc"
+    },
+    {
+      "destination": "office/scene/platform-models.js",
+      "sha256": "a72f9a844a5762195fe394d32f6c84cb02d417c9379bfd5528ec7dbe35ae8b73"
+    },
+    {
+      "destination": "office/scene/post.js",
+      "sha256": "3b09912a1d2eecb548f344ce7bebaad4c05a3ab7039409f3dca9f3b4daff1a25"
+    },
+    {
+      "destination": "office/scene/scene.css",
+      "sha256": "b47a22f8dbb6e0d8e863f778a7ac3b6a1d5b1cd26d9ab24a30c91ef61ae10603"
+    },
+    {
+      "destination": "office/scene/scene.js",
+      "sha256": "011faad83e375b4fba9d511d9c7b8d257a762b48b72d0776a2184bcd9e7dc8d1"
+    },
+    {
+      "destination": "office/scene/static-furniture.js",
+      "sha256": "ba219d8142ffe00b7bd44a454088e76fed127535a62abfc3b03274418a33a28a"
+    },
+    {
+      "destination": "office/scene/studio.js",
+      "sha256": "4c5fef62e5347d4922f890585cedc0fa30fb72412a7ae15f979206d9def8ce2e"
+    },
+    {
+      "destination": "office/scene/sunpatch.js",
+      "sha256": "b67bc54459882f8a3b3b24384554e6582407538134fc048bbabaf3f713c952d7"
+    },
+    {
+      "destination": "office/seating.js",
+      "sha256": "43c51aea71d6c73bd9bdcceb8e4f95ac6306118bbd41842e28286790480dcfd1"
+    },
+    {
+      "destination": "office/simple-mode.css",
+      "sha256": "c28609651837c398192cebf08ef75a56691b192589acb1d63086167b7d43c03c"
+    },
+    {
+      "destination": "office/simple-mode.js",
+      "sha256": "9db18f8b8c9b7c31820ed8a712643df97a838af7f9810f60d4b4d0f43aac00e8"
+    },
+    {
       "destination": "office/subagent-view.js",
-      "sha256": "1cad55ffb56b725b5acdf7b6f9882698773ba4aaf1b4c06ec1acdbf6140c3d95"
+      "sha256": "1aeefc7e11f088d6aff07f73bfa0757446eb31a001cbae06d1b78497004c9a88"
     },
     {
-      "destination": "office/scene/dialogue-layout.js",
-      "sha256": "8518012f94caa2a466395a80a83bbe28f9bec882e90f8da7c60f42ca9b247283"
+      "destination": "office/ui/ui.js",
+      "sha256": "c2364390de5966c4b2493510f35fde706b0a62a61d42371f7bfddee7da54f1ac"
     },
     {
-      "destination": "office/grok-connection.js",
-      "sha256": "58693a058fffea94a5488db9d2f01b0c09f398ada0d36b8996c9cc3f1e7a289d"
+      "destination": "office/vendor/qrcode-generator/LICENSE",
+      "sha256": "3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c"
+    },
+    {
+      "destination": "office/vendor/qrcode-generator/PROVENANCE.json",
+      "sha256": "59e40e1bbe64e71dc2ff4e26a2a65733fdabc7ee675b90712c38ecd4ddefba1e"
+    },
+    {
+      "destination": "office/vendor/qrcode-generator/qrcode.mjs",
+      "sha256": "ea91d7118a5395289170da848b7c6758b996163bfbccf312591ab65a4911b7c0"
+    },
+    {
+      "destination": "office/workspaces.js",
+      "sha256": "ee86fc993e8721a639ab765ad470b7710b9578ff901f95f09a95bddee0fc40ca"
     }
   ]
 }

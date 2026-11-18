@@ -90,10 +90,10 @@ test('a focused reader whose head moves off-screen still reserves its clamped vi
   assert.ok(placed.get('reader').left>=12);assert.ok(placed.get('reader').right<=788);
 });
 
-test('a child without a standing slot can still open its local history, without accepting arbitrary links',()=>{
+test('head selection never navigates away when a reader is unavailable',()=>{
   const bot={chat_url:'/office/agent.html?agent=fixture-child#fixture-office'};
   assert.deepEqual(headOpenAction(bot,true),{mode:'head'});
-  assert.deepEqual(headOpenAction(bot,false),{mode:'history',url:bot.chat_url});
+  assert.deepEqual(headOpenAction(bot,false),{mode:'unavailable'});
   assert.deepEqual(headOpenAction({chat_url:'javascript:alert(1)'},false),{mode:'unavailable'});
   assert.deepEqual(headOpenAction({chat_url:'https://other.invalid/'},false),{mode:'unavailable'});
 });

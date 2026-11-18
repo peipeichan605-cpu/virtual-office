@@ -53,6 +53,7 @@ export class Actor {
     this.modelScale = 1;
 
     this.root = new THREE.Group();
+    this.root.userData.auraDynamic = true;
     this.pivot = new THREE.Group();
     this.modelWrap = new THREE.Group();
     this.pivot.add(this.modelWrap);
@@ -284,7 +285,7 @@ export class Actor {
     f.halo.material.opacity = 0.6 * Math.sin(Math.PI * fk);
   }
 
-  tick(dt, t) {
+  tick(dt, t, {spawnCosmetics = true} = {}) {
     const p = this.pivot;
     const s = this.status;
     let y = 0, sx = 1, sy = 1, rx = 0, rz = 0, ox = 0;
@@ -298,7 +299,7 @@ export class Actor {
         const k = (t + this.phase) % 1.6;
         if (k < 0.45) ox = 0.03 * Math.sin(k * 70);
       }
-      if (s === 'waiting_user' && !this.anim) {
+      if (spawnCosmetics && s === 'waiting_user' && !this.anim) {
         this.nextAction -= dt;
         if (this.nextAction <= 0) { this.hop(0.32); this.nextAction = 1.7 + Math.random() * 0.6; }
       }
@@ -341,7 +342,7 @@ export class Actor {
       if (dist < LOOK_RANGE) { w = smoothstep(LOOK_RANGE, LOOK_RANGE - 1.3, dist); lookYaw = Math.atan2(dx, dz); }
     }
     this.hopCooldown -= dt;
-    if (dist < HOP_RANGE && this.hopCooldown <= 0 && !this.anim && !REDUCED) { this.hop(0.26); this.hopCooldown = HOP_COOLDOWN; }
+    if (spawnCosmetics && dist < HOP_RANGE && this.hopCooldown <= 0 && !this.anim && !REDUCED) { this.hop(0.26); this.hopCooldown = HOP_COOLDOWN; }
 
     const base = (this.baseYaw || 0) + (this.anim?.kind === 'travel' ? 0 : RESTING_TURN);
     let target = base;
@@ -382,26 +383,28 @@ export class Actor {
     this.tag.visible = !this.speech.visible && this.tagEl.dataset.mode !== 'off' && this.hostAlpha > 0.5 && !this.retiring && this.scaleS.x > 0.6;
     // Floor/model animation can hide the anchor for one frame; keep the reader open.
     if (this.retiring && this.dialogue.open) this.dialogue.setOpen(false);
-    this.tickEyes(dt);
+    this.tickEyes(dt,{spawnCosmetics});
     if (this.retiring && this.scaleS.x < 0.03) { this.dead = true; this.dispose(); }
   }
 
-  tickEyes(dt) {
-    if (!this.eyes.length) return;
+  tickEyes(dt, {spawnCosmetics = true} = {}) {
+    if (!this.eyes.length) { this.blinkT = -1; return; }
     const s = this.status;
     let open = 1;
     if (s === 'idle' && !this.spotIsLounge()) open = 0.12;        // sleeping at the desk
     else if (s === 'error') open = 0.55;
     else if (s === 'stuck') open = 0.7;
     if (open > 0.5 && !REDUCED) {
-      this.nextBlink -= dt;
-      if (this.nextBlink <= 0) { this.blinkT = 0; this.nextBlink = 2.2 + Math.random() * 3.5; }
+      if (spawnCosmetics) {
+        this.nextBlink -= dt;
+        if (this.nextBlink <= 0) { this.blinkT = 0; this.nextBlink = 2.2 + Math.random() * 3.5; }
+      }
       if (this.blinkT >= 0) {
         this.blinkT += dt;
         const b = this.blinkT / 0.16;
         if (b >= 1) this.blinkT = -1; else open *= Math.max(0.1, Math.abs(1 - 2 * b));
       }
-    }
+    } else this.blinkT = -1; // A sleeping/absent eye cannot finish an invisible blink later.
     if (this.joy > 0) { this.joy -= dt; open = Math.min(open, 0.32); }   // just finished a task: happy, squinting
     const k = 1 / this.modelScale;
     this.eyes.forEach((e, i) => {

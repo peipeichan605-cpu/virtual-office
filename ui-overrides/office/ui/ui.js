@@ -7,11 +7,11 @@ import {canManageAgent} from '../subagent-view.js';
  *   left, under the floors   dock: Status check (while one runs) / Waiting on me / Finished / Routines
  *   bottom-left activity feed (last 4)    bottom-right (left of the card)  zoom - / +
  *
- *   initUI({ onSelectBot, onSelectFloor, onZoom, onOpenChat })
+ *   initUI({ onSelectBot, onSelectFloor, onZoom })
  *   renderUI(state, { currentFloor, selectedBot })   // idempotent, cheap, safe to call every second
  *
  * State fields read: bots, floors, feed, usage, demo, now, summary, plus (bots-only mode, may be missing):
- *   bots[id].chat_url, state.finished [{ t, bot, name, step }], state.routines [{ bot, name, routine, schedule, next_run }],
+ *   state.finished [{ t, bot, name, step }], state.routines [{ bot, name, routine, schedule, next_run }],
  *   bots[id].last_seen (its own last status line), bots[id].unreported { from, to } (usage rose, no status line),
  *   state.check { t, bots: [{ id, name, at }] } (a status check: who has answered).
  *
@@ -579,7 +579,9 @@ function buildPanel(root) {
       h('div', { class: 'bhq-tcounts' }, rowWait, rowErr)));
   const list = watchFade(h('div', { class: 'bhq-members', role: 'list' }));
   const teamEmpty = h('p', { class: 'bhq-note', text: '目前沒有成員。只有你指定入駐的 Agent 才會顯示。', hidden: true });
-  const tcard = h('div', { class: 'bhq-tcard bhq-surface bhq-glow' }, list, teamEmpty);
+  const fresh = h('button', { class: 'office-new-chat', type: 'button', text: '＋ 新對話', title: '選擇平台，建立 OFFICE 管理的對話', hidden:typeof location==='undefined'||location.hash.length<2 });
+  fresh.addEventListener('click', () => window.dispatchEvent(new CustomEvent('office:new-conversation')));
+  const tcard = h('div', { class: 'bhq-tcard bhq-surface bhq-glow' }, fresh, list, teamEmpty);
   head.append(teamHint);
   const team = h('section', { class: 'bhq-team', 'aria-label': 'Floor team' }, head, tcard);
 
@@ -621,19 +623,13 @@ function buildPanel(root) {
 
   const body = watchFade(h('div', { class: 'bhq-card-body' }, taskBlock, stats, useBlock, stepsBlock));
 
-  const cta = h('button', { class: 'bhq-cta', type: 'button', text: '開啟對話／記錄', disabled: true, title: '正在載入記錄入口' });
-  cta.addEventListener('click', () => {
-    const b = U.last.state && U.last.state.bots && U.last.state.bots[U.cardBot];
-    if (!b || !b.chat_url) return;
-    openChat(b.id, b.chat_url);
-  });
-
   const workspace = h('button', {class:'office-workspace-edit',type:'button',text:'設定 Workspace',hidden:true});
   workspace.addEventListener('click', () => {
     const b = U.last.state?.bots?.[U.cardBot];
     if (canManageAgent(b)) window.dispatchEvent(new CustomEvent('office:workspace',{detail:{id:b.agent_id,name:b.name}}));
   });
-  const more = h('div', { class: 'bhq-more bhq-surface bhq-glow bhq-glow--still' }, body, h('div', { class: 'bhq-card-foot' }, cta,workspace));
+  const foot = h('div', { class: 'bhq-card-foot', hidden: true }, workspace);
+  const more = h('div', { class: 'bhq-more bhq-surface bhq-glow bhq-glow--still' }, body, foot);
   const cgrab = h('span', { class: 'bhq-cgrab', 'aria-hidden': 'true' });
   const card = h('section', { class: 'bhq-card', hidden: true, 'aria-label': 'Bot card' }, cgrab, hero, more);
 
@@ -643,14 +639,9 @@ function buildPanel(root) {
     root, team, tcard, teamHead: head, teamTitle, teamSub, teamHint, teamBig: big, nWait, nErr, rowWait, rowErr, lErr, list, teamEmpty,
     card: {
       root: card, hero, body, av, name, where, status, stDot, stTxt, now, taskBlock, task,
-      sSteps, sTasks, sHours, usageLabel, useBlock, fuel, fillBar, shareNum, hist, histSig: null, cta, workspace, fresh: true,
+      sSteps, sTasks, sHours, usageLabel, useBlock, fuel, fillBar, shareNum, hist, histSig: null, foot, workspace, fresh: true,
     },
   };
-}
-
-function openChat(id, url) {
-  if (U.h.onOpenChat) U.h.onOpenChat(id, url);
-  else window.location.href = url;
 }
 
 /* ------------------------------------------------------------------ build: feed + zoom */
@@ -1439,6 +1430,7 @@ function renderCard(state, bot, viewedFloor) {
   const desk = overview&&bot.ground_desk_id?' · '+deskLabel(bot.ground_desk_id):Number.isFinite(Number(bot.desk)) && bot.desk != null ? ' · desk ' + Number(bot.desk) : '';
   setText(c.where, where + desk + ' · ' + (bot.is_subagent?`${bot.parent_name||'主 Agent'} 的子 Agent`:seenText(bot)));
   setHidden(c.workspace, !canManageAgent(bot));
+  setHidden(c.foot, !canManageAgent(bot));
 
   setAttr(c.stDot, 'data-s', s);
   const since = parseTs(bot.since);
@@ -1486,10 +1478,6 @@ function renderCard(state, bot, viewedFloor) {
     for (const x of hist) c.hist.append(histRow(x));
   }
 
-  // chat button
-  const has = !!bot.chat_url;
-  if (c.cta.disabled === has) c.cta.disabled = !has;
-  setAttr(c.cta, 'title', has ? '查看收到的任務、交付內容及來源對話' : '正在載入記錄入口');
   c.fresh = false;
 }
 
@@ -1629,21 +1617,16 @@ function renderCheck(state) {
 function makeWaitRow(id) {
   const av = makeAva();
   const name = h('button', { class: 'bhq-wname', type: 'button' });
-  const btn = h('button', { class: 'bhq-wbtn', type: 'button', text: 'Open chat', hidden: true });
   const st = h('b');
   const step = h('span');
   const text = h('p', { class: 'bhq-wtext' }, st, step);
   const row = h('div', { class: 'bhq-wrow', 'data-id': id },
     av.root,
-    h('div', { class: 'bhq-wmain' }, h('div', { class: 'bhq-wtop' }, name, btn), text));
+    h('div', { class: 'bhq-wmain' }, h('div', { class: 'bhq-wtop' }, name), text));
   const select = () => { if (U.h.onSelectBot) U.h.onSelectBot(id); };
   name.addEventListener('click', select);
   row.addEventListener('click', (e) => { if (!e.target.closest('button')) select(); });
-  btn.addEventListener('click', () => {
-    const b = U.last.state && U.last.state.bots && U.last.state.bots[id];
-    if (b && b.chat_url) openChat(id, b.chat_url);
-  });
-  return { row, av, name, btn, st, step };
+  return { row, av, name, st, step };
 }
 
 function renderWaiting(state) {
@@ -1674,7 +1657,6 @@ function renderWaiting(state) {
     setText(r.name, bot.name || id);
     setText(r.st, CHIP[s] || statusLabel(s));
     setText(r.step, bot.step ? ' · ' + bot.step : '');
-    setHidden(r.btn, !bot.chat_url);
     return r.row;
   });
   reconcile(d.wlist, els, 0);
@@ -1701,7 +1683,7 @@ function renderFinished(state) {
   setHidden(d.fempty, items.length > 0 && state.history_ok !== false);
   setText(d.fempty, state.history_ok === false ? '交付記錄暫時未能更新；以下是已保存內容。' : '尚未收到交付紀錄。');
 
-  const sig = items.map((x) => x.t + '|' + x.e.bot + '|' + x.e.step + '|' + x.e.url).join('\n');
+  const sig = items.map((x) => x.t + '|' + x.e.bot + '|' + x.e.step).join('\n');
   if (sig !== d.finSig) {
     d.finSig = sig;
     d.tl.textContent = '';
@@ -1715,11 +1697,6 @@ function renderFinished(state) {
         h('div', { class: 'bhq-tl-main' },
           h('div', { class: 'bhq-tl-top' }, h('b', { class: 'bhq-tl-name', text: x.e.name || bot.name || x.e.bot || '' }), time),
           h('div', { class: 'bhq-tl-step', text: x.e.step || 'done', title: x.e.step || '' })));
-      if (x.e.url) {
-        const open = h('button', { class: 'bhq-delivery-open', type: 'button', text: '查看交付' });
-        open.addEventListener('click', () => openChat(x.e.bot, x.e.url));
-        li.lastElementChild.append(open);
-      }
       d.tl.append(li);
       return { time, t: x.t };
     });
@@ -1727,7 +1704,7 @@ function renderFinished(state) {
   for (const r of d.finRefs) setText(r.time, r.t == null ? '' : relAgo(r.t));
 }
 
-/* Routines: sorted by next run; "Turn off" copies `pause routine <name>` and opens the owner's chat. */
+/* Routines: copy the pause instruction and keep the Agent selected inside OFFICE. */
 
 async function copyText(text) {
   try {
@@ -1749,13 +1726,13 @@ async function turnOffRoutine(r, ref) {
   const d = U.dock;
   const cmd = 'pause routine ' + r.routine;
   const ok = await copyText(cmd);
-  setText(ref.noteText, ok ? 'Copied — paste it in the chat' : 'Could not copy — send: ' + cmd);
+  setText(ref.noteText, ok ? '已複製；請貼到 Agent 頭頂對話' : '未能複製；請輸入：' + cmd);
   const key = ref.key;
   clearTimeout(d.copied.get(key));
   ref.li.classList.add('is-copied');
   d.copied.set(key, setTimeout(() => { d.copied.delete(key); ref.li.classList.remove('is-copied'); }, 4200));
   const bot = U.last.state && U.last.state.bots && U.last.state.bots[r.bot];
-  if (bot && bot.chat_url) openChat(bot.id, bot.chat_url);
+  if (bot && U.h.onSelectBot) U.h.onSelectBot(bot.id);
 }
 
 function renderRoutines(state) {
@@ -1783,7 +1760,7 @@ function renderRoutines(state) {
       setAvatar(av, bot, null);
       const next = h('span', { class: 'bhq-rnext bhq-num' });
       const noteText = h('span');
-      const btn = h('button', { class: 'bhq-roff', type: 'button', text: 'Turn off', title: 'Copies "pause routine ' + r.routine + '" and opens the chat' });
+      const btn = h('button', { class: 'bhq-roff', type: 'button', text: '複製暫停指令', title: '複製暫停指令，並選取這個 Agent' });
       const li = h('li', { class: 'bhq-rrow' + (d.copied.has(key) ? ' is-copied' : '') },
         av.root,
         h('div', { class: 'bhq-rmain' },
@@ -1793,7 +1770,7 @@ function renderRoutines(state) {
             h('span', { class: 'bhq-rnote', role: 'status' }, svg(ICON.check), noteText),
             btn)));
       const ref = { li, next, noteText, key, t: parseTs(r.next_run) };
-      setText(noteText, 'Copied — paste it in the chat');
+      setText(noteText, '已複製；請貼到 Agent 頭頂對話');
       btn.addEventListener('click', () => turnOffRoutine(r, ref));
       d.rl.append(li);
       return ref;

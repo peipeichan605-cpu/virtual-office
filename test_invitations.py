@@ -1,3 +1,4 @@
+from security_keys import owner_key
 import json
 from pathlib import Path
 import subprocess
@@ -25,7 +26,7 @@ class InvitationTests(unittest.TestCase):
         self.server.shutdown();self.server.server_close();self.thread.join();self.bridge.history.close();self.temp.cleanup()
     def request(self,path,body=None,key=True,headers=None):
         h={'Content-Type':'application/json'}
-        if key:h['X-Office-Key']=self.bridge.config['topic']
+        if key:h['X-Office-Key']=owner_key(self.bridge.config)
         h.update(headers or {})
         req=urllib.request.Request(self.base+path,data=json.dumps(body).encode() if body is not None else None,headers=h)
         try:

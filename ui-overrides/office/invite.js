@@ -1,6 +1,8 @@
 import {workspaceChooser} from './workspaces.js';
 import {localReceiverUnavailable} from './commands.js';
 import {GrokConnectionAssistant,grokConnectionView} from './grok-connection.js';
+import {initNewConversationUI} from './new-conversation-ui.js';
+import {mountHeaderAction} from './header-actions.js';
 const key=decodeURIComponent(location.hash.slice(1));
 const errors={private_office_required:'請從你的私人 OFFICE 入口開啟。',name_in_use:'這個名稱已有人使用，請換一個名字。',invalid_name:'請填寫 1 至 80 字的名稱。',invitation_unavailable:'暫時未能建立邀請，請稍後再試。',invitation_expired:'邀請已過期，請建立新邀請。',already_claimed:'Agent 已登記，不能再取消這張邀請。'};
 Object.assign(errors,{agent_membership_changed:'這位 Agent 的身份已改變或已登出，請重新選擇；舊接駁未有套用。',cursor_connection_details_required:'請提供 Cursor Cloud Agent 連結及 API key。',cursor_agent_not_available:'這個 Cloud Agent 暫時不可接入，請在 Cursor 確認。',platform_auth_required:'平台憑證未能通過驗證。',platform_access_denied:'這個帳戶未獲准使用平台接口。',platform_target_not_found:'找不到你指定的 Agent。',invalid_webhook_details:'請填寫 Grok Bot routine 的 HTTPS Webhook URL 及 key。',grok_return_route_required:'先讓 Bot 完成接入 Prompt 及首次回報，再啟用指示。',connection_has_active_commands:'仍有指令未結束，暫時不能更換入口。',agent_already_selected:'這個 Agent 已用另一個名稱接入。',platform_connection_failed:'未能連到平台；尚未建立接駁。'});
@@ -48,16 +50,20 @@ async function request(path,body){
   const data=await response.json();if(!response.ok){const error=new Error(errors[data.error]||'暫時未能完成操作，請再試。');error.status=response.status;error.code=data.error;throw error;}return data;
 }
 if(key){
+  // Initialize the shared entry with its launcher, independently of 3D loading.
+  const wallpaper=new URLSearchParams(location.search).get('mode')==='wallpaper';
+  if(!wallpaper)initNewConversationUI();
   const launch=document.createElement('button');launch.className='office-invite-launch';launch.type='button';launch.textContent='＋ 邀請 Agent';
+  launch.hidden=wallpaper;
   const dialog=document.createElement('dialog');dialog.className='office-invite-dialog';dialog.setAttribute('aria-labelledby','invite-heading');
   dialog.innerHTML=`<button class="invite-close" type="button" aria-label="關閉邀請視窗">×</button>
-    <div class="invite-eyebrow">VIRTUAL OFFICE</div><h2 id="invite-heading">邀請一位 Agent</h2>
-    <p class="invite-intro">選擇平台，加入你想共事的 Agent。</p>
+    <div class="invite-eyebrow">VIRTUAL OFFICE</div><h2 id="invite-heading">接入現有 Agent</h2>
+    <p class="invite-intro">選擇已有 Agent 的平台，保留原對話及工作環境。</p>
     <form class="invite-form"><label>使用平台<select name="provider" required><option value="" disabled selected>請選擇平台</option><option value="codex">Codex App</option><option value="cursor">Cursor Desktop · 本機聊天</option><option value="cursor_cloud">Cursor Desktop · Cloud Agent</option><option value="grok_bot">Grok Bot</option><option value="crouton">Crouton</option><option value="generic">其他 Agent</option></select></label>
       <label>Agent 名稱<input name="name" maxlength="80" required placeholder="例如：我的工作助手" autocomplete="off"></label>
       <div class="cursor-setup" hidden><label>Cursor Agent 連結<input name="cursor_session" type="text" placeholder="https://cursor.com/agents/bc-…" autocomplete="off"></label>
         <label>Cursor API key<input name="cursor_key" type="password" autocomplete="off" placeholder="首次接駁時填寫"></label>
-        <p class="invite-footnote">沿用 Desktop 中的 Cloud Agent。Key 只保存在你的 OFFICE 本機。<a href="https://cursor.com/dashboard?tab=integrations" target="_blank" rel="noreferrer">Cursor API 設定</a></p></div>
+        <p class="invite-footnote">選擇 Cursor Desktop 中的 Cloud Agent；本機聊天適用另一個選項。Key 只保存在你的 OFFICE 本機。<a href="https://cursor.com/dashboard?tab=integrations" target="_blank" rel="noreferrer">Cursor API 設定</a></p></div>
       <p class="platform-note invite-footnote"></p>
       <button class="invite-primary" type="submit" disabled>先選擇平台</button>
       <p class="invite-footnote">只邀請你選定的 Agent，不會掃描其他聊天。</p>
@@ -70,9 +76,9 @@ if(key){
       </details>
       <div class="grok-assistant-host"></div>
       <div class="invite-actions"><button class="invite-another" type="button">邀請另一位</button><button class="invite-revoke" type="button">取消這張邀請</button></div></section>
-    <section class="cursor-result" hidden><div class="invite-status" data-state="connected">已接通指定的 Cursor Cloud Agent</div><p>可以點 Agent 頭像，在 OFFICE 傳送第一項指示。收到原生回覆後，紀錄會自動保存。</p><button class="invite-primary cursor-done" type="button">返回辦公室</button></section>
+    <section class="cursor-result" hidden><div class="invite-status" data-state="connected">已接入指定的 Cursor Cloud Agent</div><p>背景對話同步會自動啟動。點 Agent 頭頂對話可查看同步狀態，或在 OFFICE 傳送第一項指示；收到原生回覆後，紀錄會自動保存。</p><button class="invite-primary cursor-done" type="button">返回辦公室</button></section>
     <p class="invite-notice" role="alert"></p>`;
-  document.body.append(launch,dialog);
+  document.body.append(dialog);mountHeaderAction(launch);
   const form=dialog.querySelector('form'),result=dialog.querySelector('.invite-result'),notice=dialog.querySelector('.invite-notice'),status=dialog.querySelector('.invite-status'),prompt=dialog.querySelector('textarea'),copy=dialog.querySelector('.invite-copy'),revoke=dialog.querySelector('.invite-revoke'),submit=form.querySelector('button[type="submit"]'),resumeButton=form.querySelector('.invite-resume');
   const workspace=workspaceChooser();submit.before(workspace.root);
   const cursorSetup=dialog.querySelector('.cursor-setup'),cursorResult=dialog.querySelector('.cursor-result');
@@ -98,7 +104,7 @@ if(key){
     connectionAssistant.bind(data);
     return connectionAssistant.controller.capability;
   }
-  function render(data){const accepted=renderActivation(data);if(data.provider==='grok_bot')data={...data,conversation:accepted};current=data;if(data.id)previousInvitation=data.id;desiredInvitation=data.id||null;desiredAgent=data.agent_id||null;const identity=data.agent_id||data.id,completedGrok=data.provider==='grok_bot'&&data.state==='connected',onboarding=result.querySelector('.invite-onboarding-prompt');onboarding.querySelector('summary').hidden=!completedGrok;if(identity!==onboardingIdentity||completedGrok!==onboardingComplete)onboarding.open=!completedGrok;onboardingIdentity=identity;onboardingComplete=completedGrok;const unavailable=data.setup&&localReceiverUnavailable(data.conversation),localCursor=data.provider==='cursor'&&!data.conversation?.persistent;dialog.querySelector('#invite-heading').textContent=completedGrok?'完成 Grok 連接':unavailable?'收訊能力／限制':data.setup?'啟用持續收訊':'邀請一位 Agent';dialog.querySelector('.invite-intro').textContent=completedGrok?(data.name||'這位 Bot')+' · 跟住四步，完成連接及測試。':data.setup?'沿用目前 Agent 的身份及歷史。':'選擇平台，加入你想共事的 Agent。';result.querySelector('.invite-prompt-label').textContent=unavailable?'目前平台收訊能力說明':data.setup?'現有 Agent 收訊補接 Prompt':localCursor?'入場＋公開同步 Prompt（貼一次）':'入場＋持續收訊 Prompt（貼一次）';result.querySelector('.invite-footnote').textContent=unavailable?'這個原聊天目前只能保存留言，不能自動喚醒；重貼 Prompt 或再撳收訊圖示都不會啟用背景入口。':data.setup?'這是現有 Agent 的補接指引；新邀請已包含收訊設定，未接通時留言仍會保存。':localCursor?'貼一次完成入場、首次回報及公開同步，並回報收訊限制。此本機聊天目前不能自動喚醒；重貼 Prompt 或再撳收訊圖示都不會啟用背景入口。新邀請有效 24 小時。':'貼一次，由 Agent 接續完成入場、首次回報、公開同步及支援平台的持續收訊設定；平台要求批准時仍需確認。新邀請有效 24 小時。';form.hidden=true;cursorResult.hidden=true;result.hidden=false;prompt.value=data.prompt||(data.provider==='grok_bot'?'請沿用此 Bot 的 OFFICE 回報程式建立 Webhook routine；完整步驟見安裝包 docs/GROK-BOT.md。':'暫時未有可用的接入指引，請重新建立邀請或查看這位 Agent 的收訊能力。');status.textContent=invitationProgress(data);status.dataset.state=data.provider==='grok_bot'&&data.state==='connected'?grokConnectionView(data.conversation).state:data.state;revoke.hidden=data.state!=='pending';copy.disabled=!data.prompt||['expired','revoked'].includes(data.state);connectionAssistant.syncVisibility();if(!shouldFollow(data))stop();}
+  function render(data){const accepted=renderActivation(data);if(data.provider==='grok_bot')data={...data,conversation:accepted};current=data;if(data.id)previousInvitation=data.id;desiredInvitation=data.id||null;desiredAgent=data.agent_id||null;const identity=data.agent_id||data.id,completedGrok=data.provider==='grok_bot'&&data.state==='connected',onboarding=result.querySelector('.invite-onboarding-prompt');onboarding.querySelector('summary').hidden=!completedGrok;if(identity!==onboardingIdentity||completedGrok!==onboardingComplete)onboarding.open=!completedGrok;onboardingIdentity=identity;onboardingComplete=completedGrok;const unavailable=data.setup&&localReceiverUnavailable(data.conversation),localCursor=data.provider==='cursor'&&!data.conversation?.persistent;dialog.querySelector('#invite-heading').textContent=completedGrok?'完成 Grok 連接':unavailable?'收訊能力／限制':data.setup?'啟用持續收訊':'接入現有 Agent';dialog.querySelector('.invite-intro').textContent=completedGrok?(data.name||'這位 Bot')+' · 跟住四步，完成連接及測試。':data.setup?'沿用目前 Agent 的身份及歷史。':'選擇已有 Agent 的平台，保留原對話及工作環境。';result.querySelector('.invite-prompt-label').textContent=unavailable?'目前平台收訊能力說明':data.setup?'現有 Agent 收訊補接 Prompt':localCursor?'入場＋公開同步 Prompt（貼一次）':'入場＋持續收訊 Prompt（貼一次）';result.querySelector('.invite-footnote').textContent=unavailable?'這個原聊天目前只能保存留言，不能自動喚醒；重貼 Prompt 或再撳收訊圖示都不會啟用背景入口。':data.setup?'這是現有 Agent 的補接指引；新邀請已包含收訊設定，未接通時留言仍會保存。':localCursor?'貼一次完成入場、首次回報及公開同步，並回報收訊限制。此本機聊天目前不能自動喚醒；重貼 Prompt 或再撳收訊圖示都不會啟用背景入口。新邀請有效 24 小時。':'貼一次，由 Agent 接續完成入場、首次回報、公開同步及支援平台的持續收訊設定；平台要求批准時仍需確認。新邀請有效 24 小時。';form.hidden=true;cursorResult.hidden=true;result.hidden=false;prompt.value=data.prompt||(data.provider==='grok_bot'?'請沿用此 Bot 的 OFFICE 回報程式建立 Webhook routine；完整步驟見安裝包 docs/GROK-BOT.md。':'暫時未有可用的接入指引，請重新建立邀請或查看這位 Agent 的收訊能力。');status.textContent=invitationProgress(data);status.dataset.state=data.provider==='grok_bot'&&data.state==='connected'?grokConnectionView(data.conversation).state:data.state;revoke.hidden=data.state!=='pending';copy.disabled=!data.prompt||['expired','revoked'].includes(data.state);connectionAssistant.syncVisibility();if(!shouldFollow(data))stop();}
   async function refresh(){if(!current?.id||!dialog.open||busy)return;const ticket=captureView(),id=current.id;try{const data=await request('/api/office/invitations?id='+encodeURIComponent(id));if(!currentView(ticket))return;render(data);notice.textContent='';}catch(error){if(currentView(ticket))notice.textContent=error.message;}}
   function shouldFollow(data){
     if(!data||data.setup)return false;
@@ -111,12 +117,13 @@ if(key){
     stop();current=null;connectionAssistant.bind(null);const ticket=beginView();requestId=null;
     form.reset();workspace.reset();form.elements.provider.value='';platform();form.hidden=false;result.hidden=true;cursorResult.hidden=true;notice.textContent='';
     resumeButton.hidden=!previousInvitation;
-    dialog.querySelector('#invite-heading').textContent='邀請一位 Agent';dialog.querySelector('.invite-intro').textContent='選擇平台，加入你想共事的 Agent。';
+    dialog.querySelector('#invite-heading').textContent='接入現有 Agent';dialog.querySelector('.invite-intro').textContent='選擇已有 Agent 的平台，保留原對話及工作環境。';
     if(!dialog.open)dialog.showModal();form.elements.provider.focus();
     const openTicket=captureView();
     try{await workspace.load(undefined,{accept:()=>currentView(openTicket)});}catch(error){if(viewGuard.sameIntent(ticket)&&currentView(openTicket))notice.textContent=error.message;}
   }
-  launch.addEventListener('click',newInvitation);
+  launch.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('office:new-conversation')));
+  window.addEventListener('office:invite-existing-agent',newInvitation);
   dialog.querySelector('.invite-close').addEventListener('click',()=>dialog.close());
   dialog.addEventListener('close',()=>{viewGuard.change();stop();connectionAssistant.syncVisibility();});
   form.addEventListener('input',()=>requestId=null);

@@ -1,4 +1,5 @@
 """Real loopback setup receipts; no native Bot, memory tool or vendor request."""
+from security_keys import owner_key
 import json
 from pathlib import Path
 import subprocess
@@ -44,7 +45,7 @@ class PublicReportingHTTPTests(unittest.TestCase):
     def request(self, path, body=None, owner=False, headers=None):
         outgoing = {'Content-Type': 'application/json'}
         if owner:
-            outgoing['X-Office-Key'] = self.bridge.config['topic']
+            outgoing['X-Office-Key'] = owner_key(self.bridge.config)
         outgoing.update(headers or {})
         req = urllib.request.Request(self.base + path,
             data=json.dumps(body).encode() if body is not None else None, headers=outgoing)

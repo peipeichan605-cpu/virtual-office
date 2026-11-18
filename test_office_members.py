@@ -168,7 +168,8 @@ class MemberTests(unittest.TestCase):
         _,agent,_=self.member();cid=self.command(agent)
         for state in ('sending','queued','running','waiting_user','delivery_unknown'):
             with self.bridge.commands.lock,self.bridge.commands.db:self.bridge.commands.db.execute('UPDATE commands SET state=? WHERE id=?',(state,cid))
-            self.assertEqual(self.request('/api/office/agents/logout',{'agent_id':agent})[1]['error'],'agent_has_active_commands')
+            self.assertEqual(self.request('/api/office/agents/logout',{'agent_id':agent})[1]['error'],
+                'agent_has_unconfirmed_commands' if state=='delivery_unknown' else 'agent_has_active_commands')
             self.assertIn(agent,self.bridge.definitions)
             self.assertEqual(self.bridge.commands.db.execute('SELECT state FROM commands WHERE id=?',(cid,)).fetchone()[0],state)
 

@@ -1,4 +1,5 @@
 """Local fake-transport fixtures; no live credentials, dispatch or service changes."""
+from security_keys import owner_key
 import hashlib
 import json
 import sqlite3
@@ -197,7 +198,7 @@ class GrokPairingTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
         def call(owner=True, origin=None, body=proof):
             headers = {'Content-Type': 'application/json'}
-            if owner: headers['X-Office-Key'] = self.config['topic']
+            if owner: headers['X-Office-Key'] = owner_key(self.config)
             if origin: headers['Origin'] = origin
             req = urllib.request.Request('http://127.0.0.1:%s/api/office/commands/reconcile' % server.server_address[1], data=json.dumps(body).encode(), headers=headers)
             try:

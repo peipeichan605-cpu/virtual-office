@@ -18,6 +18,7 @@ import threading
 import time
 import uuid
 from history import redact, timestamp
+from security_keys import security_secrets
 
 
 class AcpError(Exception):
@@ -358,7 +359,7 @@ class HermesSession:
             item = {'id': str(uuid.uuid4()), 'run_id': self.active['run_id'], 'event': threading.Event(),
                 'allow': allow, 'deny': deny, 'decision': None,
                 'preview': redact(params.get('toolCall', {}).get('title', 'Hermes 要求批准操作'),
-                                  (self.adapter.config['topic'],), 4000),
+                                  security_secrets(self.adapter.config), 4000),
                 'expires_at': timestamp(time.time() + 45), 'deadline': time.monotonic() + 45}
             self.permissions[item['id']] = item
             self.event('status', waiting=True, step='Hermes 等待你批准操作')

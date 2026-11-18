@@ -155,6 +155,12 @@ test('retired or logged-out composer ignores pending replies and clears its draf
   assert.equal(c.agent,null);assert.equal(c.input.value,'');assert.equal(c.latest,null);assert.equal(c.form.hidden,true);assert.equal(c.syncStatus.textContent,'');
 });
 
+test('model settings appear only for a Codex background member and hide when composer is rebound or disposed',t=>{
+  const c=fixture(t);assert.equal(c.modelControl,undefined);c.bind(A,cap({mode:'codex_background'}));assert.equal(c.modelControl.textContent,'模型設定');assert.equal(c.modelControl.hidden,false);
+  c.input.value='Keep draft';c.bind(A,cap({mode:'codex_background'}));assert.equal(c.input.value,'Keep draft');assert.equal(c.element.children.filter(item=>item===c.modelControl).length,1);
+  c.bind(B,cap({mode:'cursor_cloud'}));assert.equal(c.modelControl.hidden,true);c.bind(A,cap({mode:'codex_background'}));assert.equal(c.modelControl.hidden,false);c.dispose();assert.equal(c.modelControl.hidden,true);
+});
+
 test('public synchronization describes coverage without turning dispatch proof into native App observation',()=>{
   const proof={connection_check:{verified:true,received:true,replied:true}};
   assert.equal(publicSyncHint(proof),'App 公開同步：能力待確認');
@@ -172,4 +178,24 @@ test('work reported from the App remains visibly pending and cancellable before 
   c.show(pending);c.renderPending([pending]);
   assert.equal(c.status.textContent,'等待這位 Agent 在 App 的工作結束；指示尚未送出');
   assert.equal(c.pendingBox.hidden,false);assert.equal(c.pendingBox.children[1].children[1].textContent,'取消');
+});
+
+test('Cloud App synchronization is advertised only while the selected observer is ready',t=>{
+  const sync={mode:'cloud_conversation_observer',scope:'selected_cloud_agent',state:'configured',configured:true,automatic:true,manual_app_automatic:true};
+  const c=fixture(t);c.bind(A,cap({mode:'cursor_cloud',public_sync:sync}));
+  assert.equal(c.input['aria-label'],'傳送到 Cursor App 的 Cloud Agent');
+  assert.equal(c.status.textContent,'指示會送到 Cursor App 中同一隻 Cloud Agent。');
+  assert.equal(c.syncStatus.textContent,'同一 Cloud Agent：自動同步 Cursor App 新工作、公開對話及交付');
+  assert.ok(!c.syncStatus.textContent.includes('已驗證'));
+  c.input.value='Keep my draft';
+  for(const missing of ['configured','automatic','manual_app_automatic']){
+    c.bind(A,cap({mode:'cursor_cloud',public_sync:{...sync,[missing]:false}}));
+    assert.equal(c.syncStatus.textContent,'Cloud 對話同步準備中；尚未確認 App 新工作');
+    assert.equal(c.input.value,'Keep my draft');
+  }
+  c.bind(A,cap({mode:'cursor_cloud',public_sync:{...sync,state:'recovering',automatic:false,manual_app_automatic:false}}));
+  assert.equal(c.syncStatus.textContent,'Cloud 對話同步暫時中斷；正在重新連接');
+  assert.equal(c.input.value,'Keep my draft');
+  c.bind(A,cap({mode:'cursor_cloud',public_sync:{...sync,state:'connecting',automatic:false,manual_app_automatic:false}}));
+  assert.equal(c.syncStatus.textContent,'Cloud 對話同步準備中；尚未確認 App 新工作');
 });

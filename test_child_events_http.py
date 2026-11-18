@@ -1,4 +1,5 @@
 """Real loopback tests for scoped child-observer ingress; synthetic data only."""
+from security_keys import owner_key
 import hashlib
 import http.client
 import json
@@ -82,7 +83,7 @@ class ChildEventsHttpTests(unittest.TestCase):
              reporter=False, headers=None, method=None):
         request_headers = {'Content-Type': 'application/json'}
         if owner:
-            request_headers['X-Office-Key'] = self.bridge.config['topic']
+            request_headers['X-Office-Key'] = owner_key(self.bridge.config)
         if observer is not None:
             request_headers.update({'X-Observer-Id': observer['observer_id'],
                                     'Authorization': 'Bearer ' + observer['token']})
@@ -322,12 +323,14 @@ class ChildEventsHttpTests(unittest.TestCase):
         self.assertEqual(self.call(route, reporter=True)[0], 403)
         code, public = self.call(route, owner=True)
         self.assertEqual(code, 200)
+        self.assertFalse(public['agent']['selected'])
         self.assertIn('已遮蓋', json.dumps(public, ensure_ascii=False))
         self.assertNotIn('syntheticSecret', json.dumps(public))
         history_route = '/api/office/history?' + query
         self.assertEqual(self.call(history_route, observer=self.observer)[0], 403)
         code, history = self.call(history_route, owner=True)
         self.assertEqual(code, 200)
+        self.assertFalse(history['agent']['selected'])
         run = history['runs'][0]
         self.assertEqual(run['status'], 'done')
         detail_route = '/api/office/run?' + urllib.parse.urlencode({'id': run['id']})

@@ -4,6 +4,8 @@
 
 macOS Codex App 及 Hermes ACP 已實測原生背景派工：文字進入已綁定的原聊天，由原聊天的模型與權限執行；公開進度、最終回覆及交付記錄沿用現有同步。Hermes 的設定步驟見 [HERMES.md](HERMES.md)，以下 Codex 設定只適用於 Codex App。
 
+另可從「＋ 新對話」選 [Codex 背景模式](CODEX-BACKGROUND.md)，由 OFFICE 管理獨立原生 thread。macOS 優先使用相容 Desktop App 隨附執行程式，毋須為此另裝 CLI；明確指定的版本優先，沒有相容 App 程式時才使用獨立 CLI。這個模式的「模型設定」會保留原 Agent、thread 及歷史，只影響下一項新指示；不重送舊指示，工作未結束或結果未確認時不能更改。
+
 另有通用 [Cursor Desktop Cloud adapter](CURSOR.md) 與 [Grok Bot Webhook adapter](GROK-BOT.md)，在「＋ 邀請 Agent」自行接駁，不需改程式或重啟。兩者已通過隔離協議與 UI 驗證；Grok Bot 另已完成一個真實 Bot 的兩輪 Webhook 回報測試，Cursor Cloud 尚待實際帳戶端到端驗證。Cursor 本機聊天不冒充 Cloud/CLI 接駁；Grok routine 只保證指定 Bot 路由，不宣稱綁定原生聊天 session。
 
 ## 本機啟用
@@ -35,6 +37,12 @@ Python 偵測 App 隨附、實際支援 `queue` 的 CLI；不會更新或安裝 
 Cursor Cloud 以原生 run ID 串流／查詢同一 run；重啟只恢復讀取。Grok Webhook HTTP 200 顯示「等待 Bot 回報」，需收到配對的開始及終態才更新工作狀態。兩者都不因接收成功而假定完成。
 
 每次提交帶固定 `request_id`；同編號同內容的網絡重送只保留一筆，不重複派送。不同內容重用編號會被拒絕。原聊天訊息首行帶 OFFICE 指令編號，用來精確配對原 session 和回合；OFFICE 閱讀介面省略該首行。不要單憑角色變成「工作中」推斷某條指令已執行。
+
+## 登出與結果未確認
+
+各平台共用同一項登出規則：已知仍在執行、排隊或等待批准的指示會阻止登出。若只剩結果未確認的指示，按「登出」後會先說明未知狀態；擁有人再明確按「仍要登出，保留紀錄」，才解除 OFFICE 登記及接駁。身份或工作狀態在確認期間改變時，必須重新核對。
+
+登出會取消尚未派送的留言，並保留既有公開對話、交付及未知結果。未知指示不會改成成功或已取消，也不會自動重送。這是解除 OFFICE 登記，不是原平台的取消操作；不能以角色消失判斷原生工作已停止。
 
 ## 私隱與範圍
 
