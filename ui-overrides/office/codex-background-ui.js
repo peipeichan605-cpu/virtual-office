@@ -9,6 +9,7 @@ const messages={
   invalid_workspace:'請選擇可使用的工作資料夾。',workspace_not_found:'找不到這個工作資料夾；需要時可勾選建立資料夾。',
   codex_runtime_required:'這個 OFFICE 尚未找到本機 Codex。請安裝 Codex Desktop App 或 CLI，再重新檢查。',
   codex_binary_unavailable:'這個 OFFICE 尚未找到本機 Codex。請安裝 Codex Desktop App 或 CLI，再重新檢查。',
+  codex_native_executable_required:'Windows 需要可直接執行的 codex.exe；目前找到的是 .cmd／.bat 啟動檔。請讓安裝 Agent 確認 Codex 原生執行檔在 PATH，或為這個 OFFICE 選用有效的原生執行檔，再重新檢查。',
   codex_version_unavailable:'暫時無法讀取本機 Codex 版本。請讓安裝 Agent 檢查 Codex 是否可啟動，再重新檢查。',
   codex_process_unavailable:'Codex 背景程式未能啟動。請讓安裝 Agent 檢查本機 Codex，再重新檢查。',
   codex_process_closed:'Codex 背景程式已結束。請重新檢查；已登記的對話會保留。',
@@ -16,6 +17,8 @@ const messages={
   codex_rpc_rejected:'Codex 未接受這次連線。請讓安裝 Agent 檢查本機 Codex 版本及登入，再重新檢查。',
   codex_probe_unavailable:'暫時未能檢查本機 Codex。請確認 Codex 可使用，再重新檢查。',
   codex_probe_failed:'暫時未能檢查本機 Codex。請確認 Codex 可使用，再重新檢查。',
+  codex_status_timeout:'檢查本機 Codex 逾時。請按「重新檢查」；若持續發生，讓安裝 Agent 檢查這個 OFFICE 的日誌及 Codex 啟動時間。這次檢查不會另開對話或重送工作。',
+  codex_status_unavailable:'暫時無法連接 OFFICE 的 Codex 檢查入口。請確認 OFFICE 服務仍在運行，再重新檢查。這次檢查不會另開對話或重送工作。',
   codex_login_required:'請先在運行 OFFICE 的電腦登入 Codex，再重新檢查。這裡不需要填寫 API key。',
   codex_login_unknown:'暫時未能確認 Codex 登入狀態。請確認本機 Codex 可使用，再重新檢查。',
   codex_model_invalid:'目前的 Codex 模型設定無法使用，請檢查本機 Codex 設定。',
@@ -169,7 +172,7 @@ export function initCodexBackgroundUI({document:doc=document,events=window,key=(
     form.hidden=!['ready','creating'].includes(state.phase);result.hidden=state.phase!=='created';
     refresh.hidden=!['unavailable','unknown','failed'].includes(state.phase);refresh.textContent=state.phase==='unknown'?'核對登記結果':'重新檢查';
     const runtime=state.home?.runtime_source==='desktop_app'?'Codex Desktop 內置執行器':state.home?.runtime_source==='cli'?'本機 Codex CLI':'本機 Codex';
-    status.textContent=({loading:'正在檢查本機 Codex…',ready:`${runtime} · 選擇工作資料夾，登記一條背景對話。`,creating:'正在登記背景對話，請稍候…',unavailable:codexBackgroundError({code:state.home?.reason||'codex_login_unknown'}),unknown:'登記結果未確認。請核對結果，不會自動另開一條。',created:'已加入，首次指示會啟動背景對話。',failed:'暫時未能讀取 Codex 背景模式設定。'}[state.phase]||'');
+    status.textContent=({loading:'正在檢查本機 Codex…首次檢查可能需時約一分鐘。',ready:`${runtime} · 選擇工作資料夾，登記一條背景對話。`,creating:'正在登記背景對話，請稍候…',unavailable:codexBackgroundError({code:state.home?.reason||'codex_login_unknown'}),unknown:'登記結果未確認。請核對結果，不會自動另開一條。',created:'已加入，首次指示會啟動背景對話。',failed:'暫時未能讀取 Codex 背景模式設定。'}[state.phase]||'');
     notice.textContent=state.error;for(const input of form.elements)input.disabled=!ready;submit.textContent=creating?'登記中…':'登記背景對話';
     const signature=JSON.stringify(state.home);
     if(signature!==homeSignature&&state.home){

@@ -14,7 +14,18 @@ export async function officeGet(path, key) {
   if(isMobileAccess())return mobileRequest(mobileRoute(path));
   if (!path.startsWith('/api/office/')) throw new Error('Invalid office endpoint');
   const sdk=path.startsWith('/api/office/grok/sdk/');
-  const response = await fetch(path, { cache: 'no-store', credentials: 'same-origin', headers: { 'X-Office-Key': key }, signal: AbortSignal.timeout(sdk?60000:5000) });
+  const codexStatus=path.split('?')[0]==='/api/office/codex/background/status';
+  // Codex metadata has one 45s server budget plus bounded owned-process cleanup.
+  // The normal 5s read budget must not cancel a healthy cold runtime first.
+  const signal=AbortSignal.timeout(sdk||codexStatus?60000:5000);
+  let response;
+  try{response=await fetch(path,{cache:'no-store',credentials:'same-origin',headers:{'X-Office-Key':key},signal});}
+  catch(cause){
+    if(!codexStatus)throw cause;
+    const timedOut=cause?.name==='TimeoutError'||(signal.aborted&&signal.reason?.name==='TimeoutError');
+    const error=new Error(timedOut?'Codex status request timed out':'Codex status request unavailable');
+    error.code=timedOut?'codex_status_timeout':'codex_status_unavailable';throw error;
+  }
   if (!response.ok) {
     let detail;try{detail=await response.json();}catch{}
     const vendorDenied=sdk&&response.status===403&&detail?.error==='grok_sdk_access_denied';
