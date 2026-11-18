@@ -3,17 +3,22 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { WallDisplays } from './walls.js';
 import { groundLayout } from '../overview.js';
 import {NATIVE_LAMP,lobbyLightLayout} from './lighting-layout.js';
+import {batchStaticFurniture} from './static-furniture.js';
+
+const STATIC_NATIVE_FURNITURE=new Set(['table_1','sofa','armchair_1','coffee_table','tree_2','coffee_bar','bar_stools']);
+const defaultBatching=()=>typeof location==='undefined'||new URLSearchParams(location.search).get('batching')!=='0';
 
 // Reuse the same native office.glb furniture as the workspace floors. Materials
 // belong to this instance; original template geometries/textures stay shared.
 export class GroundHall {
-  constructor(assets){
+  constructor(assets,{batching=defaultBatching()}={}){
     this.assets=assets;this.native=assets?.templates?.floor_open;
     this.root=new THREE.Group();this.root.name='ground-overview';
     this.obj=new THREE.Group();this.root.add(this.obj);this.alpha=0;
     this.closed=new THREE.Group();this.closed.name='ground-podium';
     this.ownedGeometries=new Set();this.ownedMaterials=new Set();this.ownedTextures=new Set();this.labels=[];
     this.lobbyLights=[];this.lobbyLightLevel=0;
+    this.batchingEnabled=batching;this.staticFurniture=null;
     this.laptopTemplate=this.makeLaptopTemplate();
     this.configure(0);this.setShown(false);
   }
@@ -52,7 +57,8 @@ export class GroundHall {
     if(straighten)object.rotation.set(0,0,0);
     object.traverse(mesh=>{
       if(!mesh.isMesh)return;
-      const materials=(Array.isArray(mesh.material)?mesh.material:[mesh.material]).map(original=>{
+      const originals=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+      const materials=originals.map(original=>{
         let owned;
         if(glass)owned=new THREE.MeshStandardMaterial({name:'ground-glass',color:'#9eaaa0',transparent:true,opacity:.19,roughness:.38,metalness:.12,depthWrite:false,side:THREE.DoubleSide});
         else if(original.isMeshBasicMaterial&&name!=='wall_screen')owned=new THREE.MeshStandardMaterial({name:original.name,map:original.map,color:original.color,roughness:.86,side:original.side});
@@ -60,6 +66,14 @@ export class GroundHall {
         if(palette[original.name])owned.color.set(palette[original.name]);
         this.ownedMaterials.add(owned);return owned;
       });mesh.material=Array.isArray(mesh.material)?materials:materials[0];mesh.castShadow=mesh.receiveShadow=!glass;
+      if(!glass&&STATIC_NATIVE_FURNITURE.has(name)&&materials.length===1&&
+          (materials[0].isMeshStandardMaterial||materials[0].isMeshBasicMaterial)&&
+          originals[0].onBeforeCompile===THREE.Material.prototype.onBeforeCompile){
+        const material=materials[0];
+        // The original material identity carries all untouched shader/texture
+        // settings; these are the properties this module can change per copy.
+        mesh.userData.officeStaticBatchKey=JSON.stringify([name,originals[0].uuid,material.type,material.color?.getHexString(),material.roughness,material.metalness]);
+      }
     });
     object.updateMatrixWorld(true);
     const bounds=new THREE.Box3().setFromObject(object),dimensions=bounds.getSize(new THREE.Vector3());
@@ -156,6 +170,7 @@ export class GroundHall {
     object.traverse(mesh=>{if(mesh.isMesh){mesh.userData.officeSeatIds=ids;if(ids.length===1)mesh.userData.officeDeskId=ids[0];this.deskMeshes.push(mesh);}});
   }
   clear(){
+    this.staticFurniture?.dispose({restore:false});this.staticFurniture=null;
     for(const light of this.lobbyLights){light.removeFromParent();light.target.removeFromParent();light.dispose?.();}
     this.lobbyLights=[];
     this.walls?.screen?.tex.dispose();this.walls?.board?.tex.dispose();
@@ -308,6 +323,10 @@ export class GroundHall {
     this.setLobbyLightLevel(this.lobbyLightLevel);
     this.spots=layout.seats.map(seat=>spotMap.get(seat.id));this.screens=layout.seats.map(seat=>screenMap.get(seat.id)||null);
     this.obj.userData.nativeModules=[...this.nativeModules];this.obj.userData.workstationCount=layout.seats.filter(seat=>seat.kind==='desk').length;this.obj.userData.loungeSeats=layout.mainCount;
+    if(this.batchingEnabled){
+      this.staticFurniture=batchStaticFurniture(THREE,this.obj);
+      this.deskMeshes=[...new Set(this.deskMeshes.map(mesh=>this.staticFurniture.sourceToBatch.get(mesh)||mesh))];
+    }
     return true;
   }
   setShown(value){this.alpha=value?1:0;this.root.visible=value;}

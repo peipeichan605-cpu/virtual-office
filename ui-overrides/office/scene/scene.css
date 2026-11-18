@@ -157,3 +157,29 @@
 .speech-child:focus-visible,.speech-team:focus-visible{outline:2px solid #4a819b;outline-offset:1px}
 .speech-detail{box-sizing:border-box;overflow:auto;overscroll-behavior:contain}
 @media(prefers-reduced-motion:reduce){.office-speech{transition:none}}
+
+/* Same reader in head and floating modes; movement never changes Agent seating. */
+.speech-window-header{display:flex;align-items:center;gap:6px;flex:none;padding:7px 9px;border-bottom:1px solid #dce5df;background:#f0f5f1;border-radius:12px 12px 0 0}
+.speech-window-handle{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font:650 12px/1.6 system-ui;color:#29483b;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:2px 4px;border-radius:5px}
+.speech-window-handle:active{cursor:grabbing}
+.speech-window-handle:focus-visible,.speech-window-toggle:focus-visible,.speech-window-resize:focus-visible{outline:2px solid #398969;outline-offset:1px}
+.speech-window-toggle{flex:none;border:1px solid #c9d8ce;border-radius:6px;padding:3px 7px;background:#fff;color:#426450;font:11px/1.5 system-ui;cursor:pointer}
+.speech-detail .speech-toolbar{flex-wrap:wrap;flex:none}
+.speech-detail .speech-toolbar button[hidden],.speech-detail .office-command[hidden]{display:none}
+.office-dialogue-window{position:fixed;z-index:12000;display:flex;flex-direction:column;box-sizing:border-box;pointer-events:auto;margin:0;border:1px solid #bfd1c5;border-radius:13px;background:#fbfdfb;color:#20312b;font:13px/1.5 system-ui,sans-serif;box-shadow:0 12px 34px #14271f30;overflow:visible;filter:none;user-select:text;-webkit-user-select:text}
+.office-dialogue-window[hidden]{display:none}
+.office-dialogue-window .speech-window-header{border-radius:12px 12px 0 0}
+.office-dialogue-window .speech-messages{flex:1 1 0;min-height:36px;max-height:none!important;margin:0;overflow:auto}
+.office-dialogue-window .speech-older{flex:none}
+.office-dialogue-window .office-command{flex:0 0 auto;box-sizing:border-box;min-height:0;overflow:auto;max-height:min(55%,calc(100% - 115px));border-radius:0 0 12px 12px}
+.office-dialogue-window .speech-toolbar>[role=status]{flex:1 1 140px}
+.speech-window-resize{position:absolute;z-index:2;border:0;padding:0;margin:0;background:transparent;touch-action:none;user-select:none;-webkit-user-select:none}
+.speech-window-resize.is-left{left:-4px;top:16px;bottom:16px;width:8px;cursor:ew-resize}
+.speech-window-resize.is-right{right:-4px;top:16px;bottom:16px;width:8px;cursor:ew-resize}
+.speech-window-resize.is-top{top:-4px;left:16px;right:16px;height:8px;cursor:ns-resize}
+.speech-window-resize.is-bottom{bottom:-4px;left:16px;right:16px;height:8px;cursor:ns-resize}
+.speech-window-resize.is-se{right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;border-radius:0 0 12px 0;background:linear-gradient(135deg,transparent 55%,#819d8c 56%,#819d8c 62%,transparent 63%,transparent 72%,#819d8c 73%,#819d8c 79%,transparent 80%)}
+.speech-detail:not(.office-dialogue-window) .speech-window-resize:not(.is-se){display:none}
+.speech-detail:not(.office-dialogue-window){position:relative}
+.office-speech.has-floating-dialogue .speech-peek{outline:1px solid #6d9c7e}
+@media(max-height:420px){.office-dialogue-window .speech-window-header{padding:3px 7px}.office-dialogue-window .speech-toolbar{padding:3px 8px}.office-dialogue-window .office-command{max-height:48%}.office-dialogue-window .command-public-sync{max-height:30px;overflow:auto}}

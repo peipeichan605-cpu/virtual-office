@@ -236,7 +236,10 @@ export function createDaylight({ scene, renderer }) {
     glass.clear();
     building.group.traverse((o) => {
       if (!o.isMesh) return;
-      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      // Batched meshes retain original materials for immediate per-source fallback. Keep their live
+      // relighting/tint in step too, even while the original source meshes are detached from the scene.
+      const materials = new Set([...(Array.isArray(o.material) ? o.material : [o.material]), ...(o.officeSourceMaterials || [])]);
+      for (const m of materials) {
         if (m.userData.nightPatched) { baked.add(m); patch.relight(m); }
         if (m.name === 'glass_pane') glass.add(m);
       }

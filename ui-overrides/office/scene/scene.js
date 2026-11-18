@@ -1,6 +1,7 @@
 // Isometric 3D building (CONTRACT §6, v2): renderer, camera on springs, floor stack, actors, picking, post.
 // Public API (unchanged): initScene, renderScene, zoom, focusBot.
 import * as THREE from 'three';
+import {isMobileAccess} from '../mobile-access.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -17,8 +18,14 @@ import { Spring, clamp } from './spring.js';
 import { sofiaHour, fontsPromise } from './walls.js';
 import { isGround } from '../overview.js';
 import {requiredMainSeats,resolveSeats,nearestDesk} from '../seating.js';
-import {isObservedChild,memberBots,followerSlots,canManageAgent} from '../subagent-view.js';
+import {isObservedChild,memberBots,followerSlots,FollowerMotion,canManageAgent} from '../subagent-view.js';
+import {collectFollowerObstacles,createFollowerNavigator} from './follower-obstacles.js';
 import {layoutHeadLabels,headOpenAction} from './dialogue-layout.js';
+import {createFramePacer} from './frame-pacer.js';
+import {furnitureSeatIds} from './static-furniture.js';
+import {forEachCaptureBox} from './mesh-bounds.js';
+import {IdleRenderController,hasSceneTransition,observePublicDialogue} from './idle-render.js';
+import {getGraphicsSettings,subscribeGraphicsSettings,publishGraphicsStatus} from '../graphics-settings.js';
 
 // Relative to the page (not the site root), so the office also works when it is published in a sub-folder, e.g.
 // https://bodila51.github.io/grokbot-wallpaper/office/ -> ../assets. Locally the page is at `/`, where this is /assets.
@@ -59,14 +66,29 @@ let loadingEl = null;
 let sizeSignature='';
 let groundSeats=new Map(),seatTargets=null,seatSaving=false,seatNotice=null,seatNoticeTimer=null;
 let followerPositions=new Map();
+let followerTargets=new Map(),followerMotion=null,followerEnvironment=null,followerSignature='',followerFloorId=null;
+const followerEnvironments=new WeakMap();
 const childLinks=new Map();
 // Debug/test switches: ?floor=<id> forces the active floor, ?from=<id> starts there first, ?intro=0 skips the load
 // animation, ?hold=<s> fast-forwards that long after the (last) switch and freezes time, ?cam=x,z,zoom snaps the camera.
-// Wallpaper mode (?mode=wallpaper, for Lively): no panel offset, hover only (no pan / zoom / select), <= 30 fps, no
+// OFFICE and wallpaper use the selected FPS ceiling; animation time remains elapsed-time based.
+// Wallpaper mode (?mode=wallpaper, for Lively): no panel offset, hover only (no pan / zoom / select), no
 // in-scene tags unless &tags=1. app.js owns ?floor= there (pin / cycle), so the scene's own debug switch is off.
 const WALLPAPER = new URLSearchParams(location.search).get('mode') === 'wallpaper';
 const WALLPAPER_TAGS = new URLSearchParams(location.search).get('tags') === '1';
-const WALLPAPER_FRAME_MS = 1000 / 30;
+let graphicsSettings = getGraphicsSettings();
+const shouldDraw = createFramePacer(graphicsSettings.fps);
+const idleProfile = new URLSearchParams(location.search).get('office_idle_profile') === '1';
+let idleFrameStats = {started:null,frames:0,idle_frames:0,active_frames:0};
+const idleRender = new IdleRenderController({
+  enabled:graphicsSettings.idle && new URLSearchParams(location.search).get('idle_render') !== '0',
+  onTransition({idle,now,reason}) {
+    document.documentElement.dataset.officeRenderMode = idle ? 'idle' : 'active';
+    if (idleProfile) console.info('OFFICE_IDLE '+JSON.stringify({idle:Number(idle),at_ms:Math.round(now),reason}));
+  },
+});
+let lastRenderMs = null;
+const wakeScene = reason => idleRender.wake(performance.now(),reason);
 const WALLPAPER_FRAMING = 0.9;                        // < 1 = closer: the side panels' space is not needed, so the tower fills more
 const TEST = (() => {
   const q = new URLSearchParams(location.search);
@@ -81,6 +103,8 @@ const officeAssets = loadOfficeAssets(`${ASSETS}/office`);
 export function initScene(el, cbs = {}) {
   container = el;
   callbacks = cbs;
+  document.documentElement.dataset.officeRenderMode = 'active';
+  wakeScene('init');
   container.classList.add('hq-scene');
   ensureAssets();
 
@@ -95,9 +119,12 @@ export function initScene(el, cbs = {}) {
     container.append(loadingEl);
   }
 
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+  // createPost owns the 4x MSAA scene target. The canvas receives only a
+  // fullscreen composition; sampling it again adds no scene-edge detail.
+  // Keep an explicit reference switch for controlled GPU/pixel comparisons.
+  renderer = new THREE.WebGLRenderer({ antialias: new URLSearchParams(location.search).get('canvas_msaa') === '1', alpha: true, powerPreference: 'high-performance' });
   // the post chain (MSAA, half-float) is capped at 1.5x: soft by design, and it keeps VRAM and fill cost sane
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  renderer.setPixelRatio(graphicsPixelRatio(devicePixelRatio, graphicsSettings.scale, container.clientWidth || 1, container.clientHeight || 1, graphicsRenderLimits(renderer)));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -133,13 +160,25 @@ export function initScene(el, cbs = {}) {
     Promise.race([fontsPromise, new Promise((r) => setTimeout(r, 1500))]).then(go, go);
   });
 
-  post = createPost(renderer, scene, camera);
+  post = createPost(renderer, scene, camera, {antialias:graphicsSettings.antialias});
+  applyGraphicsSettings(graphicsSettings);
+  subscribeGraphicsSettings(applyGraphicsSettings);
+
+  // Capture-phase listeners also see events stopped by dialogue/composer UI.
+  // Feed polling and native receivers remain owned by app.js and its adapters.
+  for (const type of ['pointermove','pointerdown','pointerup','pointercancel','wheel','touchstart','touchmove','touchend','keydown','input','click'])
+    addEventListener(type,()=>wakeScene('interaction'),{capture:true,passive:true});
+  addEventListener('visibilitychange',()=>{if(!document.hidden)wakeScene('visibility');});
+  renderer.domElement.addEventListener('webglcontextrestored',()=>applyGraphicsSettings(getGraphicsSettings()));
+  observePublicDialogue(container,()=>wakeScene('dialogue'));
+  addEventListener('office:dialogue-activity',()=>wakeScene('dialogue'));
+  fontsPromise.then(()=>wakeScene('fonts'),()=>{});
 
   addPointerHandlers();
   seatNotice=document.createElement('div');seatNotice.className='office-seat-notice';seatNotice.setAttribute('role','status');seatNotice.hidden=true;container.append(seatNotice);
   addEventListener('office:agent-drag-start',event=>{if(isGround(building?.activeId)&&actors.has(event.detail?.id))onDown(event.detail.event,event.detail.id);});
   addEventListener('keydown',event=>{if(event.key==='Escape'&&drag?.actorId){cancelSeatDrag();drag=null;}});
-  new ResizeObserver(resize).observe(container);
+  new ResizeObserver(()=>applyGraphicsSettings(getGraphicsSettings())).observe(container);
   resize();
   renderer.setAnimationLoop(frame);
 
@@ -156,7 +195,7 @@ function ensureAssets() {
     l.href = new URL('./scene.css', import.meta.url).href;
     document.head.append(l);
   }
-  if (!document.querySelector('link[href*="family=Inter"]')) {
+  if (!isMobileAccess() && !document.querySelector('link[href*="family=Inter"]')) {
     const l = document.createElement('link');
     l.rel = 'stylesheet';
     l.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&display=swap';
@@ -165,6 +204,7 @@ function ensureAssets() {
 }
 
 export function renderScene(state, view) {
+  idleRender.observe(state,view,performance.now());
   lastState = state;
   lastView = { ...view };
   if (building) sync();
@@ -197,7 +237,25 @@ function sync() {
     if(spot){spots.set(bot.id,spot);rootSpots.set(bot.agent_id,spot);}
   }
   const children=floorBots.filter(isObservedChild);
-  followerPositions=followerSlots(children,rootSpots,panBounds(),followerPositions,overview?inst.spots:assets.spots.desks,view.selectedBot);
+  if(children.length){
+    const key=String(inst.key||'')+'|'+building.activeId+'|'+(building.styles.get(building.activeId)?.layout??'');
+    let environment=followerEnvironments.get(inst);
+    if(!environment||environment.key!==key){
+      const obstacles=collectFollowerObstacles(THREE,inst.obj,inst.root);
+      environment={key,obstacles,navigator:createFollowerNavigator(panBounds(),obstacles)};followerEnvironments.set(inst,environment);
+    }
+    if(followerEnvironment!==environment){
+      const previous=followerFloorId===building.activeId?followerMotion?.states:null;
+      followerEnvironment=environment;followerMotion=new FollowerMotion(environment.navigator);
+      if(previous)for(const [id,state] of previous)if(environment.navigator.clear(state))followerMotion.states.set(id,{...state,route:[],attempt:null});
+      followerTargets=new Map();followerSignature='';followerFloorId=building.activeId;
+    }
+    // Existing parents may still be walking to their destination. Reserve
+    // beside the live positions, not beside the new seats ahead of them.
+    for(const bot of members){const actor=actors.get(bot.id);if(actor?.ctx.inst===inst)rootSpots.set(bot.agent_id,{pos:actor.root.position,yaw:actor.baseYaw||0});}
+    followerTargets=followerSlots(children,rootSpots,panBounds(),followerTargets,overview?inst.spots:[...assets.spots.desks,...assets.spots.lounges],view.selectedBot,environment.obstacles);
+    followerPositions=followerMotion.step(followerTargets,0,new Set(children.map(bot=>bot.id)));followerSignature='';
+  }else{followerMotion=null;followerEnvironment=null;followerPositions=new Map();followerTargets=new Map();}
   for(const bot of children){const at=followerPositions.get(bot.id);if(at)spots.set(bot.id,{pos:new THREE.Vector3(at.x,at.y,at.z),yaw:at.yaw,lounge:true,subagent:true});}
   const ids=new Set(spots.keys());
   for(const [id,actor] of actors)if(!ids.has(id)){actor.retire();retiring.add(actor);actors.delete(id);}
@@ -214,15 +272,17 @@ function sync() {
           callbacks.onSelectBot?.(id);
           const reader=actors.get(id)?.dialogue,action=headOpenAction(lastState?.bots[id],!!reader);
           if(action.mode==='head'){reader.setOpen(true);reader.peek.focus({preventScroll:true});}
-          else if(action.mode==='history')location.href=action.url;
         }, dropDelay: delay });
       actors.set(bot.id, actor);
+      const setModel = actor.setModel.bind(actor);
+      actor.setModel = (...args) => { const result=setModel(...args);wakeScene('model');return result; };
       attachModel(actor, bot);
     }
     actor.root.scale.setScalar(isObservedChild(bot)?0.72:1);
     if(isObservedChild(bot)&&!childLinks.has(bot.id)){
       const geometry=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
       const line=new THREE.Line(geometry,new THREE.LineBasicMaterial({color:0x84a7ba,transparent:true,opacity:0.38,depthWrite:false}));
+      line.userData.auraDynamic=true;
       inst.root.add(line);childLinks.set(bot.id,line);
     }
     const deskIdx = overview?inst.spots.indexOf(groundSeats.get(bot.id)):(DESK_ORDER[(bot.desk || 1) - 1] || 1) - 1;
@@ -254,13 +314,24 @@ function sync() {
 
 // Follow the root's live position during travel and dragging, without assigning
 // a seat to the child or moving its actual native workspace.
-function positionFollowers(){
+function positionFollowers(dt=0){
   const byAgent=new Map([...actors.values()].map(actor=>[actor.bot?.agent_id,actor]));
+  if(followerMotion){
+    const children=[],roots=new Map();
+    for(const actor of actors.values())if(isObservedChild(actor.bot))children.push(actor.bot);
+    else roots.set(actor.bot.agent_id,{pos:actor.root.position,yaw:actor.baseYaw||0});
+    const signature=children.map(bot=>bot.id).join('|')+';'+[...roots].map(([id,at])=>id+':'+at.pos.x.toFixed(4)+','+at.pos.z.toFixed(4)).join('|');
+    if(signature!==followerSignature){
+      const inst=building.activeOpen(),furniture=isGround(building.activeId)?inst.spots:[...assets.spots.desks,...assets.spots.lounges];
+      followerTargets=followerSlots(children,roots,panBounds(),followerTargets,furniture,lastView.selectedBot,followerEnvironment.obstacles);followerSignature=signature;
+    }
+    followerPositions=followerMotion.step(followerTargets,dt,new Set(children.map(bot=>bot.id)));
+  }
   for(const actor of actors.values())if(isObservedChild(actor.bot)){
-    const root=byAgent.get(actor.bot.root_agent_id),offset=followerPositions.get(actor.id);
-    if(!root||!offset)continue;
-    actor.root.position.x=root.root.position.x+offset.dx;
-    actor.root.position.z=root.root.position.z+offset.dz;
+    const root=byAgent.get(actor.bot.root_agent_id),at=followerPositions.get(actor.id);
+    if(!root||!at)continue;
+    actor.root.position.x=at.x;actor.root.position.z=at.z;
+    if(actor.spot){actor.spot.pos.x=at.x;actor.spot.pos.z=at.z;}
     const line=childLinks.get(actor.id);
     if(line){
       const parent=byAgent.get(actor.bot.parent_agent_id)||root,coordinates=line.geometry.attributes.position;
@@ -274,13 +345,14 @@ function positionFollowers(){
 
 // Fast-forward all springs/animations (used by ?intro=0 and window.bothq.settle() for tests and screenshots).
 function settle(seconds = 3) {
+  wakeScene('settle');
   const step = 1 / 30;
   for (let t = 0; t < seconds; t += step) {
     nowSec += step;
     stepCamera(step);
     building.update(step, performance.now());
     for (const a of actors.values()) { a.hostAlpha = building.activeOpen()?.alpha ?? 1; a.tick(step, nowSec); }
-    positionFollowers();
+    positionFollowers(step);
     for (const a of retiring) { a.tick(step, nowSec); if (a.dead) retiring.delete(a); }
   }
 }
@@ -312,6 +384,7 @@ function loadModel(id) {
 // ---------- floor switch = elevator ride ----------
 
 function switchFloor(id, first) {
+  wakeScene('floor');
   cancelSeatDrag();drag=null;
   for (const a of actors.values()) { a.retire(); retiring.add(a); }
   actors.clear();
@@ -340,6 +413,7 @@ function hideLoader() {
 // ---------- camera (all on springs) ----------
 
 export function zoom(dir) {
+  wakeScene('zoom');
   if (!building) return;
   if (dir === 'reset') {
     const home=homePosition();cam.x.to(home.x); cam.z.to(home.z); cam.y.to(building.activeY + HOME.y); cam.zoom.to(0);
@@ -350,6 +424,7 @@ export function zoom(dir) {
 }
 
 export function focusBot(id) {
+  wakeScene('focus');
   const a = actors.get(id);
   if (!a || !building) return;
   const target=a.spot?.pos||a.root.position;
@@ -375,13 +450,59 @@ function clampTarget() {
   cam.zoom.target = clamp(cam.zoom.target, Math.log(ZOOM.min), Math.log(ZOOM.max));
 }
 
-function resize() {
+// Three exposes the texture limit but not MAX_RENDERBUFFER_SIZE. Read the
+// latter through the public GL API so high detail also fits multisampled depth.
+export function graphicsRenderLimits(activeRenderer) {
+  const capabilities = activeRenderer.capabilities || {};
+  let maxRenderbufferSize = capabilities.maxRenderbufferSize;
+  try {
+    const gl = activeRenderer.getContext?.();
+    if (gl?.getParameter && gl.MAX_RENDERBUFFER_SIZE !== undefined) {
+      const value = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+      if (Number.isFinite(value) && value > 0) maxRenderbufferSize = value;
+    }
+  } catch { /* a restored context will be queried again */ }
+  return {maxTextureSize:capabilities.maxTextureSize,maxRenderbufferSize};
+}
+
+// The CSS viewport stays unchanged; only its drawing-buffer detail changes.
+// Clamp the physical dimensions before allocating any scene/post framebuffer.
+export function graphicsPixelRatio(deviceRatio, scale, width, height, capabilities = {}) {
+  if (!Number.isFinite(scale) || scale <= 0) throw new RangeError('scale must be positive');
+  const native = Number.isFinite(deviceRatio) && deviceRatio > 0 ? Math.min(deviceRatio, 1.5) : 1;
+  const desired = native * scale;
+  const limits = [capabilities.maxTextureSize, capabilities.maxRenderbufferSize].filter(value => Number.isFinite(value) && value > 0);
+  const limit = limits.length ? Math.min(...limits) : Infinity;
+  return Math.max(Number.EPSILON, Math.min(desired, limit / Math.max(1, width), limit / Math.max(1, height)));
+}
+
+function applyGraphicsSettings(next) {
+  graphicsSettings = next;
+  shouldDraw.setFps(next.fps);
+  idleRender.enabled = next.idle && new URLSearchParams(location.search).get('idle_render') !== '0';
+  wakeScene('graphics');
+  if (!renderer || !post) return;
+  const width = container.clientWidth || 1, height = container.clientHeight || 1;
+  const ratio = graphicsPixelRatio(devicePixelRatio, next.scale, width, height, graphicsRenderLimits(renderer));
+  if (renderer.getPixelRatio() !== ratio) renderer.setPixelRatio(ratio);
+  const antialias = post.setAntialias(next.antialias);
+  resize();
+  const native = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? Math.min(devicePixelRatio, 1.5) : 1;
+  const notes = [];
+  if (next.idle && !idleRender.enabled) notes.push('此測試連結已暫停閒置節能。');
+  if (antialias.effectiveAntialias !== next.antialias) notes.push(`此裝置未支援 ×${next.antialias} 抗鋸齒，已套用 ×${antialias.effectiveAntialias}。`);
+  if (ratio < native * next.scale - 1e-6) notes.push('畫面精細度已按裝置上限調整。');
+  publishGraphicsStatus({...antialias,requestedFps:next.fps,requestedScale:next.scale,effectiveScale:Number((ratio/native).toFixed(3)),message:notes.join(' ')});
+}
+
+function resize(force = false) {
   if (!renderer) return;
   const w = container.clientWidth || 1, h = container.clientHeight || 1;
   const layout=isGround(building?.activeId)?building.overview.layout:null;
-  const signature=`${w}:${h}:${layout?.width||0}:${layout?.depth||0}`;
-  if(signature===sizeSignature)return;
+  const signature=`${w}:${h}:${layout?.width||0}:${layout?.depth||0}:${renderer.getPixelRatio()}`;
+  if(force!==true&&signature===sizeSignature)return;
   sizeSignature=signature;
+  wakeScene('resize');
   renderer.setSize(w, h, false);
   labels.setSize(w, h);
   post?.setSize(w, h);
@@ -408,7 +529,7 @@ const homePosition=()=>isGround(building?.activeId)?{x:building.overview.layout.
 function addPointerHandlers() {
   const el = renderer.domElement;
   el.addEventListener('pointermove', onMove);
-  el.addEventListener('pointerleave', () => { cursor.active = false; setHover(null); });
+  el.addEventListener('pointerleave', () => { wakeScene('pointerleave');cursor.active = false; setHover(null); });
   if (WALLPAPER) return;                              // a desktop background: bots follow the cursor, nothing else
   el.addEventListener('pointerdown', onDown);
   el.addEventListener('pointerup', onUp);
@@ -445,9 +566,8 @@ function pickDesk(event){
   setPointer(event);raycaster.setFromCamera(pointer,camera);
   const hit=raycaster.intersectObjects(seatTargets.pickables,false)[0];
   if(hit){
-    let object=hit.object;while(object&&!object.userData.officeDeskId&&!object.userData.officeSeatIds)object=object.parent;
-    if(object?.userData.officeSeatIds){const point=building.activeOpen().root.worldToLocal(hit.point.clone()),ids=new Set(object.userData.officeSeatIds);return nearestDesk(point,seatTargets.spots.filter(spot=>ids.has(spot.id)).map(spot=>({...spot,x:spot.pos.x,z:spot.pos.z})),Infinity);}
-    const id=object?.userData.officeDeskId;if(id)return seatTargets.spots.find(spot=>spot.id===id)||null;
+    const seatIds=furnitureSeatIds(hit.object,hit.instanceId);
+    if(seatIds?.length){const point=building.activeOpen().root.worldToLocal(hit.point.clone()),ids=new Set(seatIds);return nearestDesk(point,seatTargets.spots.filter(spot=>ids.has(spot.id)).map(spot=>({...spot,x:spot.pos.x,z:spot.pos.z})),Infinity);}
   }
   const point=seatPoint(event);if(!point)return null;
   return nearestDesk(point,seatTargets.spots.map(spot=>({...spot,x:spot.pos.x,z:spot.pos.z})),1.85);
@@ -455,7 +575,7 @@ function pickDesk(event){
 
 function showSeatTargets(movingId){
   clearSeatTargets();const inst=building?.activeOpen();if(!inst?.spots)return;
-  const root=new THREE.Group();root.name='office-drop-targets';
+  const root=new THREE.Group();root.name='office-drop-targets';root.userData.auraDynamic=true;
   const geometry=new THREE.RingGeometry(.64,.78,28);geometry.rotateX(-Math.PI/2);
   const free=new THREE.MeshBasicMaterial({color:'#38ad78',transparent:true,opacity:.7,depthWrite:false,side:THREE.DoubleSide});
   const busy=new THREE.MeshBasicMaterial({color:'#d7857d',transparent:true,opacity:.55,depthWrite:false,side:THREE.DoubleSide});
@@ -604,6 +724,7 @@ const confettiGeo = new THREE.PlaneGeometry(0.07, 0.035);
 
 function confetti(at) {
   const group = new THREE.Group();
+  group.userData.auraDynamic=true;
   group.position.copy(at);
   const parts = [];
   for (let i = 0; i < 36; i++) {
@@ -646,11 +767,13 @@ function stepEffects(dt) {
 // task, then the live view is drawn again before the browser paints, so nothing flickers.
 // Returns a <canvas> of width x height, or null while the office is still loading.
 export function captureScene({ width = 1600, height = 900, scale = 1, box = { x: 0.06, y: 0.06, w: 0.88, h: 0.76 } } = {}) {
+  wakeScene('capture');
   const inst = building?.activeOpen();
   if (!inst || !post) return null;
   const pr = renderer.getPixelRatio();
-  const maxPx = Math.min(renderer.capabilities.maxTextureSize, renderer.capabilities.maxRenderbufferSize || Infinity);
-  const ss = Math.max(1, Math.min(scale, maxPx / width, maxPx / height));
+  const limits = graphicsRenderLimits(renderer);
+  const maxPx = Math.min(limits.maxTextureSize, limits.maxRenderbufferSize || Infinity);
+  const ss = Math.min(Math.max(1, scale), maxPx / width, maxPx / height);
   const zoom0 = camera.zoom, pos0 = camera.position.clone();
   const hidden = [];
   const hide = (o) => { if (o?.visible) { o.visible = false; hidden.push(o); } };
@@ -683,7 +806,7 @@ export function captureScene({ width = 1600, height = 900, scale = 1, box = { x:
       if (walls.board) walls.drawBoard(live);
     }
     renderer.setPixelRatio(pr);
-    resize();
+    resize(true); // Capture changed live targets/frustum without changing the observed container size.
     camera.zoom = zoom0;
     camera.position.copy(pos0);
     camera.updateProjectionMatrix();
@@ -705,16 +828,15 @@ function frameShot(aspect, box) {
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   const walk = (o) => {
     if (!o.visible) return;
-    if (o.isMesh && o.geometry) {
-      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
-      shotBox.copy(o.geometry.boundingBox);
+    forEachCaptureBox(o, (bounds, world) => {
+      shotBox.copy(bounds);
       for (let i = 0; i < 8; i++) {
         shotCorner.set(i & 1 ? shotBox.max.x : shotBox.min.x, i & 2 ? shotBox.max.y : shotBox.min.y, i & 4 ? shotBox.max.z : shotBox.min.z)
-          .applyMatrix4(o.matrixWorld).applyMatrix4(camera.matrixWorldInverse);
+          .applyMatrix4(world).applyMatrix4(camera.matrixWorldInverse);
         x0 = Math.min(x0, shotCorner.x); x1 = Math.max(x1, shotCorner.x);
         y0 = Math.min(y0, shotCorner.y); y1 = Math.max(y1, shotCorner.y);
       }
-    }
+    });
     for (const c of o.children) walk(c);
   };
   walk(building.group);
@@ -738,7 +860,6 @@ function updateCursorGround() {
 
 const focusV = new THREE.Vector3();
 
-let lastDraw = 0;
 let overlayViewport=null,overlayViewportAt=-1e9;
 
 function layoutDialogues(nowMs) {
@@ -747,12 +868,12 @@ function layoutDialogues(nowMs) {
     overlayViewportAt=nowMs;
     const origin=container.getBoundingClientRect(),obstacles=[];
     let left=12,right=width-12;
-    for(const selector of ['#topbar','#floors','#panel','.bhq-dock','#office-mode-toggle']){
+    for(const selector of ['#topbar','#floors','#panel','.bhq-dock','#office-mode-toggle','#office-graphics-settings-launch']){
       const el=document.querySelector(selector);if(!el||!el.getClientRects().length)continue;
       const b=el.getBoundingClientRect();if(!b.width||!b.height)continue;
       const rect={left:b.left-origin.left,right:b.right-origin.left,top:b.top-origin.top,bottom:b.bottom-origin.top};
       obstacles.push(rect);
-      if(width>=900&&selector!=='#topbar'&&selector!=='#office-mode-toggle'){
+      if(width>=900&&selector!=='#topbar'&&selector!=='#office-mode-toggle'&&selector!=='#office-graphics-settings-launch'){
         if(rect.left<width*.35)left=Math.max(left,rect.right+10);
         else if(rect.right>width*.65)right=Math.min(right,rect.left-10);
       }
@@ -769,11 +890,11 @@ function layoutDialogues(nowMs) {
     el.style.display='';
     el.style.setProperty('--speech-panel-width',Math.min(350,overlayViewport.right-overlayViewport.left)+'px');
     dialogue.fitViewport(y,height);
-    const measureKey=`${width}|${height}|${document.documentElement.classList.contains('office-simple-mode')}|${dialogue.expanded}|${dialogue.children.length>0}`;
-    if(dialogue.expanded||dialogue.measureKey!==measureKey){dialogue.measureKey=measureKey;dialogue.measure={width:el.offsetWidth||140,height:el.offsetHeight||34};}
+    const measureKey=`${width}|${height}|${document.documentElement.classList.contains('office-simple-mode')}|${dialogue.headExpanded}|${dialogue.children.length>0}`;
+    if(dialogue.headExpanded||dialogue.measureKey!==measureKey){dialogue.measureKey=measureKey;dialogue.measure={width:el.offsetWidth||140,height:el.offsetHeight||34};}
     candidates.push({id:actor.id,x,y,width:dialogue.measure.width,height:dialogue.measure.height,
-      expanded:dialogue.expanded,selected:actor.selected,hovered:actor.hovered,
-      focused:el.contains(document.activeElement),child:!!actor.bot?.is_subagent});
+      expanded:dialogue.headExpanded,selected:actor.selected,hovered:actor.hovered,
+      focused:el.contains(document.activeElement)||dialogue.detail.contains(document.activeElement),child:!!actor.bot?.is_subagent});
   }
   const placement=layoutHeadLabels(candidates,overlayViewport);
   for(const actor of actors.values()){
@@ -788,33 +909,39 @@ function layoutDialogues(nowMs) {
 }
 
 function frame(t) {
-  if (document.hidden) { clock.getDelta(); return; }       // no work in a background tab
-  if (WALLPAPER) {                                          // <= 30 fps: skip the in-between vsyncs; dt keeps real time
-    const since = t - lastDraw;
-    if (since < WALLPAPER_FRAME_MS - 2) return;
-    lastDraw += Math.max(1, Math.round(since / WALLPAPER_FRAME_MS)) * WALLPAPER_FRAME_MS;  // stay on the 33 ms grid (100+ Hz displays)
-    if (t - lastDraw > WALLPAPER_FRAME_MS / 2) lastDraw = t;                                // fell behind (hidden, hitch): resync, no bursts
-  }
-  const dt = frozen ? 0 : Math.min(clock.getDelta(), 0.05);
-  if (frozen) clock.getDelta();
-  nowSec = clock.elapsedTime;
+  const hidden = document.hidden;
+  const clockDelta = clock.getDelta();                  // Always drain elapsed time; sleeping is never a catch-up queue.
   const nowMs = performance.now();
+  if (hidden) idleRender.frame(nowMs,{hidden:true});
+  if (!shouldDraw(t, hidden)) {
+    return;
+  }
+  const plan = idleRender.frame(nowMs,{busy:!!followerMotion?.moving||hasSceneTransition({camera:cam,building,actors:actors.values(),retiring,effects,drag,pinch,seatSaving})});
+  if (!plan.draw) return;
+  const elapsed = lastRenderMs === null ? clockDelta : Math.max(0,(nowMs-lastRenderMs)/1000);
+  const dt = frozen ? 0 : Math.min(elapsed,0.05);
+  if (!plan.idle) nowSec = clock.elapsedTime;
 
-  daylight.update(dt, nowMs);
+  daylight.update(frozen?0:plan.idle?Math.min(elapsed,1.25):dt, nowMs);
   stepCamera(dt);
   if (building) building.update(dt, nowMs);
   if (pointerDirty && !drag?.panning && !drag?.moving) { pointerDirty = false; setHover(pick()); }
   updateCursorGround();
 
   const hostAlpha = building?.activeOpen()?.alpha ?? 1;
-  for (const a of actors.values()) { a.hostAlpha = hostAlpha; a.tick(dt, nowSec); }
-  positionFollowers();
+  if (!plan.idle) for (const a of actors.values()) {
+    a.hostAlpha = hostAlpha;
+    // Stop new optional motions once quiet, so staggered waiting agents cannot
+    // keep one another awake forever. Existing hops/blinks finish normally.
+    a.tick(dt, nowSec,{spawnCosmetics:!idleRender.quietDue(nowMs)});
+  }
+  positionFollowers(plan.idle?0:dt);
   for (const a of retiring) {
     a.hostAlpha = a.ctx.inst.alpha;
     a.tick(dt, nowSec);
     if (a.dead) retiring.delete(a);
   }
-  stepEffects(dt);
+  if (!plan.idle) stepEffects(dt);
 
   if (post) {
     focusV.set(0, (building ? building.cabinY.x : 0) + 0.7, 0).project(camera);
@@ -823,5 +950,17 @@ function frame(t) {
   if (!WALLPAPER || WALLPAPER_TAGS) {
     layoutDialogues(nowMs);
     labels.render(scene, camera);
+  }
+  lastRenderMs = nowMs;
+  idleRender.didRender(nowMs);
+  if (idleProfile) {
+    if (idleFrameStats.started === null) idleFrameStats.started = nowMs;
+    idleFrameStats.frames++;
+    idleFrameStats[plan.idle?'idle_frames':'active_frames']++;
+    if (nowMs-idleFrameStats.started >= 5000) {
+      const {frames,idle_frames,active_frames} = idleFrameStats;
+      console.info('OFFICE_IDLE_FRAMES '+JSON.stringify({frames,idle_frames,active_frames,window_ms:Math.round(nowMs-idleFrameStats.started)}));
+      idleFrameStats = {started:nowMs,frames:0,idle_frames:0,active_frames:0};
+    }
   }
 }
