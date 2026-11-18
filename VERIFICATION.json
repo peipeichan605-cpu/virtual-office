@@ -574,7 +574,16 @@
       "mac_tests_run": 75,
       "passed": 73,
       "skipped": 2,
-      "windows_native_metadata_verification": "pending_final_candidate"
+      "windows_native_metadata_verification": "passed",
+      "code_commit": "b751b33056a906db8a0fbd42782561f688004914",
+      "github_ci_run_id": 44284166945,
+      "windows_tests_run": 51,
+      "windows_passed": 47,
+      "windows_skipped": 4,
+      "stop_argv_executed_outside_installation_directory": true,
+      "service_and_launcher_exited": true,
+      "isolated_port_released": true,
+      "existing_office_service_unchanged": true
     }
   },
   "previous_release_validation_0_2_0": {
