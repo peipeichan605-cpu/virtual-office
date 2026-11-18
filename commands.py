@@ -5,18 +5,23 @@ agents get a private mailbox while native execution requires a saved binding.
 """
 import hashlib
 import hmac
+from contextlib import nullcontext
 import json
+import math
 import os
 from pathlib import Path
 import re
 import sqlite3
 import threading
+import time
 import uuid
 from command_adapters import DeliveryError, make_adapters
 from history import redact, timestamp
+from security_keys import integrity_fingerprint, matches_integrity
 
 TERMINAL = {'completed', 'failed', 'cancelled'}
 MARKER = re.compile(r'^\[OFFICE:([0-9a-f-]{36})\]\n')
+MOBILE_COMMAND_TTL = 900
 
 
 class CommandError(Exception):
@@ -29,6 +34,9 @@ class Commands:
     def __init__(self, config, history, enabled=True, adapters=None, on_status=None):
         self.config, self.history, self.enabled = config, history, enabled
         self.on_status = on_status
+        # The gateway installs a validator before starting the dispatcher.
+        # Missing or unavailable mobile authorization always fails closed.
+        self.mobile_authorizer = None
         self.bindings = config.get('command_bindings', {})
         self.adapters = make_adapters(config, self.observe_native) if adapters is None else adapters
         self.lock = threading.RLock()
@@ -42,46 +50,183 @@ class Commands:
             adapter TEXT NOT NULL, fingerprint TEXT NOT NULL, preview TEXT NOT NULL,
             payload TEXT, state TEXT NOT NULL, native_message_id TEXT, run_id TEXT,
             created_at TEXT NOT NULL, updated_at TEXT NOT NULL, detail_code TEXT)''')
+        columns = {row[1] for row in self.db.execute('PRAGMA table_info(commands)')}
+        for name, kind in (('source_device', 'TEXT'), ('source_revision', 'INTEGER'),
+                           ('source_expires_at', 'REAL'), ('source_membership', 'TEXT')):
+            if name not in columns:
+                self.db.execute('ALTER TABLE commands ADD COLUMN ' + name + ' ' + kind)
         self.db.execute('CREATE INDEX IF NOT EXISTS command_agent_time ON commands(agent_id,created_at)')
+        self.db.execute('CREATE INDEX IF NOT EXISTS command_mobile_source ON commands(source_device,state)')
         self.db.execute('''CREATE TABLE IF NOT EXISTS command_reconciliations (
             id TEXT PRIMARY KEY, command_id TEXT NOT NULL UNIQUE, agent_id TEXT NOT NULL,
             prior_state TEXT NOT NULL, prior_run_id TEXT, command_fingerprint TEXT NOT NULL,
             terminal_event_id TEXT NOT NULL, terminal_event_fingerprint TEXT NOT NULL,
             review_note_sha256 TEXT NOT NULL, provenance TEXT NOT NULL, created_at TEXT NOT NULL)''')
+        # Detaching from Office is not a native completion or cancellation.
+        # Keep the original unknown command untouched and fence its callbacks.
+        self.db.execute('''CREATE TABLE IF NOT EXISTS command_detachments (
+            command_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, prior_state TEXT NOT NULL,
+            native_message_id TEXT, run_id TEXT, detached_at TEXT NOT NULL)''')
         # Never replay an interrupted external side effect. Original-session
         # observations can still reconcile an uncertain delivery after restart.
         self.db.execute("UPDATE commands SET state='delivery_unknown',payload=NULL,detail_code='interrupted_delivery',updated_at=? WHERE state='sending'", (timestamp(),))
         self.db.commit()
         self.migrate_pending_inbox()
+        retired=set(config.get('logged_out_agent_ids',[]))-{a['id'] for a in config.get('agents',[])}
+        for agent in retired:self.detach_unconfirmed(agent,commit=False)
+        self.db.commit()
         self.recovery_pending=True
         self.reconcile()
         # A restarted Office no longer owns an in-flight ACP request. Preserve
         # the uncertainty and history; never replay a possibly executed prompt.
-        self.db.execute("UPDATE commands SET state='delivery_unknown',payload=NULL,detail_code='interrupted_delivery',updated_at=? WHERE adapter='hermes_acp' AND state IN ('queued','running','waiting_user')", (timestamp(),))
+        self.db.execute("UPDATE commands SET state='delivery_unknown',payload=NULL,detail_code='interrupted_delivery',updated_at=? WHERE adapter IN ('hermes_acp','cursor_local','codex_background') AND state IN ('queued','running','waiting_user')", (timestamp(),))
         self.db.commit()
 
     def restore_observations(self):
         # GET a recorded native run only after the owning Bridge is initialized.
         with self.lock:
-            rows=self.db.execute("SELECT * FROM commands WHERE adapter='cursor_cloud' AND native_message_id IS NOT NULL AND state IN ('queued','running','waiting_user','delivery_unknown')").fetchall()
+            rows=self.db.execute("SELECT * FROM commands WHERE adapter='cursor_cloud' AND native_message_id IS NOT NULL AND state IN ('queued','running','waiting_user','delivery_unknown') AND id NOT IN (SELECT command_id FROM command_detachments)").fetchall()
         for row in rows:
-            binding=self.bindings.get(row['agent_id'])
-            adapter=self.adapters.get('cursor_cloud')
-            if self.enabled and binding=={'adapter':'cursor_cloud','session_id':row['session_id']} and hasattr(adapter,'resume'):
-                with self.history.lock:
-                    ids=self.history.db.execute('SELECT event_id FROM messages WHERE agent_id=? AND run_id=? AND role=?',(row['agent_id'],row['id'],'assistant')).fetchall()
-                segments=[int(item[0].rsplit(':',1)[-1]) for item in ids if item[0] and item[0].startswith('hermes:'+row['id']+':text:') and item[0].rsplit(':',1)[-1].isdigit()]
-                adapter.resume(row['session_id'],row['id'],row['native_message_id'],row['preview'],recovery=True,last_segment=max(segments,default=0))
+            with self.lock:
+                binding=self.binding(row['agent_id'])
+                adapter=self.adapters.get('cursor_cloud')
+                if self.enabled and not self.detached(row['id']) and binding=={'adapter':'cursor_cloud','session_id':row['session_id']} and hasattr(adapter,'resume'):
+                    with self.history.lock:
+                        ids=self.history.db.execute('SELECT event_id FROM messages WHERE agent_id=? AND run_id=? AND role=?',(row['agent_id'],row['id'],'assistant')).fetchall()
+                    segments=[int(item[0].rsplit(':',1)[-1]) for item in ids if item[0] and item[0].startswith('hermes:'+row['id']+':text:') and item[0].rsplit(':',1)[-1].isdigit()]
+                    adapter.resume(row['session_id'],row['id'],row['native_message_id'],row['preview'],recovery=True,last_segment=max(segments,default=0))
 
     def reconcile(self):
-        rows=self.db.execute("SELECT agent_id,run_id FROM commands WHERE run_id IS NOT NULL AND state NOT IN ('completed','failed','cancelled')").fetchall()
+        rows=self.db.execute("SELECT agent_id,run_id FROM commands WHERE run_id IS NOT NULL AND state NOT IN ('completed','failed','cancelled') AND id NOT IN (SELECT command_id FROM command_detachments)").fetchall()
         for row in rows:
             with self.history.lock:
                 run=self.history.db.execute('SELECT status FROM runs WHERE agent_id=? AND run_id=?',(row['agent_id'],row['run_id'])).fetchone()
             if run:self.observe_run(row['agent_id'],row['run_id'],run['status'])
 
     def fingerprint(self, agent, text):
-        return hmac.new(self.config['topic'].encode(), (agent + '\0' + text).encode(), hashlib.sha256).hexdigest()
+        return integrity_fingerprint(self.config, (agent + '\0' + text).encode())
+
+    def matches_fingerprint(self, agent, text, expected):
+        """Legacy dedupe proofs survive owner-key migration without replay."""
+        return matches_integrity(self.config, (agent + '\0' + text).encode(), expected)
+
+    @staticmethod
+    def _origin(origin, agent, *, creating=False):
+        if origin is None:
+            return None
+        if (not isinstance(origin, dict) or
+                not {'device_id', 'revision', 'expires_at'} <= set(origin) or
+                set(origin) - {'device_id', 'revision', 'expires_at', 'agent_id', 'membership'} or
+                not isinstance(origin.get('device_id'), str) or
+                not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', origin['device_id']) or
+                type(origin.get('revision')) is not int or origin['revision'] < 1 or
+                type(origin.get('expires_at')) not in (int, float) or
+                not math.isfinite(origin['expires_at']) or
+                ('agent_id' in origin and origin['agent_id'] != agent) or
+                ('membership' in origin and
+                 (not isinstance(origin['membership'], str) or not 1 <= len(origin['membership']) <= 512
+                  or any(ord(ch) < 32 or ord(ch) == 127 for ch in origin['membership'])))):
+            raise CommandError(400, 'invalid_mobile_origin')
+        now = time.time()
+        if creating and origin['expires_at'] > now + MOBILE_COMMAND_TTL:
+            raise CommandError(400, 'invalid_mobile_origin')
+        return {**origin, 'agent_id': agent}
+
+    def _origin_allowed(self, origin, agent):
+        if origin is None:
+            return True
+        if origin['expires_at'] <= time.time():
+            return False
+        try:
+            return callable(self.mobile_authorizer) and self.mobile_authorizer(origin, agent) is True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _row_origin(row):
+        if (row['source_device'] is None and row['source_revision'] is None
+                and row['source_expires_at'] is None and row['source_membership'] is None):
+            return None
+        origin = {'device_id': row['source_device'], 'revision': row['source_revision'],
+                  'expires_at': row['source_expires_at'], 'agent_id': row['agent_id']}
+        if row['source_membership'] is not None:
+            origin['membership'] = row['source_membership']
+        return origin
+
+    @staticmethod
+    def _same_origin(row, origin):
+        if origin is None:
+            return (row['source_device'] is None and row['source_revision'] is None
+                    and row['source_expires_at'] is None and row['source_membership'] is None)
+        return (row['source_device'] == origin['device_id'] and row['source_revision'] == origin['revision']
+                and row['source_membership'] == origin.get('membership'))
+
+    def _cancel_mobile_row(self, row, reason):
+        """The caller holds commands.lock; an inbox receipt has execute=False.
+
+        A native dispatch already in flight cannot be undone here. An inbox
+        receipt still needs a separate start authorization before execution.
+        """
+        if row['state'] != 'pending' and not (row['adapter'] == 'agent_inbox' and row['state'] == 'queued'):
+            return False
+        changed = self.db.execute("UPDATE commands SET state='cancelled',payload=NULL,detail_code=?,updated_at=? WHERE id=? AND (state='pending' OR (adapter='agent_inbox' AND state='queued'))",
+                                 (reason, timestamp(), row['id'])).rowcount
+        self.db.commit()
+        if changed != 1:
+            return False
+        agent = next((a for a in self.config.get('agents', []) if a['id'] == row['agent_id']), None)
+        if agent and row['adapter'] == 'agent_inbox':
+            self.history.record(agent['id'], agent['provider'], agent['name'], row['id'], 'cancelled',
+                prompt=row['preview'], delivery='手機授權已失效，指示未獲准開始執行。', source_kind='agent_inbox')
+        return True
+
+    def validate_mobile_delivery(self, row):
+        """Recheck the originating device immediately before dispatch/claim.
+
+        Lock order is commands.lock then the mobile authorization store lock.
+        Revocation must use that same order. Never call a mutating gateway here.
+        """
+        with self.lock:
+            try:
+                origin = self._origin(self._row_origin(row), row['agent_id'])
+                allowed = self._origin_allowed(origin, row['agent_id'])
+            except (CommandError, KeyError, TypeError, ValueError):
+                origin, allowed = {}, False
+            if not allowed:
+                reason = ('mobile_command_expired' if isinstance(origin.get('expires_at'), (int, float))
+                          and origin['expires_at'] <= time.time() else 'mobile_authorization_revoked')
+                self._cancel_mobile_row(row, reason)
+            return allowed
+
+    def revoke_mobile_pending(self, device_id):
+        """Cancel unstarted device work; report native in-flight work honestly."""
+        if not isinstance(device_id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', device_id):
+            raise CommandError(400, 'invalid_mobile_device')
+        counts = {'cancelled': 0, 'blocked_before_start': 0, 'already_received': 0}
+        with self.lock:
+            for row in self.db.execute("SELECT * FROM commands WHERE source_device=? AND state NOT IN ('completed','failed','cancelled')",
+                                       (device_id,)).fetchall():
+                if row['state'] == 'pending':
+                    counts['cancelled'] += int(self._cancel_mobile_row(row, 'mobile_authorization_revoked'))
+                elif row['adapter'] == 'agent_inbox' and row['state'] == 'queued':
+                    counts['blocked_before_start'] += int(self._cancel_mobile_row(row, 'mobile_authorization_revoked'))
+                else:
+                    counts['already_received'] += 1
+        return counts
+
+    def detached(self, command_id):
+        """Caller holds the command lock, including native event projection."""
+        return self.db.execute('SELECT 1 FROM command_detachments WHERE command_id=?', (command_id,)).fetchone() is not None
+
+    def detach_unconfirmed(self, agent, *, commit=True):
+        """Audit an owner's membership retirement; never rewrite native outcome."""
+        with self.lock:
+            rows=self.db.execute("SELECT id,agent_id,state,native_message_id,run_id FROM commands WHERE agent_id=? AND state='delivery_unknown'", (agent,)).fetchall()
+            for row in rows:
+                self.db.execute('INSERT OR IGNORE INTO command_detachments VALUES (?,?,?,?,?,?)',
+                    (row['id'],agent,row['state'],row['native_message_id'],row['run_id'],timestamp()))
+            if commit:self.db.commit()
+            return len(rows)
 
     def binding(self, agent):
         if 'agents' in self.config and not any(a['id']==agent for a in self.config['agents']):return None
@@ -128,8 +273,26 @@ class Commands:
         from public_sync import capability as public_sync_capability
         capability['public_sync']=public_sync_capability(self.config,agent,self.binding(agent),
             getattr(self,'public_sync_observer',None))
+        if self.binding(agent) and self.binding(agent)['adapter']=='cursor_local':
+            binding=self.binding(agent);adapter=self.adapters.get('cursor_local')
+            capability.update(conversation_scope='office_owned_session', tool_policy='chat_only',
+                              tools_enabled=False, sdk_child_activity='parent_status_only',
+                              native_target_verified=bool(adapter and adapter.native_verified(binding['session_id'])))
+        if self.binding(agent) and self.binding(agent)['adapter']=='codex_background':
+            binding=self.binding(agent);adapter=self.adapters.get('codex_background')
+            capability.update(conversation_scope='office_owned_session', tool_policy='read_only',
+                              tools_enabled=True, approval_policy='on-request',
+                              background_child_activity='unsupported',
+                              native_target_verified=bool(adapter and adapter.native_verified(binding['session_id'])))
         definition=next((a for a in self.config.get('agents',[]) if a['id']==agent),{})
-        if definition.get('provider')=='grok_bot':
+        if self.binding(agent) and self.binding(agent)['adapter']=='grok_sdk':
+            binding=self.binding(agent);adapter=self.adapters.get('grok_sdk')
+            capability.update(conversation_scope='selected_native_session', experimental=True,
+                              native_target_verified=bool(adapter and adapter.native_verified(binding['session_id'])))
+            observer=getattr(self,'grok_sdk_sync',None)
+            proof=observer.describe(agent) if observer else None
+            capability['execution_verified']=bool(isinstance(proof,dict) and proof.get('execution_verified'))
+        elif definition.get('provider')=='grok_bot':
             checks=getattr(self,'connection_checks',None)
             proof=checks.status(agent,native_ready=capability.get('native_ready')) if checks else {'state':'unconfigured' if capability['mode']=='agent_inbox' else 'ready_to_test',
                 'verified':False,'received':False,'replied':False,'test_id':None,'can_test':False,'can_retry':False}
@@ -141,7 +304,7 @@ class Commands:
         return {key: row[key] for key in ('id', 'agent_id', 'preview', 'state', 'run_id',
                                           'created_at', 'updated_at', 'detail_code')}
 
-    def create(self, data, *, commit=True):
+    def create(self, data, *, origin=None, commit=True):
         if not isinstance(data, dict) or set(data) != {'request_id', 'agent_id', 'text'}:
             raise CommandError(400, 'invalid_command')
         ident, agent, text = data['request_id'], data['agent_id'], data['text']
@@ -155,22 +318,33 @@ class Commands:
         text = text.strip()
         fingerprint = self.fingerprint(agent, text)
         with self.lock:
+            origin = self._origin(origin, agent, creating=True)
+            if not self._origin_allowed(origin, agent):
+                raise CommandError(403, 'mobile_authorization_revoked')
             binding=self.binding(agent)
             if not binding:raise CommandError(409,'not_connected')
             old = self.db.execute('SELECT * FROM commands WHERE id=?', (ident,)).fetchone()
             if old:
-                if old['agent_id'] != agent or not hmac.compare_digest(old['fingerprint'], fingerprint):
+                if (old['agent_id'] != agent or not self._same_origin(old, origin) or
+                        not self.matches_fingerprint(agent, text, old['fingerprint'])):
                     raise CommandError(409, 'request_id_conflict')
+                if origin is not None and old['state'] == 'pending' and not self.validate_mobile_delivery(old):
+                    old = self.db.execute('SELECT * FROM commands WHERE id=?', (ident,)).fetchone()
                 return {'command': self.public(old), 'duplicate': True}
             if not self.capability(agent)['can_send']:
                 raise CommandError(503, 'adapter_unavailable')
-            count = self.db.execute("SELECT COUNT(*) FROM commands WHERE agent_id=? AND state IN ('pending','sending','queued','delivery_unknown','running','waiting_user')", (agent,)).fetchone()[0]
+            count = self.db.execute("SELECT COUNT(*) FROM commands WHERE agent_id=? AND state IN ('pending','sending','queued','delivery_unknown','running','waiting_user') AND id NOT IN (SELECT command_id FROM command_detachments)", (agent,)).fetchone()[0]
             if count >= 20:
                 raise CommandError(429, 'queue_full')
             at = timestamp()
-            self.db.execute('INSERT INTO commands VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            self.db.execute('''INSERT INTO commands
+                (id,agent_id,session_id,adapter,fingerprint,preview,payload,state,native_message_id,run_id,
+                 created_at,updated_at,detail_code,source_device,source_revision,source_expires_at,source_membership)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (ident, agent, binding['session_id'], binding['adapter'], fingerprint,
-                 redact(text, self.history.secrets, 6000), text, 'pending', None, None, at, at, None))
+                 redact(text, self.history.secrets, 6000), text, 'pending', None, None, at, at, None,
+                 origin['device_id'] if origin else None, origin['revision'] if origin else None,
+                 origin['expires_at'] if origin else None, origin.get('membership') if origin else None))
             if commit:self.db.commit()
             row = self.db.execute('SELECT * FROM commands WHERE id=?', (ident,)).fetchone()
             if binding['adapter']=='agent_inbox':
@@ -185,11 +359,38 @@ class Commands:
         approvals = adapter.approvals(binding['session_id']) if hasattr(adapter, 'approvals') else []
         return {'capability': self.capability(agent), 'commands': [self.public(row) for row in rows], 'approvals': approvals}
 
-    def cancel_pending(self, data):
+    def list_mobile(self, agent, origin):
+        """Selected-agent public command history without permission decisions."""
+        with self.lock:
+            origin = self._origin(origin, agent)
+            if origin is None or not self._origin_allowed(origin, agent):
+                raise CommandError(403, 'mobile_authorization_revoked')
+            return self.list_mobile_view(agent, origin['device_id'], revision=origin['revision'])
+
+    def list_mobile_view(self, agent, device_id=None, *, revision=None):
+        """Trusted projection helper; caller must enforce mobile view scope.
+
+        This never reads native approval requests. A view-only caller must set
+        can_cancel=False regardless of ownership; cancel_pending enforces send.
+        """
+        with self.lock:
+            rows = self.db.execute('SELECT * FROM commands WHERE agent_id=? ORDER BY created_at DESC,id DESC LIMIT 20',
+                                   (agent,)).fetchall()
+            commands = [{**self.public(row), 'can_cancel': bool(device_id is not None and
+                         row['source_device'] == device_id and row['state'] == 'pending' and
+                         (revision is None or row['source_revision'] == revision))} for row in rows]
+            return {'capability': self.capability(agent), 'commands': commands, 'approvals': []}
+
+    def cancel_pending(self, data, *, origin=None):
         if not isinstance(data,dict) or set(data)!={'agent_id','command_id'}:raise CommandError(400,'invalid_command')
         with self.lock:
+            origin = self._origin(origin, data['agent_id'])
+            if not self._origin_allowed(origin, data['agent_id']):
+                raise CommandError(403, 'mobile_authorization_revoked')
             row=self.db.execute('SELECT * FROM commands WHERE agent_id=? AND id=?',(data['agent_id'],data['command_id'])).fetchone()
             if not row:raise CommandError(404,'command_not_found')
+            if origin is not None and not self._same_origin(row, origin):
+                raise CommandError(404, 'command_not_found')
             if row['state']=='cancelled':return {'command':self.public(row),'duplicate':True}
             if row['state']!='pending':raise CommandError(409,'command_already_received')
             self.db.execute("UPDATE commands SET state='cancelled',payload=NULL,updated_at=? WHERE id=?",(timestamp(),row['id']));self.db.commit()
@@ -215,9 +416,15 @@ class Commands:
             self.recovery_pending=False
             self.restore_observations()
         with self.lock:
+            for mobile in self.db.execute("SELECT * FROM commands WHERE source_device IS NOT NULL AND (state='pending' OR (adapter='agent_inbox' AND state='queued'))").fetchall():
+                self.validate_mobile_delivery(mobile)
             row = None
-            for candidate in self.db.execute("SELECT * FROM commands WHERE state='pending' AND adapter!='agent_inbox' ORDER BY created_at,id").fetchall():
+            for candidate in self.db.execute("SELECT * FROM commands WHERE state='pending' AND adapter!='agent_inbox' AND id NOT IN (SELECT command_id FROM command_detachments) ORDER BY created_at,id").fetchall():
                 if not self.allowed(candidate['agent_id']):continue
+                if candidate['adapter']=='cursor_cloud' and getattr(self,'cloud_sync',None) and self.cloud_sync.busy(candidate['agent_id']):
+                    continue
+                if candidate['adapter']=='grok_sdk' and getattr(self,'grok_sdk_sync',None) and self.grok_sdk_sync.busy(candidate['agent_id']):
+                    continue
                 if candidate['adapter']=='grok_webhook' and self.reported_work_in_progress(candidate['agent_id']):
                     # The App may already be doing a separately reported job.
                     # Our queue serializes Office requests only; a new routine
@@ -237,7 +444,7 @@ class Commands:
                 if hasattr(adapter, 'can_dispatch') and not adapter.can_dispatch(candidate['session_id']):
                     continue
                 if getattr(adapter, 'serial', False):
-                    prior = self.db.execute("SELECT 1 FROM commands WHERE agent_id=? AND state IN ('sending','queued','running','waiting_user','delivery_unknown') LIMIT 1", (candidate['agent_id'],)).fetchone()
+                    prior = self.db.execute("SELECT 1 FROM commands WHERE agent_id=? AND state IN ('sending','queued','running','waiting_user','delivery_unknown') AND id NOT IN (SELECT command_id FROM command_detachments) LIMIT 1", (candidate['agent_id'],)).fetchone()
                     if prior:
                         continue
                 row = candidate
@@ -246,6 +453,7 @@ class Commands:
                 return
             self.db.execute("UPDATE commands SET state='sending',updated_at=? WHERE id=?", (timestamp(), row['id']))
             self.db.commit()
+
         receipt, issue, state = {}, None, 'queued'
         try:
             binding = self.bindings.get(row['agent_id'])
@@ -254,7 +462,19 @@ class Commands:
             adapter = self.adapters.get(row['adapter'])
             if adapter is None:
                 raise DeliveryError('adapter_unavailable')
-            receipt = adapter.submit(row['session_id'], '[OFFICE:' + row['id'] + ']\n' + row['payload'])
+            # A phone revocation and the start of native delivery are serialized.
+            # Once submit has started it may already have an external effect;
+            # revocation cannot honestly promise to undo that effect.
+            with self.lock if row['source_device'] is not None else nullcontext():
+                if not self.validate_mobile_delivery(row):
+                    with self.lock:
+                        self.db.execute("UPDATE commands SET state='cancelled',payload=NULL,detail_code='mobile_authorization_revoked',updated_at=? WHERE id=? AND state='sending'",
+                                        (timestamp(), row['id']))
+                        self.db.commit()
+                    return
+                if not self.allowed(row['agent_id']):
+                    raise DeliveryError('dispatch_disabled')
+                receipt = adapter.submit(row['session_id'], '[OFFICE:' + row['id'] + ']\n' + row['payload'])
             issue = receipt.get('attention_code')
         except DeliveryError as error:
             state, issue = ('delivery_unknown' if error.uncertain else 'failed'), error.code
@@ -262,12 +482,28 @@ class Commands:
             state, issue = 'delivery_unknown', 'delivery_unknown'
         with self.lock:
             # Observation can beat the CLI's return. Never demote running/done.
-            self.db.execute('''UPDATE commands SET payload=NULL,native_message_id=?,
+            self.db.execute('''UPDATE commands SET payload=NULL,native_message_id=COALESCE(native_message_id,?),
                 state=CASE WHEN state='sending' THEN ? ELSE state END,
                 detail_code=CASE WHEN state='sending' THEN ? ELSE detail_code END,
                 updated_at=? WHERE id=?''',
                 (receipt.get('native_message_id'), state, issue, timestamp(), row['id']))
             self.db.commit()
+
+            final=self.db.execute('SELECT * FROM commands WHERE id=?',(row['id'],)).fetchone()
+        if (row['adapter'] in {'cursor_local','codex_background','grok_sdk'} and final['state'] in {'failed','delivery_unknown'}
+                and not final['native_message_id']):
+            # A local dispatcher failure is not a native start event. Keep the
+            # owner's prompt and uncertainty visible even before a run receipt.
+            definition=next((agent for agent in self.config.get('agents',[]) if agent['id']==row['agent_id']),None)
+            if definition:
+                unknown=final['state']=='delivery_unknown'
+                self.history.record(row['agent_id'],definition['provider'],definition['name'],row['id'],
+                    'unknown' if unknown else 'error',prompt=row['preview'],
+                    delivery='執行結果未確認；不會自動重送。' if unknown else '指示未能送出；請查看接駁狀態。',
+                    source_kind=row['adapter']+'_dispatch')
+                if self.on_status:
+                    self.on_status(row['agent_id'],{'type':'interrupted' if unknown else 'finished',
+                        'state':final['state'],'run_id':row['id'],'transport_only':True})
 
     def reported_work_in_progress(self, agent):
         """Called under the command lock; no timeout fabricates completion."""
@@ -288,7 +524,7 @@ class Commands:
         body = text[match.end():].strip()
         with self.lock:
             row = self.db.execute('SELECT * FROM commands WHERE id=? AND agent_id=?', (match[1], agent)).fetchone()
-            if not row or row['state'] == 'pending' or not hmac.compare_digest(row['fingerprint'], self.fingerprint(agent, body)) or (row['run_id'] and row['run_id'] != run_id):
+            if not row or self.detached(row['id']) or row['state'] in {'pending','cancelled'} or not self.matches_fingerprint(agent, body, row['fingerprint']) or (row['run_id'] and row['run_id'] != run_id):
                 return text
             next_state = row['state'] if row['state'] in TERMINAL else 'running'
             self.db.execute('UPDATE commands SET state=?,run_id=?,payload=NULL,detail_code=NULL,updated_at=? WHERE id=?',
@@ -326,12 +562,12 @@ class Commands:
             row = self.db.execute('SELECT * FROM commands WHERE id=?', (ident,)).fetchone()
             binding = self.binding(agent['id'])
             body = text[match.end():].strip()
-            if (not canonical or row is None or event.get('run_id') != ident or
+            if (not canonical or row is None or self.detached(ident) or event.get('run_id') != ident or
                     row['agent_id'] != agent['id'] or row['adapter'] != 'grok_webhook' or
-                    row['state'] == 'pending' or row['run_id'] not in (None, ident) or
+                    row['state'] in {'pending','cancelled'} or row['run_id'] not in (None, ident) or
                     binding != {'adapter': 'grok_webhook', 'session_id': row['session_id']} or
                     event.get('source_id') != agent['source_id'] or
-                    not hmac.compare_digest(row['fingerprint'], self.fingerprint(agent['id'], body))):
+                    not self.matches_fingerprint(agent['id'], body, row['fingerprint'])):
                 raise EventConflict('grok_command_start_mismatch')
             return body
 
@@ -363,7 +599,6 @@ class Commands:
                 raise ValueError()
         except (ValueError, KeyError, TypeError, AttributeError):
             raise CommandError(400, 'invalid_reconciliation') from None
-        original_fingerprint = self.fingerprint(agent['id'], text.strip())
         event_fingerprint = hashlib.sha256(json.dumps(event, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
         note_sha256 = hashlib.sha256(note.strip().encode()).hexdigest()
         provenance = 'owner_reviewed_authenticated_terminal'
@@ -373,7 +608,7 @@ class Commands:
                 raise CommandError(404, 'reconciliation_command_not_found')
             if (row['adapter'] != 'grok_webhook' or
                     self.binding(agent['id']) != {'adapter': 'grok_webhook', 'session_id': row['session_id']} or
-                    not hmac.compare_digest(row['fingerprint'], original_fingerprint)):
+                    not self.matches_fingerprint(agent['id'], text.strip(), row['fingerprint'])):
                 raise CommandError(409, 'reconciliation_command_mismatch')
             receipt = self.history.db.execute('SELECT * FROM event_receipts WHERE agent_id=? AND event_id=?',
                 (agent['id'], event['event_id'])).fetchone()
@@ -387,7 +622,7 @@ class Commands:
                     message is None or message['run_id'] != ident or message['role'] != 'assistant' or
                     message['phase'] != 'final' or message['text'] != terminal_text or run['delivery'] != terminal_text):
                 raise CommandError(409, 'reconciliation_terminal_proof_mismatch')
-            proof = {'command_fingerprint': original_fingerprint, 'terminal_event_id': event['event_id'],
+            proof = {'command_fingerprint': row['fingerprint'], 'terminal_event_id': event['event_id'],
                      'terminal_event_fingerprint': event_fingerprint, 'review_note_sha256': note_sha256,
                      'provenance': provenance}
             prior = self.db.execute('SELECT * FROM command_reconciliations WHERE command_id=?', (ident,)).fetchone()
@@ -424,24 +659,26 @@ class Commands:
         if not terminal:
             return
         with self.lock:
-            self.db.execute("UPDATE commands SET state=?,payload=NULL,detail_code=NULL,updated_at=? WHERE agent_id=? AND run_id=? AND state NOT IN ('completed','failed','cancelled')",
+            self.db.execute("UPDATE commands SET state=?,payload=NULL,detail_code=NULL,updated_at=? WHERE agent_id=? AND run_id=? AND state NOT IN ('completed','failed','cancelled') AND id NOT IN (SELECT command_id FROM command_detachments)",
                 (terminal, timestamp(), agent, run_id))
             self.db.commit()
 
     def observe_native(self, agent, event):
-        binding = self.bindings.get(agent)
-        if not binding or binding['adapter'] != event.get('adapter','hermes_acp') or binding['adapter'] not in {'hermes_acp','cursor_cloud'} or binding['session_id'] != event.get('session_id'):
-            return
         run, kind = event['run_id'], event['type']
-        definition = next((a for a in self.config['agents'] if a['id'] == agent), None)
-        if not definition:
-            return
         with self.lock:
+            # Membership may change while a native callback waits for this
+            # lock. Validate it here, never from a pre-lock snapshot.
+            binding = self.bindings.get(agent)
+            if not binding or binding['adapter'] != event.get('adapter','hermes_acp') or binding['adapter'] not in {'hermes_acp','cursor_cloud','cursor_local','codex_background','grok_sdk'} or binding['session_id'] != event.get('session_id'):
+                return
+            definition = next((a for a in self.config['agents'] if a['id'] == agent), None)
+            if not definition:
+                return
             row = self.db.execute('SELECT * FROM commands WHERE id=? AND agent_id=?', (run, agent)).fetchone()
-            if not row or row['state'] in TERMINAL:
+            if not row or self.detached(run) or row['state'] in TERMINAL:
                 return
             native=event.get('native_run_id')
-            if binding['adapter']=='cursor_cloud':
+            if binding['adapter'] in {'cursor_cloud','cursor_local','codex_background','grok_sdk'}:
                 if not native or (row['native_message_id'] and native!=row['native_message_id']):return
                 if kind=='accepted':
                     self.db.execute("UPDATE commands SET native_message_id=?,state='queued',payload=NULL,updated_at=? WHERE id=? AND state='sending'",(native,timestamp(),run))
@@ -470,8 +707,8 @@ class Commands:
                 self.db.execute('UPDATE commands SET state=?,payload=NULL,run_id=COALESCE(run_id,?),detail_code=?,updated_at=? WHERE id=?',
                     (state, run, event.get('detail_code'), timestamp(), run))
                 self.db.commit()
-        if self.on_status:
-            self.on_status(agent, event)
+            if self.on_status:
+                self.on_status(agent, event)
 
     def run(self, stop):
         while not stop.is_set():
@@ -482,6 +719,10 @@ class Commands:
             stop.wait(0.5)
 
     def close(self):
+        if getattr(self,'grok_sdk_sync',None):
+            self.grok_sdk_sync.close()
+        if getattr(self,'cloud_sync',None):
+            self.cloud_sync.close()
         for adapter in self.adapters.values():
             if hasattr(adapter, 'close'):
                 adapter.close()

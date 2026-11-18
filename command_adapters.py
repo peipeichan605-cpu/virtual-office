@@ -77,8 +77,14 @@ class CodexAppAdapter:
 def make_adapters(config, on_event=None):
     from hermes_acp import HermesAcpAdapter
     from platform_adapters import CursorCloudAdapter, GrokWebhookAdapter
+    from cursor_local import CursorLocalAdapter
+    from codex_background import CodexBackgroundAdapter
+    from grok_sdk import GrokSdkAdapter
     settings = config.get('command_adapters', {})
     return {'codex_app': CodexAppAdapter(settings.get('codex_app')),
             'hermes_acp': HermesAcpAdapter(config, on_event),
             'cursor_cloud': CursorCloudAdapter(config, on_event),
-            'grok_webhook': GrokWebhookAdapter(config, on_event)}
+            'cursor_local': CursorLocalAdapter(config, on_event),
+            'codex_background': CodexBackgroundAdapter(config, on_event),
+            'grok_webhook': GrokWebhookAdapter(config, on_event),
+            'grok_sdk': GrokSdkAdapter(config, on_event)}

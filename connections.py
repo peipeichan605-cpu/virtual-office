@@ -5,11 +5,14 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import threading
 import uuid
 from configuration import agent_name, codex_targets, load_config, save_config
 from hermes_acp import private_json
 from platform_adapters import HTTPS, RemoteError, cursor_agent_id, cursor_headers, secret_file, validate_key, webhook_url
 from history import timestamp
+from security_keys import integrity_fingerprint, matches_integrity
+from cursor_local import DEFAULT_MODEL, MODEL, LocalStartError, SdkRuntime, durable_state, lifecycle_path, local_agent_id, tool_restrictions
 
 
 class ConnectionError(ValueError):
@@ -19,9 +22,15 @@ class ConnectionError(ValueError):
 
 
 class Connections:
-    def __init__(self, bridge, transport=None):
+    def __init__(self, bridge, transport=None, local_runtime=None):
         self.bridge, self.transport = bridge, transport or HTTPS()
         self.root = Path(bridge.config['data_dir']) / 'platform-secrets'
+        self.local_runtime = local_runtime or SdkRuntime()
+        self._creation_lock, self._creating = threading.RLock(), set()
+        with bridge.history.lock, bridge.history.db:
+            bridge.history.db.execute('''CREATE TABLE IF NOT EXISTS cursor_sdk_creations (
+                request_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL,
+                state TEXT NOT NULL, response TEXT, reason TEXT, native_id TEXT)''')
 
     def status(self):
         cursor_sessions=self.bridge.config.get('command_adapters',{}).get('cursor_cloud',{}).get('sessions',{})
@@ -148,6 +157,184 @@ class Connections:
             self.save(config)
         return {'connected':True,'agent_id':ident,'mode':'cursor_cloud','same_session':True,
                 'native_target_verified':True,'execution_verified':False}
+
+    def _saved_cursor_sdk(self):
+        # Cursor Cloud's legacy cursor.json is intentionally read-only. The
+        # SDK account settings have their own installation-private file.
+        path = self.root / 'cursor-sdk.json'
+        if not path.is_file():
+            return {}
+        try:
+            value = secret_file(str(path))
+            return value if isinstance(value, dict) else {}
+        except (ValueError, OSError, KeyError, TypeError):
+            return {}
+
+    @staticmethod
+    def _creation_request_id(value):
+        try:
+            if not isinstance(value, str) or str(uuid.UUID(value)) != value:
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise ConnectionError('invalid_request_id')
+        return value
+
+    def cursor_local_status(self, request_id=None):
+        saved = self._saved_cursor_sdk()
+        try:
+            validate_key(saved.get('api_key'))
+            has_key = True
+        except ValueError:
+            has_key = False
+        workspace = saved.get('workspace')
+        if not isinstance(workspace, str) or not Path(workspace).is_dir():
+            workspace = None
+        available = self.local_runtime.available()
+        catalog = self.bridge.workspaces.catalog() if hasattr(self.bridge, 'workspaces') else []
+        result = {'sdk_available': available,
+            'sdk_reason': None if available else getattr(self.local_runtime, 'reason', None) or 'cursor_sdk_required',
+            'sdk_version': getattr(self.local_runtime, 'version', None),
+            'credential_configured': has_key, 'workspace': workspace,
+            'workspaces': [{'name': row['name'], 'path': row['path']} for row in catalog],
+            'mode': 'cursor_local', 'scope': 'office_owned_session', 'tool_policy': 'chat_only'}
+        if request_id is not None:
+            request_id = self._creation_request_id(request_id)
+            with self.bridge.history.lock:
+                row = self.bridge.history.db.execute('SELECT * FROM cursor_sdk_creations WHERE request_id=?', (request_id,)).fetchone()
+            if row:
+                with self._creation_lock:
+                    active = request_id in self._creating
+                state = row['state']
+                if state == 'creating':
+                    state = 'pending' if active else 'unknown'
+                creation = {'request_id': request_id, 'state': state}
+                if row['response']:
+                    response = json.loads(row['response'])
+                    creation.update({key: response[key] for key in ('agent_id', 'name') if key in response})
+                    if state == 'completed' and not self._sdk_creation_selected(response):
+                        creation.update(state='revoked', reason='agent_membership_changed')
+                if row['reason']:
+                    creation['reason'] = row['reason']
+                result['creation'] = creation
+            else:
+                result['creation'] = {'request_id':request_id,'state':'not_found'}
+        return result
+
+    def _sdk_creation_selected(self, response):
+        ident = response.get('agent_id')
+        definition = self.bridge.definitions.get(ident)
+        return bool(definition and definition.get('driver')=='cursor' and
+            self.bridge.commands.bindings.get(ident)=={'adapter':'cursor_local','session_id':definition['source_id']})
+
+    def create_cursor_local(self, data):
+        """Create one owner-selected SDK chat; never import other native agents."""
+        allowed = {'name', 'workspace', 'api_key', 'model', 'request_id', 'tools', 'disallowed_tools', 'setting_sources', 'create_folder'}
+        if not isinstance(data, dict) or set(data) - allowed:
+            raise ConnectionError('invalid_connection')
+        request_id = self._creation_request_id(data.get('request_id') or str(uuid.uuid4()))
+        saved = self._saved_cursor_sdk()
+        if 'create_folder' in data and not isinstance(data['create_folder'], bool):
+            raise ConnectionError('invalid_workspace')
+        creating_folder = data.get('create_folder') is True
+        try:
+            from workspaces import workspace_path
+            cwd = workspace_path(data.get('workspace', saved.get('workspace')))
+            folder = Path(cwd)
+            if not folder.is_dir() and not (creating_folder and not folder.exists() and folder.parent.is_dir()):
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise ConnectionError('invalid_workspace')
+        try:
+            key = validate_key(data.get('api_key') or saved.get('api_key'))
+        except (ValueError, OSError, KeyError, TypeError):
+            raise ConnectionError('cursor_connection_details_required')
+        model = data.get('model') or DEFAULT_MODEL
+        if not isinstance(model, str) or not MODEL.fullmatch(model):
+            raise ConnectionError('cursor_model_invalid')
+        try:
+            policy = tool_restrictions(data)
+            requested_name = agent_name(data['name']) if 'name' in data else None
+        except (ValueError, TypeError):
+            raise ConnectionError('invalid_connection')
+        if not self.local_runtime.available():
+            raise ConnectionError(getattr(self.local_runtime, 'reason', None) or 'cursor_sdk_required', 409)
+        fingerprint_payload = json.dumps({
+            'name': requested_name, 'cwd': cwd, 'model': model, 'policy': policy,
+            'create_folder': creating_folder,
+            'key_sha256': hashlib.sha256(key.encode()).hexdigest()}, sort_keys=True).encode()
+        fingerprint = integrity_fingerprint(self.bridge.config, fingerprint_payload)
+        with self.bridge.commands.lock, self.bridge.history.lock, self.bridge.history.db:
+            row = self.bridge.history.db.execute('SELECT * FROM cursor_sdk_creations WHERE request_id=?', (request_id,)).fetchone()
+            if row:
+                if not matches_integrity(self.bridge.config, fingerprint_payload, row['fingerprint']):
+                    raise ConnectionError('request_id_conflict', 409)
+                if row['state'] == 'completed' and row['response']:
+                    response = json.loads(row['response'])
+                    if not self._sdk_creation_selected(response):
+                        raise ConnectionError('agent_membership_changed',409)
+                    return response
+                with self._creation_lock:
+                    active = request_id in self._creating
+                raise ConnectionError(row['reason'] or ('cursor_creation_pending' if active else 'cursor_creation_unknown'), 409)
+            config = load_config(self.bridge.config['config_path'])
+            taken = {agent['name'] for agent in config['agents']}
+            name = requested_name or 'Cursor SDK 對話'
+            if requested_name and name in taken:
+                raise ConnectionError('name_in_use', 409)
+            number = 2
+            while name in taken:
+                name = 'Cursor SDK 對話 ' + str(number); number += 1
+            self.bridge.history.db.execute('INSERT INTO cursor_sdk_creations VALUES (?,?,?,?,?,?)',
+                (request_id, fingerprint, 'creating', None, None, None))
+            with self._creation_lock:
+                self._creating.add(request_id)
+        native_id = None
+        try:
+            if creating_folder:
+                folder.mkdir(exist_ok=True)
+            # Reserve a stable intended ID locally. SDK1.3.1 native creation
+            # must wait for the first explicit prompt on the SAME handle.
+            native_id = local_agent_id(self.local_runtime.reserve(key, model, cwd, policy, request_id=request_id, name=name))
+            with self.bridge.commands.lock, self.bridge.history.lock:
+                self.bridge.history.db.execute('UPDATE cursor_sdk_creations SET native_id=? WHERE request_id=?', (native_id, request_id))
+                self.bridge.history.db.commit()
+                config = load_config(self.bridge.config['config_path'])
+                ident = 'cursor:' + native_id
+                if any(agent['name'] == name or agent['id'] == ident for agent in config['agents']):
+                    raise ConnectionError('cursor_creation_unknown', 409)
+                credential = self.root / ('cursor-sdk-' + hashlib.sha256(native_id.encode()).hexdigest()[:24] + '.json')
+                private_json(credential, {'api_key': key})
+                self.bridge.history.secrets = (*self.bridge.history.secrets, key)
+                config['agents'].append({'id': ident, 'source_id': native_id, 'name': name, 'provider': 'cursor', 'driver': 'cursor'})
+                config.setdefault('command_bindings', {})[ident] = {'adapter': 'cursor_local', 'session_id': native_id}
+                settings = {'credential_file': str(credential), 'cwd': cwd, 'model': model, **policy}
+                durable_state(lifecycle_path(settings), {'schema':1,'agent_id':native_id,'cwd':cwd,
+                    'phase':'reserved','native_target_verified':False,'name':name})
+                config.setdefault('command_adapters', {}).setdefault('cursor_local', {}).setdefault('sessions', {})[native_id] = settings
+                self.save(config)
+                private_json(self.root / 'cursor-sdk.json', {'api_key': key, 'workspace': cwd})
+                if hasattr(self.bridge, 'workspaces'):
+                    workspace = self.bridge.workspaces.create(cwd)
+                    self.bridge.workspaces.observe(ident, cwd, 'cursor_local')
+                    self.bridge.workspaces.assign(ident, workspace['id'], 'manual')
+                response = {'connected': True, 'agent_id': ident, 'name': name, 'mode': 'cursor_local',
+                    'same_session': True, 'native_target_verified': False, 'execution_verified': False,
+                    'registration_state':'pending_first_instruction',
+                    'scope': 'office_owned_session', 'tool_policy': 'chat_only', 'request_id': request_id}
+                self.bridge.history.db.execute('UPDATE cursor_sdk_creations SET state=?,response=?,reason=NULL WHERE request_id=?',
+                    ('completed', json.dumps(response), request_id))
+                self.bridge.history.db.commit()
+                return response
+        except Exception as error:
+            confirmed = isinstance(error, LocalStartError) and not error.uncertain and native_id is None
+            reason = error.code if isinstance(error, LocalStartError) else 'cursor_creation_unknown'
+            with self.bridge.history.lock, self.bridge.history.db:
+                self.bridge.history.db.execute('UPDATE cursor_sdk_creations SET state=?,reason=? WHERE request_id=?',
+                    ('failed' if confirmed else 'unknown', reason, request_id))
+            raise ConnectionError(reason, 409) from error
+        finally:
+            with self._creation_lock:
+                self._creating.discard(request_id)
 
     def _cursor_target(self, config, ident, name):
         if ident in config.get('disabled_command_agents',[]):raise ConnectionError('dispatch_disabled',409)

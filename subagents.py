@@ -95,6 +95,7 @@ class ChildTail:
         self.metadata = None
         self.run = None
         self.run_started = 0
+        self.context_started = 0
         self.root_run = row['parent_run_id']
         self.own_turn = False
         self.last_event = 0
@@ -175,12 +176,19 @@ class ChildTail:
                     continue
                 if run==self.run or start<self.run_started:
                     continue
+                # The first own turn belongs to the spawning parent's turn
+                # at birth, even when native execution starts later. Reused
+                # child turns instead use their own verified start boundary.
+                # This matters when an enrolled native child keeps the same
+                # outer root_turn_id across several of its own turns.
+                self.context_started=(max(start, self.row['born'], stamp)
+                                      if self.own_turn else self.row['born'])
                 self.run, self.root_run = run, root_run
                 self.run_started=start
                 self.own_turn = True
                 self.status = 'working'; self.terminal_at = None; self.final_text = ''
                 self.last_event = stamp
-                events.append({'kind': 'run', 'status': 'working', 'run_id': run, 'at': record.get('timestamp'), 'started_at': payload.get('started_at'), 'parent_run_id': root_run})
+                events.append({'kind': 'run', 'status': 'working', 'run_id': run, 'at': record.get('timestamp'), 'started_at': payload.get('started_at'), 'parent_run_id': root_run, 'native_context_at':self.context_started})
                 continue
             if not self.own_turn:
                 continue
@@ -192,9 +200,9 @@ class ChildTail:
                     self.status = 'error' if payload.get('error') or kind in {'task_failed', 'turn_failed'} else 'cancelled' if kind in {'task_aborted', 'turn_aborted'} else 'done'
                     self.terminal_at = stamp; self.last_event = stamp
                     text = payload.get('last_agent_message') or self.final_text
-                    events.append({'kind': 'run', 'status': self.status, 'run_id': self.run, 'at': record.get('timestamp'), 'delivery': text if isinstance(text, str) else '', 'parent_run_id': self.root_run})
+                    events.append({'kind': 'run', 'status': self.status, 'run_id': self.run, 'at': record.get('timestamp'), 'delivery': text if isinstance(text, str) else '', 'parent_run_id': self.root_run, 'native_context_at':self.context_started})
                     if isinstance(text, str) and text:
-                        events.append({'kind': 'message', 'role': 'assistant', 'phase': 'final', 'text': text, 'run_id': self.run, 'at': record.get('timestamp'), 'parent_run_id': self.root_run})
+                        events.append({'kind': 'message', 'role': 'assistant', 'phase': 'final', 'text': text, 'run_id': self.run, 'at': record.get('timestamp'), 'parent_run_id': self.root_run, 'native_context_at':self.context_started})
                 elif self.status == 'working':
                     self.last_event = max(self.last_event, stamp)
             elif record.get('type') == 'response_item':
@@ -221,7 +229,7 @@ class ChildTail:
                         if encrypted and header_only and 'Payload:' in text and not text.partition('Payload:')[2].strip():
                             text='原平台未提供可讀任務內容；請查看子 Agent 的公開進度與交付。'
                     if phase == 'final': self.final_text = text
-                    events.append({'kind': 'message', 'role': role, 'phase': phase, 'text': text, 'run_id': self.run, 'at': record.get('timestamp'), 'parent_run_id': self.root_run})
+                    events.append({'kind': 'message', 'role': role, 'phase': phase, 'text': text, 'run_id': self.run, 'at': record.get('timestamp'), 'parent_run_id': self.root_run, 'native_context_at':self.context_started})
         return events
 
 
@@ -323,6 +331,21 @@ class ObservedChildren:
             result.append(item)
         return result
 
+    @staticmethod
+    def parent_run(tail, context, at):
+        """Resolve a verified native root context to this selected session.
+
+        The selected session can itself be a child, so native root_turn_id is
+        not necessarily its Office run_id. Require a matching accepted start,
+        never guess the current turn solely from a child's birth timestamp.
+        """
+        starts = dict(getattr(tail, 'run_contexts', {}))
+        if tail and tail.run:
+            starts[tail.run] = (getattr(tail, 'native_root_run', None) or tail.run, tail.run_started)
+        matches = [(started, run) for run, (native, started) in starts.items()
+                   if native == context and started and started <= at]
+        return max(matches)[1] if matches else None
+
     def discover(self):
         b = self.bridge
         source = CodexDiscovery(b.config['codex_db'])
@@ -335,7 +358,10 @@ class ObservedChildren:
             tail = b.tails.get(root['native_id'])
             if not definition or not tail or not tail.run or not getattr(tail, 'run_started', 0):
                 continue
-            lower = max(tail.run_started, seconds(definition.get('native_observe_after')))
+            # Membership/join is the fence, not the parent's latest turn. A
+            # still-working descendant can first be polled after a new turn.
+            lower = (seconds(definition.get('native_observe_after')) or
+                     getattr(tail, 'observation_started', 0) or tail.run_started)
             current = {r['native_id']: r for r in known if r['root_id'] == root['root_id']}
             active_count=sum(r['status'] not in {'done','error','cancelled'} for r in current.values())
             queue = [(root['native_id'], root['root_id'], 0, getattr(tail,'agent_path','/root'))]
@@ -384,7 +410,21 @@ class ObservedChildren:
                     if reader.metadata is None:
                         if len(self.pending_tails)<MAX_CHILDREN:self.pending_tails[ident]=reader
                         continue
+                    context_run = reader.root_run if reader.own_turn else row['parent_context_run']
+                    parent_run = self.parent_run(tail, context_run, reader.context_started or born)
+                    if not parent_run:
+                        # An earlier turn cannot be admitted until its own
+                        # post-boundary start proves the original root context.
+                        if (not reader.own_turn and (reader.offset < reader.last_size or reader.pending)
+                                and len(self.pending_tails)<MAX_CHILDREN):
+                            self.pending_tails[ident]=reader
+                        else:
+                            self.pending_tails.pop(ident,None)
+                        continue
                     self.pending_tails.pop(ident,None)
+                    row['parent_run_id'] = parent_run
+                    row['parent_context_run'] = context_run
+                    reader.row = row
                     row['agent_path'] = reader.metadata['agent_path']
                     self.db.execute('INSERT OR IGNORE INTO observed_agents ('+','.join(row)+') VALUES (' + ','.join('?' for _ in row) + ')', tuple(row.values()))
                     self.tails[ident] = reader
@@ -412,32 +452,34 @@ class ObservedChildren:
             return
         current_tail = b.tails.get(root['native_id'])
         for event in events:
-            # First admission is tied to a real current parent run. A reused
-            # child may get a later run only when native root_turn_id proves it.
+            # A reused child may have advanced through several native turns
+            # between polls. Resolve each event separately rather than tying
+            # all buffered text to the parent's latest or child's birth turn.
             root = self.db.execute('SELECT native_id FROM observed_agent_roots WHERE root_id=? AND generation=? AND active=1', (row['root_id'], row['generation'])).fetchone()
             if not root or row['root_id'] not in b.agents:
                 return
             current_tail = b.tails.get(root['native_id'])
             context_run = event.get('parent_run_id')
-            permitted = {row['parent_context_run'] or row['parent_run_id']}
-            if current_tail and current_tail.run:
-                permitted.add(getattr(current_tail,'native_root_run',None) or current_tail.run)
-            if context_run not in permitted:
+            parent_run = self.parent_run(current_tail, context_run, event['native_context_at'])
+            if not parent_run and context_run == (row['parent_context_run'] or row['parent_run_id']):
+                parent_run = row['parent_run_id']
+            if not parent_run:
                 continue
-            parent_run=(current_tail.run if current_tail and context_run==(getattr(current_tail,'native_root_run',None) or current_tail.run) else row['parent_run_id'])
             if event['kind'] == 'run':
                 self.db.execute('INSERT OR IGNORE INTO observed_agent_runs VALUES (?,?,?)', (row['id'], event['run_id'], parent_run))
-                b.history.record(row['id'], row['provider'], row['name'], source_kind='observed_subagent', **{k: v for k, v in event.items() if k not in {'kind', 'parent_run_id'}})
+                b.history.record(row['id'], row['provider'], row['name'], source_kind='observed_subagent', **{k: v for k, v in event.items() if k not in {'kind', 'parent_run_id', 'native_context_at'}})
             else:
-                b.history.message(row['id'], **{k: v for k, v in event.items() if k not in {'kind', 'parent_run_id'}})
+                b.history.message(row['id'], **{k: v for k, v in event.items() if k not in {'kind', 'parent_run_id', 'native_context_at'}})
                 if event['phase'] == 'prompt':
                     b.history.record(row['id'], row['provider'], row['name'], event['run_id'], 'working', prompt=event['text'], at=event['at'], source_kind='observed_subagent')
-        if reader.run and reader.root_run in ({row['parent_context_run'] or row['parent_run_id']} | ({getattr(current_tail,'native_root_run',None) or current_tail.run} if current_tail else set())):
+        parent_run = self.parent_run(current_tail, reader.root_run, reader.context_started)
+        if not parent_run and reader.root_run == (row['parent_context_run'] or row['parent_run_id']):
+            parent_run = row['parent_run_id']
+        if reader.run and parent_run:
             state = reader.status
             if state == 'working' and time.time() - reader.last_event > 1800:
                 state = 'waiting_user'
             step = {'working': '子 Agent 正在工作', 'done': '子 Agent 已完成', 'error': '子 Agent 執行失敗', 'cancelled': '子 Agent 已中止', 'waiting_user': '來源暫無更新；未確認完成'}[state]
-            parent_run=(current_tail.run if current_tail and reader.root_run==(getattr(current_tail,'native_root_run',None) or current_tail.run) else row['parent_run_id'])
             self.db.execute('UPDATE observed_agents SET status=?,step=?,run_id=?,parent_run_id=?,parent_context_run=?,updated_at=?,terminal_at=? WHERE id=?',
                             (state, step, reader.run, parent_run, reader.root_run, reader.last_event, reader.terminal_at, row['id']))
         revision=self.revisions.get(row['id'])

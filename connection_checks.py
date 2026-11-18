@@ -5,6 +5,7 @@ creates one normal command only on explicit start(), never on status polling.
 """
 import hashlib
 import hmac
+from security_keys import integrity_candidates
 import json
 import time
 import uuid
@@ -71,7 +72,7 @@ class ConnectionChecks:
                 definition = self._definition(test['agent_id'])
                 binding = self.commands.binding(test['agent_id'])
                 current = bool(definition and binding == {'adapter': test['adapter'], 'session_id': test['session_id']}
-                    and hmac.compare_digest(test['route_fingerprint'], self._signature(test['agent_id'], binding, definition)))
+                    and test['route_fingerprint'] in self._signatures(test['agent_id'], binding, definition))
                 if current and self.clock() <= test['deadline']:
                     continue
                 reason = 'connection_test_expired' if current else 'connection_test_route_changed'
@@ -82,12 +83,15 @@ class ConnectionChecks:
         return next((a for a in self.commands.config.get('agents', []) if a['id'] == agent_id), None)
 
     def _signature(self, agent_id, binding, definition):
+        return self._signatures(agent_id, binding, definition)[0]
+
+    def _signatures(self, agent_id, binding, definition):
         row = self.commands.db.execute('SELECT revision FROM connection_check_routes WHERE agent_id=?', (agent_id,)).fetchone()
         value = {'binding': binding, 'revision': row[0] if row else '',
                  'source_id': definition.get('source_id'), 'provider': definition.get('provider'),
                  'credential_hash': definition.get('token_sha256')}
-        return hmac.new(self.commands.config['topic'].encode(),
-            json.dumps(value, sort_keys=True, separators=(',', ':')).encode(), hashlib.sha256).hexdigest()
+        return integrity_candidates(self.commands.config,
+            json.dumps(value, sort_keys=True, separators=(',', ':')).encode())
 
     def _busy(self, agent_id, except_id=None):
         if self.commands.reported_work_in_progress(agent_id):
@@ -149,12 +153,12 @@ class ConnectionChecks:
             return self._public('unconfigured', reason='native_setup_required')
         if binding['adapter'] not in self.SUPPORTED:
             return self._public('unsupported', reason='check_not_supported')
-        signature = self._signature(agent_id, binding, definition)
+        signatures = self._signatures(agent_id, binding, definition)
         if test is None:
             test = self.commands.db.execute('SELECT * FROM connection_checks WHERE agent_id=? '
-                'AND route_fingerprint=? ORDER BY created DESC,rowid DESC LIMIT 1',
-                (agent_id, signature)).fetchone()
-        if test is not None and not hmac.compare_digest(test['route_fingerprint'], signature):
+                'AND route_fingerprint IN ('+','.join('?' for _ in signatures)+') ORDER BY created DESC,rowid DESC LIMIT 1',
+                (agent_id, *signatures)).fetchone()
+        if test is not None and test['route_fingerprint'] not in signatures:
             return self._public('unconfirmed', test=test, reason='connection_changed')
         ready = native_ready is not False and binding['adapter'] in self.commands.adapters
         free = not self._busy(agent_id, test['id'] if test else None)
@@ -217,7 +221,7 @@ class ConnectionChecks:
             signature = self._signature(agent_id, binding, definition)
             prior = self.commands.db.execute('SELECT * FROM connection_checks WHERE id=?', (ident,)).fetchone()
             if prior:
-                if prior['agent_id'] != agent_id or not hmac.compare_digest(prior['route_fingerprint'], signature):
+                if prior['agent_id'] != agent_id or prior['route_fingerprint'] not in self._signatures(agent_id, binding, definition):
                     raise ConnectionCheckError('request_id_conflict', 409)
                 ready = self.commands.capability(agent_id).get('native_ready')
                 return dict(self._status(agent_id, native_ready=ready, test=prior), duplicate=True)
@@ -258,7 +262,7 @@ class ConnectionChecks:
             if (not definition or not self.commands.allowed(agent_id) or
                     binding != {'adapter': test['adapter'], 'session_id': test['session_id']} or
                     event.get('source_id') != definition.get('source_id') or
-                    not hmac.compare_digest(test['route_fingerprint'], self._signature(agent_id, binding, definition))):
+                    test['route_fingerprint'] not in self._signatures(agent_id, binding, definition)):
                 return
             proof = self.history.db.execute('SELECT fingerprint,run_id FROM event_receipts WHERE agent_id=? AND event_id=?',
                 (agent_id, event.get('event_id'))).fetchone()

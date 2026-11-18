@@ -244,11 +244,17 @@ class CursorCloudAdapter:
             raise DeliveryError('cursor_api_key_required')
         if not self.can_dispatch(sid):
             raise DeliveryError('platform_agent_busy')
+        # Keep the Office correlation marker in our durable receipt only. The
+        # native Cloud conversation, including other Cursor clients, receives
+        # exactly the owner's prompt. Keep the marked text for local start
+        # correlation below; stripping it globally would change quoted text.
         try:
-            value = self.transport.json('POST', self.base + sid + '/runs', self.headers(sid), {'prompt':{'text':text}})
+            value = self.transport.json('POST', self.base + sid + '/runs', self.headers(sid), {'prompt':{'text':text[match.end():]}})
         except RemoteError as error:
             raise DeliveryError(error.code, error.uncertain)
         run = value.get('run', {})
+        if not isinstance(run, dict):
+            raise DeliveryError('cursor_invalid_run_receipt', True)
         native = run.get('id')
         if run.get('agentId') != sid or not isinstance(native, str) or not CURSOR_RUN.fullmatch(native):
             raise DeliveryError('cursor_invalid_run_receipt', True)
@@ -310,6 +316,12 @@ class CursorCloudAdapter:
                     {**self.headers(sid), 'Accept':'text/event-stream'})
                 with self.lock:self.connections[sid] = connection
                 for kind, value in sse_events(response, self.stop):
+                    # Most public text frames omit identity because the stream
+                    # URL is scoped to one run. If an identity is supplied it
+                    # must agree before any public text or status is emitted.
+                    if (value.get('runId', native) != native or
+                            value.get('agentId', sid) != sid):
+                        raise RemoteError('cursor_run_mismatch')
                     if kind == 'status':
                         if value.get('runId') != native:raise RemoteError('cursor_run_mismatch')
                         if value.get('status') in {'RUNNING','WAITING_FOR_BACKGROUND_WORK'}:begin()

@@ -1,47 +1,580 @@
 {
-  "release": "0.1.0-preview",
-  "verified_at_utc": "2026-11-11T08:22:10.686270+00:00",
-  "verification_scope": "Fresh relocated installation, automated tests and isolated empty-office HTTP smoke; not a new real-platform end-to-end test.",
-  "platform": "macOS",
-  "python_version": "3.9.6",
-  "node_version": "v22.23.2",
-  "python_tests": {
-    "passed": 495,
-    "failed": 0,
-    "duration_seconds": 81.63
-  },
-  "javascript_tests": {
-    "passed": 138,
-    "failed": 0
-  },
-  "fresh_install": {
+  "release": "0.2.0-preview",
+  "verified_at_utc": "2026-11-18T07:49:30.225277+00:00",
+  "verification_scope": "This release: relocated fresh pinned UI install, 36 selected UI test files, and Python syntax compilation. Historical feature tests below retain their original dates and do not represent a full rerun.",
+  "release_validation": {
+    "installed_ui": {
+      "expected_files": 126,
+      "actual_files": 126,
+      "hash_mismatches": [],
+      "upstream_commit": "76232f7af1a94d3cbd3d0b1cf05e460c85637acf"
+    },
+    "node_counts": {
+      "tests": 400,
+      "suites": 0,
+      "pass": 400,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "node_test_files": [
+      "test_aura_cache.mjs",
+      "test_capture_restore.mjs",
+      "test_codex_background_ui.mjs",
+      "test_codex_model_ui.mjs",
+      "test_commands.mjs",
+      "test_composer_scope.mjs",
+      "test_connection_assistant.mjs",
+      "test_cursor_sdk_ui.mjs",
+      "test_dialogue_layout.mjs",
+      "test_dialogue_portal.mjs",
+      "test_dialogue_scope.mjs",
+      "test_dialogue_window.mjs",
+      "test_feed_connection.mjs",
+      "test_follower_geometry.mjs",
+      "test_gaussian_kernel.mjs",
+      "test_graphics_settings.mjs",
+      "test_graphics_settings_ui.mjs",
+      "test_grok_sdk_commands.mjs",
+      "test_grok_sdk_ui.mjs",
+      "test_ground_layout.mjs",
+      "test_header_actions.mjs",
+      "test_history_detail.mjs",
+      "test_idle_render.mjs",
+      "test_lighting_layout.mjs",
+      "test_logout_controls.mjs",
+      "test_mesh_bounds.mjs",
+      "test_platform_identity.mjs",
+      "test_post_pipeline.mjs",
+      "test_render_pacing.mjs",
+      "test_scene_graphics_settings.mjs",
+      "test_seating.mjs",
+      "test_static_furniture.mjs",
+      "test_subagent_layout.mjs",
+      "test_sunpatch_instancing.mjs",
+      "test_ui_navigation.mjs",
+      "test_workspace_scope.mjs"
+    ],
+    "excluded_js_files": [
+      "test_grok_sdk_worker.mjs",
+      "test_mobile_owner.mjs",
+      "test_mobile_pairing_input.mjs",
+      "test_mobile_session_controls.mjs",
+      "test_mobile_session_recovery.mjs",
+      "test_mobile_ui.mjs"
+    ],
+    "three_fixture_version": "0.180.0",
+    "python_files_compiled": 122,
+    "python_runtime_tests_run": false,
     "passed": true,
-    "upstream_commit": "76232f7af1a94d3cbd3d0b1cf05e460c85637acf",
-    "ui_files": 78,
-    "all_hashes_match": true,
-    "empty_roster": true,
-    "no_preconfigured_routes": true,
-    "external_feed_disabled": true,
-    "http_status": 200,
-    "temporary_process_stopped": true
+    "limitations": [
+      "Unit/packaging checks are not browser rendering, real phone, live provider, deployment-policy or security assurance.",
+      "Mobile auth/session suites and SDK authentication-worker fixture excluded; previous verification records remain separately dated."
+    ]
   },
-  "privacy_review": {
-    "passed": true,
+  "initial_release_0_1_0": {
+    "release": "0.1.0-preview",
+    "verified_at_utc": "2026-11-11T08:22:10.686270+00:00",
+    "verification_scope": "Fresh relocated installation, automated tests and isolated empty-office HTTP smoke; not a new real-platform end-to-end test.",
+    "platform": "macOS",
+    "python_version": "3.9.6",
+    "node_version": "v22.23.2",
+    "python_tests": {
+      "passed": 495,
+      "failed": 0,
+      "duration_seconds": 81.63
+    },
+    "javascript_tests": {
+      "passed": 138,
+      "failed": 0
+    },
+    "fresh_install": {
+      "passed": true,
+      "upstream_commit": "76232f7af1a94d3cbd3d0b1cf05e460c85637acf",
+      "ui_files": 78,
+      "all_hashes_match": true,
+      "empty_roster": true,
+      "no_preconfigured_routes": true,
+      "external_feed_disabled": true,
+      "http_status": 200,
+      "temporary_process_stopped": true
+    },
+    "privacy_review": {
+      "passed": true,
+      "private_runtime_included": false,
+      "personal_paths_or_live_agent_ids_included": false,
+      "private_links_or_credentials_included": false,
+      "personal_screenshots_or_chats_included": false
+    },
+    "release_scope": {
+      "grok_webhook_retained": true,
+      "experimental_desktop_sender_included": false,
+      "github_pages_runtime": false
+    },
+    "limitations": [
+      "Grok Bot uses cooperative public reporting and a separately configured Webhook for background commands.",
+      "Cursor local App chats have no verified original-chat background delivery entrypoint.",
+      "Other OS and platform versions require their own live checks.",
+      "Cursor Cloud duplex was verified in bounded macOS trials; multi-hour idle and other operating systems are not covered.",
+      "Legacy commands lacking a provable native receipt remain unconfirmed and can block that selected agent outbound queue."
+    ]
+  },
+  "third_party_notice": "See NOTICE.md; no blanket license is asserted for upstream assets or brand artwork.",
+  "cursor_sdk": {
+    "verified_at": "2026-11-12T12:35:45.636618+00:00",
+    "sdk_version": "1.3.1",
+    "mode": "office_owned_pure_conversation",
+    "native_first_send_lazy_creation": true,
+    "same_native_session_two_live_turns": true,
+    "second_turn_after_service_restart_and_idle": true,
+    "second_turn_preserved_context": true,
+    "public_reply_and_delivery_history_verified": true,
+    "delta_stream_final_same_row_verified": true,
+    "desktop_existing_chat_takeover": false,
+    "desktop_app_direct_input_bidirectional_verified": false,
+    "tools_enabled": false,
+    "existing_desktop_cloud_hooks_retained": true,
+    "sdk_native_children_verified": false,
+    "existing_child_mechanisms_retained": true,
+    "automatic_cloud_enrollment": false,
+    "automatic_unknown_retry_or_cancel": false,
+    "core_python_tests": 537,
+    "sdk_python_tests": 88,
+    "javascript_tests": 278,
+    "javascript_skipped": 0,
+    "relocated_python_tests": 162,
+    "relocated_javascript_tests": 99,
+    "fresh_pinned_ui_install_verified": true,
+    "ui_override_hashes_verified": 54,
+    "protected_scene_graphics_child_ui_files_unchanged": 34,
+    "new_gpu_benchmark": false,
+    "private_data_included": false,
+    "source_contribution": "dominicliu69/virtual-office@0753acc8591e48cfaf3199a6f1b2cabbdc1bbb07"
+  },
+  "cursor_cloud_duplex": {
+    "verified_at_utc": "2026-11-13T06:48:55.593906+00:00",
+    "same_cloud_agent_office_send_and_reply": true,
+    "direct_desktop_cloud_prompt_stream_state_delivery": true,
+    "idle_followup_and_offline_restart_recovery": true,
+    "native_runs_tested": 6,
+    "core_python_tests": 585,
+    "javascript_tests": 281,
+    "javascript_skipped": 0,
+    "relocated_python_tests": 77,
+    "relocated_javascript_tests": 281,
+    "preserved_render_child_files": 34,
+    "auto_account_roster_import": false,
     "private_runtime_included": false,
-    "personal_paths_or_live_agent_ids_included": false,
-    "private_links_or_credentials_included": false,
-    "personal_screenshots_or_chats_included": false
+    "unpaired_old_unknown_commands_released": false,
+    "fresh_gpu_benchmark": false,
+    "source_sha256": {
+      "cursor_cloud_sync.py": "59f6df62eeafac5696520c91ffcc8092f13335cca0b143d6353ff5b5d3606e1d",
+      "cursor_cloud_recovery.py": "ec1939119485a26df1fe189ce1d497195feb595941ed5975294c7cc9cbcb00ef",
+      "platform_adapters.py": "3840f2cf1773252bfa6d45c0cc3518dcb51543479de6ce940a8aa8161b6e1a26",
+      "commands.py": "b1f9877be61426e751a04006533ac5c8f518aa53134fb472d75599d02d7f49b0",
+      "dashboard.py": "95f1acc700cdacd245aa129fcc9b1cc2fd5906e9ea549fe6ebe593949643ce94",
+      "public_sync.py": "86dce7073b673212c89771317b239bc95ad71c3d7978d5bc2522696218779508"
+    }
   },
-  "release_scope": {
-    "grok_webhook_retained": true,
-    "experimental_desktop_sender_included": false,
-    "github_pages_runtime": false
+  "movable_dialogue": {
+    "verified_at_utc": "2026-11-13T07:21:00.799529+00:00",
+    "scope": "Shared head dialogue for all enrolled platforms and child Agents; existing reader and composer retained.",
+    "relocated_javascript_tests": 301,
+    "relocated_javascript_skipped": 0,
+    "new_controller_and_portal_regression_tests": 20,
+    "fresh_pinned_ui_install_verified": true,
+    "ui_override_hashes_verified": 56,
+    "source_and_mirrors_identical": true,
+    "same_reader_draft_scroll_and_identity_retained": true,
+    "child_dialogue_remains_read_only": true,
+    "single_open_reader_or_family_panel": true,
+    "geometry_only_browser_preferences": true,
+    "close_and_retire_release_pointer_capture_and_listeners": true,
+    "no_additional_polling_or_model_calls": true,
+    "new_gpu_benchmark": false,
+    "private_runtime_included": false,
+    "public_publish_performed": false,
+    "source_sha256": {
+      "office/scene/dialogue.js": "e938fb1f43762b27a203f826911f5d2548ebd77a7ec062604cefe4c31e3b61dc",
+      "office/scene/dialogue-window.js": "7b4ba8ed3eaf6a0f109fa7173bd3f23043513aec407963c5fa3bd7d36d5f134b",
+      "office/scene/scene.js": "8e4c5f436393587d650039fc5d2f9d54d22dd1712260a8290f800740910f3af8",
+      "office/scene/scene.css": "b47a22f8dbb6e0d8e863f778a7ac3b6a1d5b1cd26d9ab24a30c91ef61ae10603"
+    },
+    "design_reference": "dominicliu69/virtual-office@0753acc8591e48cfaf3199a6f1b2cabbdc1bbb07/ui-overrides/office/commands.js",
+    "live_ui_checks_reported_by_primary_agent": [
+      "explicit float",
+      "title pointer drag",
+      "corner pointer resize",
+      "head to floating pointer drag",
+      "draft preserved on docking",
+      "keyboard movement",
+      "real child read-only dialogue",
+      "same UI for Grok",
+      "375x667 viewport clamp",
+      "floor cleanup"
+    ],
+    "limitations": [
+      "This UI change does not add or expand any platform native message capability.",
+      "No fresh GPU benchmark; existing render and idle mechanisms retained."
+    ]
   },
-  "limitations": [
-    "Grok Bot uses cooperative public reporting and a separately configured Webhook for background commands.",
-    "Cursor local App chats have no verified original-chat background delivery entrypoint.",
-    "Cursor Cloud App-origin complete sync and long-idle delivery remain unverified.",
-    "Other OS and platform versions require their own live checks."
-  ],
-  "third_party_notice": "See NOTICE.md; no blanket license is asserted for upstream assets or brand artwork."
+  "codex_background": {
+    "prepared_at_utc": "2026-11-13T08:23:13.156606+00:00",
+    "state": "verified_scoped_four_turn_trial",
+    "mode": "optional_office_owned_read_only_background",
+    "relocated_python_tests": 651,
+    "relocated_javascript_tests": 321,
+    "javascript_skipped": 0,
+    "fresh_empty_install_verified": true,
+    "ui_override_hashes_verified": 58,
+    "pinned_installed_asset_entries_verified": 47,
+    "generated_ui_files": 93,
+    "js_import_closure_verified": true,
+    "protected_scene_graphics_child_files_unchanged": 35,
+    "protected_pinned_assets_unchanged": 10,
+    "live_verification": {
+      "state": "passed_scoped_four_successful_turns",
+      "successful_turns": 4,
+      "same_native_thread": true,
+      "same_selected_model_and_provider": true,
+      "office_ui_sent_instructions": true,
+      "public_working_state_and_stream_observed": true,
+      "public_commentary_distinct_from_final_delivery": true,
+      "final_delivery_matches_native_public_text": true,
+      "idle_gap_seconds": 75.6028,
+      "idle_context_preserved": true,
+      "service_restart_recovery": true,
+      "previous_owned_workers_stopped_before_restart": true,
+      "same_context_after_restart": true,
+      "read_only_workspace_file_read": true,
+      "desktop_app_exit_tested": false,
+      "desktop_app_closed_operation": null,
+      "long_duration_idle_tested": false
+    },
+    "auto_enrollment_existing_chats": false,
+    "existing_app_chat_takeover": false,
+    "background_child_sync_verified": false,
+    "fresh_gpu_benchmark": false,
+    "private_runtime_or_auth_included": false,
+    "remote_publish_performed": false,
+    "source_sha256": {
+      "codex_background.py": "cf64c8690ca3e060f6a26137c2c80133f706358b1ed891dec7061d761aace5f8",
+      "codex_background_connections.py": "c30208e0623ffb200e3adc7c3496811931307b3827d9e1e58afd369faa0ec8bf",
+      "codex_background_rollback.py": "076afc0caa737af31cb44c1040e671c9f964f3c8f09664751223617935e1bc72",
+      "codex_rpc.py": "6515197fb2b5f9732f5821c82e78566c864d2f0ef2f123360ef457d837f11fab",
+      "command_adapters.py": "bbe07bf72d507f9371e0043c1f4b4dc3a3c923c24f89ea4ef637770e0d7357ad",
+      "commands.py": "329581ba6dbf87ac5eb865493dd43681cba21e0f0fa2830f03717f80f26c4b88",
+      "configuration.py": "6a15157c427947a95092edf464437a61f70069d41cbe69443361d21cad2fe659",
+      "dashboard.py": "7195c7cca2d75a241116af03fd3263747ed3e63912cb39dbc970eed1ecac3cdf",
+      "public_sync.py": "10b4dd20a030dd793c2b2270b8bee98f1a09c58c821d0809841347ca0955d8aa"
+    },
+    "limits": [
+      "Four successful turns used one explicitly selected supported model and account; model catalog membership does not prove account execution support.",
+      "Idle verification covers approximately76seconds, not long-term unattended operation.",
+      "Full Codex Desktop App exit was not tested.",
+      "Background-mode child Agent synchronization is not supported; existing original-App child mechanisms are preserved.",
+      "651 Python full-suite tests ran on the model-picker freeze; the later phase-only runtime patch passed83focusedtests. JavaScript321tests had0skips.",
+      "Relocation tests ran on macOS Python3.9 and Node22; Windows/Linux not tested.",
+      "UI uses local installed assets verified against pinned manifest hashes; no repeated remote download."
+    ],
+    "relocated_python_scope": "651 Python tests on model-picker freeze; narrow phase-aware runtime patch subsequently verified by 83 focused tests",
+    "phase_patch_focused_python_tests": 83,
+    "phase_patch_python_skipped": 0,
+    "model_selection": "optional_per_session_choice_with_native_configured_default_preserved",
+    "global_model_configuration_changed": false,
+    "verified_at_utc": "2026-11-13T08:25:36.651248+00:00",
+    "documentation_sha256": {
+      "README.md": "23811ce3761d2c1ca59ec6d30973f805710f92f4dbbc9f53531afa2981be36df",
+      "docs/CODEX-BACKGROUND.md": "989101e8a489677dc598e5fa0bfaaad171b3ad40bde25b0b6e94f407a28fd642"
+    },
+    "configured_model_changed_automatically": false,
+    "background_child_sync_supported": false,
+    "initial_model_compatibility_trial": {
+      "outcome": "configured_model_rejected_as_unsupported_for_account",
+      "successful_turn": false,
+      "correctly_reported_failed": true,
+      "automatic_model_fallback": false,
+      "separate_failed_test_identity_retired": true,
+      "later_supported_model_explicitly_selected_by_user": true
+    }
+  },
+  "mobile_tsnet": {
+    "implementation": "optional independent tsnet frontend",
+    "tailscale_version": "v1.104.7",
+    "go_minimum": "1.27.4",
+    "required_build_tag": "ts_omit_peerapiserver",
+    "go_offline_top_level_tests_passed": 25,
+    "go_offline_tests_including_subtests_passed": 87,
+    "python_lifecycle_tests_passed": 17,
+    "source_sha256": {
+      "phone_tsnet.py": "a26f1d67db4a8ab6ec001dc653f5bcf2459754400bb5fa771331c973e579bb32",
+      "test_phone_tsnet.py": "be52d5842b2644f968a543e27ba64ac3d7ee972a4e8361bf2ce57f58c47ccfdf",
+      "README.md": "738a468c9f3b8411c920f1083a184fc2a1dcc4a6de44557a687fc74401a99dbb",
+      "docs/MOBILE-ACCESS.md": "2e1e9af27d8ccdce1bde3b617ecde7a0132df8275715b9721ecd0f23d6ef59f6",
+      "docs/MOBILE-TSNET.md": "6820024ba399432923b216af973ae8b9e6aa8cd5468b7d81a260fab75f9ef2d3",
+      "phone-tsnet/README.md": "5bbcb9c1e84b15327af8955d281a9052cac0494b691d6ce6f3434dc22afdec1d",
+      "phone-tsnet/config.go": "b7940499316c254016112ceb9944e2c2201fc2599caa78d95124ed5731096a94",
+      "phone-tsnet/config_test.go": "c0fccf306172fbfb7e6debe63044456350af3d742cfc9012db079005f17a529b",
+      "phone-tsnet/go.mod": "f59d0b83623377e35c88c3dfa48c28ebd348c91cb2e4ccc27831e756a806c00b",
+      "phone-tsnet/go.sum": "a08fa8d9e3c7db68151b1d7a168c316a66176ed23da8947414d2df72891becfb",
+      "phone-tsnet/main.go": "aaaca80a005225613628d9e61bfa138f825942cde1b8636a13ba73df2f203891",
+      "phone-tsnet/main_test.go": "30ea9e087f46235a005782b8135206a56a06f31529e6fe10eb2e68428aa71aaf",
+      "phone-tsnet/ownership_other.go": "e5aa4050c92f3d186e431dda4b9c56d7f91b651f120488ead5cbd22fdcb19575",
+      "phone-tsnet/ownership_unix.go": "84cc05f85f980f80841d812bef56f341d966b5ea68b88e784ff49cabf444af97",
+      "phone-tsnet/proxy.go": "da2f71b24f42f9c1dc87c715cdfdf2874ae9e194595ae4f52e716f4c4c8ef6d9",
+      "phone-tsnet/proxy_test.go": "d078c762bd616a1c0d27045317077847d1a31f939f6f30511f7f574f7e55ec43",
+      "phone-tsnet/status.go": "32db7d95318ecac04ca836d1d481baf84d2f5f6a113e10d69c1f9ce9fe22f78c",
+      "phone-tsnet/certificate.go": "ecf6d76e84993d9633006cfe1b396e60cf5527dcc22ca0260ea56807bc2df348",
+      "phone-tsnet/certificate_test.go": "025b77329fcf7b74457dc3542c9ed2472676a78469d23b1c9c9f1be0f30aab5b",
+      "phone-tsnet/identity.go": "824c587faa653ca8531b766972885327c0ccf128a30b40acaaf27b39a796e816",
+      "phone-tsnet/identity_test.go": "e6258bcdc903af73b44a3f2be2ae419e837d68f47ea5e65732802dd61be0e828"
+    },
+    "packaged_binary": false,
+    "packaged_runtime_or_credentials": false,
+    "host_vpn_or_routes_modified_by_packaging": false,
+    "live_android_cellular_verified": false,
+    "live_vpn_coexistence_verified": false,
+    "live_phone_agent_roundtrip_verified": false,
+    "limitations": [
+      "Controlled local tests only; no live enrollment or node listener in these tests.",
+      "Real phone, effective network policy and VPN coexistence need deployment acceptance.",
+      "POSIX lifecycle implementation; no Windows lifecycle or Linux live acceptance claim."
+    ],
+    "certificate_preparation": {
+      "before_listener": true,
+      "timeout_seconds": 45,
+      "exact_hostname_key_and_time_checked": true,
+      "new_cli_or_phase": false,
+      "live_phone_acceptance_inferred": false
+    },
+    "identity_preparation": {
+      "before_listener": true,
+      "timeout_seconds": 15,
+      "missing_metadata_only": true,
+      "populated_mismatch_rejected_immediately": true,
+      "post_ready_immediate_failure_preserved": true,
+      "new_cli_or_phase": false,
+      "live_phone_acceptance_inferred": false
+    }
+  },
+  "owner_pairing_qr": {
+    "source_sha256": {
+      "public/office/mobile-owner.js": "b39d4f106758837061311146c11d1bfbb0d4420fe9a00cfcfcf50a870c5f9022",
+      "public/office/mobile-owner.css": "52e34eadebcd7b8cd307b70aa8e438b7fc1b492da1e4cf9687cb0ea9a656bf75",
+      "public/office/vendor/qrcode-generator/qrcode.mjs": "ea91d7118a5395289170da848b7c6758b996163bfbccf312591ab65a4911b7c0",
+      "public/office/vendor/qrcode-generator/LICENSE": "3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c",
+      "public/office/vendor/qrcode-generator/PROVENANCE.json": "59e40e1bbe64e71dc2ff4e26a2a65733fdabc7ee675b90712c38ecd4ddefba1e",
+      "test_mobile_owner.mjs": "01fbf8eb00f17ea01c14051405106228f1ee6d42dc9948ecc48b54d083e946b7",
+      "README.md": "738a468c9f3b8411c920f1083a184fc2a1dcc4a6de44557a687fc74401a99dbb",
+      "docs/MOBILE-ACCESS.md": "2e1e9af27d8ccdce1bde3b617ecde7a0132df8275715b9721ecd0f23d6ef59f6",
+      "docs/MOBILE-TSNET.md": "6820024ba399432923b216af973ae8b9e6aa8cd5468b7d81a260fab75f9ef2d3"
+    },
+    "encoder": "qrcode-generator 2.0.4",
+    "encoder_scope": "Local owner-only lazy-loaded module; no external QR service.",
+    "mobile_static_manifest_tests_passed": 11,
+    "mobile_allowlist_sha256": "7c714df376b49596122294299d86e53c9372d62a7efab0e9214c9d91f8a43667",
+    "mobile_allowlist_changed": false,
+    "private_runtime_included": false,
+    "live_phone_scan_verified": false,
+    "timer_receiver_regression_detects_old_bug": true,
+    "prior_owner_and_mobile_node_tests_passed": 27,
+    "owner_node_tests_passed": 19,
+    "revoked_state_refresh_reopen_tests_passed": true,
+    "expired_state_refresh_reopen_tests_passed": true
+  },
+  "mobile_qr_navigation": {
+    "source_sha256": {
+      "mobile_gateway.py": "5b04c46cc832c2fdd4e774b86b675a08750e9ba0938c125bd631bc5dd308eee1",
+      "test_mobile_gateway.py": "f53706e39d8bd8f37af5e863b8d8715a99a4134b0579288db59fcd1b9f57c230"
+    },
+    "source_gateway_auth_command_tests_passed": 83,
+    "scope": "Only exact GET /mobile/pair public shell with cross-site navigate/document headers.",
+    "pairing_post_identity_csrf_or_private_routes_widened": false,
+    "live_phone_or_tailscale_tested_by_this_suite": false
+  },
+  "mobile_resilience": {
+    "verified_at_utc": "2026-11-17T07:45:46.961354+00:00",
+    "scope": "Generic mobile bootstrap/session fencing and authoritative command retry reconciliation; isolated and offline relocated tests.",
+    "source_sha256": {
+      "public/office/commands.js": "995101ed7f83177ee88eb331f90d7dd3ee2234b2b3ff4f458dad9fb03ab06701",
+      "test_commands.mjs": "9e82ce72db18136844e0794c3dd9792f558ea951d530519202866aae1bf4aa19",
+      "public/office/mobile-access.js": "ebb7611fbdd47ea90010298fbca8e9e7df46f8497bad3443578ec654bd4b965c",
+      "public/office/mobile-entry.js": "efc98d3167e3033baf643196ff2305f6f8f18e7aa689248ca0c18364eef057a9",
+      "public/office/agent.js": "690b31297e7d5ec8a62d616e4740a51d83c0e00e9e2e1eb411a21e432f0b740a",
+      "test_mobile_session_recovery.mjs": "b82ddb0b84eb05ac5a9408b8b8317d319386150757addc96873f1003329c3c41",
+      "test_mobile_ui.mjs": "91703f58549e221f0a67eb99da3edba387b7ce1cba995b86fc00e944cab5054b"
+    },
+    "source_combined_node_tests_passed": 76,
+    "source_mobile_python_tests_passed": 112,
+    "relocated_node_tests_passed": 76,
+    "relocated_node_tests_skipped": 0,
+    "relocated_mobile_static_boundary_tests_passed": 11,
+    "ui_overrides_verified": 89,
+    "offline_final_ui_files_verified": 124,
+    "non_overridden_pinned_installed_files_verified": 35,
+    "new_runtime_module_or_allowlist_added": false,
+    "post_commands_automatically_retried": false,
+    "hidden_bootstrap_polling": false,
+    "private_runtime_included": false,
+    "live_phone_or_network_failure_tested_by_this_suite": false,
+    "public_publish_performed": false
+  },
+  "mobile_usability": {
+    "verified_at_utc": "2026-11-17T08:38:14.995049+00:00",
+    "scope": "Generic mobile scope policy, workspace navigation, close interaction and in-place dialogue; isolated offline relocated tests.",
+    "source_sha256": {
+      "public/office/mobile.css": "c98db4425f5147adbefa24c8189d42d8b55c87cf0800d85a17144446425e8d83",
+      "public/office/mobile-owner.css": "0c82b79833217d09f5f0f0294e732e15f8eb0ed238957b847da00c53bb9ec1b4",
+      "public/office/app.js": "5dc0a91dea64a27b72812f1c3a8802862fc65e8904e17dbebd223920f330c755",
+      "public/office/scene/scene.js": "011faad83e375b4fba9d511d9c7b8d257a762b48b72d0776a2184bcd9e7dc8d1",
+      "public/office/scene/dialogue-layout.js": "b5d263440c1eccc2a6b96720552665553afc6ebd3475ee19d87d822de99f897b",
+      "test_dialogue_layout.mjs": "d1e63b0711ac6daad4a75cb728b18a5b4c8afc9d1f1066ab20a213e0cd0d2d5d",
+      "public/office/scene/dialogue.js": "3b953f183f2cdc44937ecd287b0781c2f98f4622422128c7e7a6488fc045d75f",
+      "public/office/ui/ui.js": "c2364390de5966c4b2493510f35fde706b0a62a61d42371f7bfddee7da54f1ac",
+      "test_dialogue_portal.mjs": "cfc79d942ae67f429fe950daf7a58f00b04005c83c30ccbd2641043965d39423",
+      "test_ui_navigation.mjs": "5db74aafcbaab77bbcd744cdd10f5019c1300034c470a5362de1b9877196dae3",
+      "mobile_auth.py": "3c9bacae98d6e6b50e2cca6ed46fd57038a8df0fb0c25ce380c25ccdbfa101b9",
+      "mobile_service.py": "4b6883bc80b30f33310bcd4c152d094cbb2a5f7ea71fb81c471b03b027837345",
+      "commands.py": "9a7a1be20a1d5597fc1b6abd42e30ff8e38cca670e50ad48d49517dcbd1fb145",
+      "dashboard.py": "386f9b5905b2c531fefd009685fb32c4b22a7b05aef87204b0d311f54864808b",
+      "mobile_static_manifest.py": "6b1f3230fbb0916f4179c4f88dad6435600bc6979d008b9d9f43bff2e1f8322d",
+      "public/office/mobile-owner.js": "0d481f174907639708edc8f965112b2c7f3776ca66e6ee61cd7495d9cd255c2f",
+      "test_mobile_auth.py": "33e1d811e1fc2e5fda67dce56d9e9a02b0c096399e8a9374600922713835e16b",
+      "test_mobile_service.py": "6977719821d64263f42461f7adcdce40593cd8e96347c9b0964ab493557392b9",
+      "test_mobile_commands.py": "39a9c431de930442a690caa3d7e81fd8a2683c009c885f52263fa958a51875a4",
+      "test_mobile_gateway.py": "1ef861ce0e65d1b364b5620418e3bb6b46910dde7cf597620d5f611c15159fee",
+      "test_security_keys_http.py": "51f75e9dcbbbb1f39c203525afb4e0e97f20da02520a4b15b5d941e78d8cee4b",
+      "test_mobile_owner.mjs": "635cefaeeb3763035a8965fcb5e5030687ec2fc33480812fcd59934349c2b428",
+      "test_mobile_session_recovery.mjs": "35b794f77f881619ddcdcdf71768ebb26b478148fd00414174cdec95e5dfd833",
+      "public/office/header-actions.js": "ed0788c0f67c635adc3ecc8b3736a00809eb2fb0abc10277dc1d10c9c82b612d",
+      "public/office/graphics-settings-ui.js": "cfcc930c8705a0d255cca61e02ffc36bdbd345308496fa7193a580251e1ae552",
+      "public/office/graphics-settings.css": "0bce333680f1fb0a30be69ba5573874f14eeb465fd114faf84cddbacce4e8874",
+      "public/office/invite.js": "5476d97f3062b7411804d8d7346d52f158a4badc33287f11452bed63d3bcd5dc",
+      "public/office/invite.css": "2aa80915832a68adc36e4b70a7655a9b3d10e036005dee86c2bda63031f4248d",
+      "public/office/simple-mode.js": "9db18f8b8c9b7c31820ed8a712643df97a838af7f9810f60d4b4d0f43aac00e8",
+      "test_header_actions.mjs": "1ab1a77b8b2b53c9c3317caa4d0d52a92697bc1151d3870b197e013a06f28c39",
+      "public/office/scene/dialogue-window.js": "0954e310f07731e64a3636a05119b951afa8f84c04b7eb6265c95ba17c76a494",
+      "test_dialogue_window.mjs": "aa66c7756fe8bdedfc8cb11fbeeafd02a7a04ae4dc25f39f1bfb282a9a1713f1"
+    },
+    "relocated_node_tests": {
+      "tests": 164,
+      "pass": 164,
+      "fail": 0,
+      "skipped": 0
+    },
+    "relocated_python_tests": {
+      "tests": 149
+    },
+    "ui_overrides_verified": 90,
+    "offline_final_ui_files_verified": 125,
+    "non_overridden_pinned_files_verified": 35,
+    "existing_phone_scopes_automatically_expanded": false,
+    "view_and_send_separate": true,
+    "history_records_deleted": false,
+    "private_runtime_included": false,
+    "live_phone_tested_by_this_suite": false,
+    "public_publish_performed": false,
+    "full_relocated_suite_precedes_scroll_reopen_patch": true,
+    "scroll_reopen_regression": {
+      "verified_at_utc": "2026-11-17T08:55:46.672502+00:00",
+      "source_sha256": {
+        "public/office/scene/dialogue.js": "3b953f183f2cdc44937ecd287b0781c2f98f4622422128c7e7a6488fc045d75f",
+        "public/office/scene/dialogue-window.js": "0954e310f07731e64a3636a05119b951afa8f84c04b7eb6265c95ba17c76a494",
+        "test_dialogue_portal.mjs": "cfc79d942ae67f429fe950daf7a58f00b04005c83c30ccbd2641043965d39423",
+        "test_dialogue_window.mjs": "aa66c7756fe8bdedfc8cb11fbeeafd02a7a04ae4dc25f39f1bfb282a9a1713f1"
+      },
+      "relocated_node_tests": {
+        "tests": 48,
+        "pass": 48,
+        "fail": 0,
+        "skipped": 0
+      },
+      "scope": "Retain floating-reader scroll position when closing and reopening in place.",
+      "real_android_tested_by_this_suite": false,
+      "full_suite_repeated": false
+    }
+  },
+  "mobile_onboarding": {
+    "verified_at_utc": "2026-11-17T09:43:37.004299+00:00",
+    "scope": "Generic mobile first-connection assistant and bounded remembered-login renewal; isolated relocated tests.",
+    "source_sha256": {
+      "docs/MOBILE-ACCESS.md": "cc91ab501b99a3000b679acd09e5263d2b953c3be73d86c64fafc0be22b8621e",
+      "docs/MOBILE-QUICKSTART.md": "92b2d4d358c8d8798e5ed6a38d0f420f3a5a48f0948986113578fba90bb5fdf9",
+      "docs/MOBILE-TSNET.md": "58f86cd2af41bc582fd37c2f3be31f2894eab8dd986b361492255cd466b418f6",
+      "mobile_auth.py": "86b8f25d5f9550843820a2e4952a3115df9b5f8a359b848f57b46ea4d66184f3",
+      "mobile_gateway.py": "103681aa0b34d67709cd26be0c6801f456428a7455468cdf5ce1689882e73593",
+      "mobile_service.py": "02d1a94d34bbb5604e5cbae4c31cc1bfcc157f0c543bb2847bc229ae92b8a267",
+      "mobile_setup.py": "9662e6d3ee663bb2476b380871ea4364d0b4e9637db1cb898dea3f922f364dd0",
+      "mobile_static_manifest.py": "bd4cd245cd8d98ed9ce26792a32687ed0dc33a46ca9c522fc398231a9de4a5b9",
+      "public/office/mobile-access.js": "3b69aee9c547cad6a26b492cec3bf668c014d53809f4c7d1716d9bee67e8e69b",
+      "public/office/mobile-entry.js": "46a03a446078c18ed0bbb95f3901a61b16e80bd9ac3044d45afbf110cf91f907",
+      "public/office/mobile-owner.css": "1be32de831db12a65d9f5b097e7d46846e56760ef733279e594146bda6e1f804",
+      "public/office/mobile-owner.js": "e22dd0b7cd2176ac9fa48c879874bb4f685e64eddce6fed84b7287c9251f0204",
+      "public/office/mobile-pair.html": "98af4bcdcec12e560684400fdf57ef21d00dfb24e28d9d443bf26be369bd52c1",
+      "public/office/mobile-pair.js": "6a09e6a5a6d996e5b415eaf7a35e3abf9c342a6e2110a7f0deedc7d7a8947f62",
+      "public/office/mobile-session-controls.js": "962a4874add6f3210cb7c10f16ff20fe35febf3628e07f1fc1f8c01f9f111f62",
+      "public/office/mobile.css": "34fdb4c878db1d7bfddc875cb46d683fe9b9af69ca8edd055790ee86c155ab86",
+      "test_mobile_gateway.py": "eb1192875894b4e8c794b671c15262ee456093fe7204f460f9a219c17a5dd91d",
+      "test_mobile_owner.mjs": "a4faf119592aaef5c4a953852057154dc8b02fbbcc98b4c5e209900e97de792a",
+      "test_mobile_pairing_input.mjs": "e527eeb8025588379ac55a27a8a326edc8c6ea95dd629059229be7cc05fa3ff1",
+      "test_mobile_renewal.py": "5ba009e6fd21cc63b77a34159996c4ee73890373fe53badfffb69543fcff988b",
+      "test_mobile_service.py": "f7a4fe80c5bfb25bdb0479871957ef96895a309a1a75404704c146323a413634",
+      "test_mobile_session_controls.mjs": "41ad5820199aaf59c04aa0109746ea80469fb7d276f69419ffe499240e6ba550",
+      "test_mobile_session_recovery.mjs": "c091bd207b825ab97af75a0862b448b9c609075937801662c19a1c3dd9ad6690",
+      "test_mobile_setup.py": "798e5ad236c1807f4b2fa5074f0796cb81c3fb5e2ef3708f104265e8617bf563",
+      "phone-tsnet/proxy.go": "43d578c574f44dd88c9709320bd19d33e8299d57f81071a4be0b8d02d887e166",
+      "phone-tsnet/proxy_test.go": "c8c0a8e89391af8031d7af6b1323a7f8ba720f937eff414e7ca218591e5437ad"
+    },
+    "relocated_node_tests": {
+      "tests": 192,
+      "pass": 192,
+      "fail": 0,
+      "skipped": 0
+    },
+    "relocated_python_tests": {
+      "tests": 196
+    },
+    "ui_overrides_verified": 91,
+    "non_overridden_pinned_files_verified": 35,
+    "offline_ui_files_verified": 126,
+    "legacy_phone_auto_enrollment": false,
+    "new_agent_grants_automatic": false,
+    "private_runtime_included": false,
+    "real_phone_tested_by_this_suite": false,
+    "public_publish_performed": false,
+    "full_suite_precedes_this_guard_fix": true,
+    "renewable_scope_guard": {
+      "verified_at_utc": "2026-11-17T09:46:07.215340+00:00",
+      "source_sha256": {
+        "public/office/mobile-owner.js": "e22dd0b7cd2176ac9fa48c879874bb4f685e64eddce6fed84b7287c9251f0204",
+        "test_mobile_owner.mjs": "a4faf119592aaef5c4a953852057154dc8b02fbbcc98b4c5e209900e97de792a"
+      },
+      "relocated_node_tests": {
+        "tests": 30,
+        "pass": 30,
+        "fail": 0,
+        "skipped": 0
+      },
+      "full_suite_repeated": false,
+      "scope": "Allow existing remembered phones awaiting short-session renewal to update scopes from owner UI."
+    },
+    "full_python_node_suite_precedes_proxy_routes": true,
+    "private_frontend_renewal_routes": {
+      "verified_at_utc": "2026-11-17T09:52:01.340450+00:00",
+      "source_sha256": {
+        "phone-tsnet/proxy.go": "43d578c574f44dd88c9709320bd19d33e8299d57f81071a4be0b8d02d887e166",
+        "phone-tsnet/proxy_test.go": "c8c0a8e89391af8031d7af6b1323a7f8ba720f937eff414e7ca218591e5437ad",
+        "docs/MOBILE-TSNET.md": "58f86cd2af41bc582fd37c2f3be31f2894eab8dd986b361492255cd466b418f6"
+      },
+      "relocated_go_tests": {
+        "top_level_tests": 27,
+        "including_subtests": 103,
+        "failed": 0
+      },
+      "network": "offline cached modules; GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local",
+      "scope": "Exact POST renewal and remember routes through the private tsnet boundary.",
+      "live_phone_tested_by_this_suite": false
+    }
+  }
 }

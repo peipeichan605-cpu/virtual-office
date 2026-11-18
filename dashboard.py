@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from security_keys import matches_owner_key, security_secrets
 """Local, read-only bot observers and an ntfy-only loopback proxy.
 
 No prompts, tool arguments, responses, credentials, or source titles are published.
@@ -97,6 +98,10 @@ class CodexTail:
         self.run = None
         self.run_started = 0
         self.native_root_run = None
+        # Bounded public start metadata, not prompts or tool arguments. Child
+        # discovery may run after this session has already advanced a turn.
+        self.run_contexts = {}
+        self.observation_started = 0
         self.agent_path = '/root'
         self.last_event = 0
         self.state = ('waiting_user', '未能確認來源狀態')
@@ -145,6 +150,13 @@ class CodexTail:
             self.run = run
             self.run_started = seconds(p.get('started_at')) or stamp
             self.native_root_run = p.get('root_turn_id') or run
+            if self.initialized and not self.observation_started:
+                self.observation_started = self.run_started
+            if (isinstance(self.native_root_run, str) and
+                    re.fullmatch(r'[A-Za-z0-9_-]{1,160}', self.native_root_run)):
+                self.run_contexts[run] = (self.native_root_run, self.run_started)
+                while len(self.run_contexts) > 256:
+                    self.run_contexts.pop(next(iter(self.run_contexts)))
             self.state = ('working', '處理訊息')
             self.final_text = ''
             self.history_event('working', rec, started_at=p.get('started_at'))
@@ -209,6 +221,9 @@ class CodexTail:
                 events.append(event)
         if not self.initialized:
             self.initialized = True
+            # Legacy bindings without an explicit join cutoff may observe
+            # descendants of this initial turn, never earlier replayed turns.
+            self.observation_started = self.run_started
             status, step = self.state
             if status == 'done':
                 status, step = 'idle', '未執行；上次回合已結束'
@@ -303,7 +318,7 @@ class Bridge:
         self.agents = {a['id']: {'id':a['id'],'name':a['name'],'provider':a['provider'],
                        'native_url':'codex://threads/'+a['source_id'] if a['driver']=='codex' else None} for a in config['agents']}
         self.allowed_names = {a['name'] for a in self.agents.values()}
-        self.history = HistoryStore(Path(config['data_dir']) / 'history.sqlite3', secrets=(config['topic'],))
+        self.history = HistoryStore(Path(config['data_dir']) / 'history.sqlite3', secrets=security_secrets(config))
         self.commands = Commands(config,self.history,enabled=not dry_run,on_status=self.native_status)
         self.workspaces = Workspaces(self.history)
         from office_members import OfficeMembers
@@ -332,6 +347,10 @@ class Bridge:
                                       reporting_setup=lambda agent_id:self.get_public_reporting().ensure(agent_id))
         from connections import Connections
         self.connections = Connections(self)
+        from codex_background_connections import CodexBackgroundConnections
+        self.codex_background_connections = CodexBackgroundConnections(self)
+        from grok_sdk_connections import GrokSdkConnections
+        self.grok_sdk_connections = GrokSdkConnections(self)
         from connection_checks import ConnectionChecks
         self.connection_checks = ConnectionChecks(self.commands)
         self.commands.connection_checks = self.connection_checks
@@ -350,18 +369,35 @@ class Bridge:
         from child_events import ChildEvents
         self.child_events = ChildEvents(self)
         # Redaction includes only explicitly configured platform credentials.
-        from platform_adapters import secret_file
-        for kind in ('cursor_cloud','grok_webhook'):
+        from platform_adapters import secret_file, validate_key
+        for kind in ('cursor_cloud','cursor_local','grok_webhook'):
             for settings in config.get('command_adapters',{}).get(kind,{}).get('sessions',{}).values():
                 try:
                     secrets=secret_file(settings['credential_file'])
                     self.history.secrets=(*self.history.secrets,*(v for v in secrets.values() if isinstance(v,str)))
                 except (ValueError,OSError,KeyError):pass
+        # The SDK account cache can outlive its last selected session. It is
+        # still a known secret after logout/restart and must remain redacted.
+        try:
+            sdk_account = Path(config['data_dir']) / 'platform-secrets' / 'cursor-sdk.json'
+            key = validate_key(secret_file(str(sdk_account)).get('api_key'))
+            self.history.secrets = (*self.history.secrets, key)
+        except (ValueError, OSError, KeyError, TypeError):
+            pass
+
+        from cursor_cloud_sync import CursorCloudSync
+        self.cursor_cloud_sync = CursorCloudSync(self, enabled=not dry_run)
+        self.commands.cloud_sync = self.cursor_cloud_sync
+        from grok_sdk_sync import GrokSdkSync
+        self.grok_sdk_sync = GrokSdkSync(self, enabled=not dry_run)
+        self.commands.grok_sdk_sync = self.grok_sdk_sync
+        from mobile_service import MobileService
+        self.mobile = MobileService(self)
 
     def native_status(self, agent, event):
         info=self.agents.get(agent)
         if not info:return
-        label='Cursor' if info['provider']=='cursor' else 'Hermes'
+        label={'cursor':'Cursor','codex':'Codex','grok_bot':'Grok Bot'}.get(info['provider'],'Hermes')
         kind=event['type'];status='working';step=label+' 正在處理指示'
         if kind=='status':
             status='waiting_user' if event.get('waiting') else 'working';step=event['step']
@@ -392,6 +428,14 @@ class Bridge:
 
     def public_sync_observer(self, agent_id):
         """Describe an activated scoped Hook, never infer it from dispatch."""
+        grok=getattr(self,'grok_sdk_sync',None)
+        if grok:
+            description=grok.describe(agent_id)
+            if description is not None:return description
+        cloud=getattr(self,'cursor_cloud_sync',None)
+        if cloud:
+            description=cloud.describe(agent_id)
+            if description is not None:return description
         root=getattr(self,'definitions',{}).get(agent_id)
         if not root or root.get('provider')!='cursor' or root.get('driver')!='push':
             return False
@@ -420,13 +464,23 @@ class Bridge:
         for a in config['agents']:
             if a['id'] not in self.definitions:
                 self.activate_push_agent(a)
-            if a['driver']=='cursor':
+            if a['driver']=='cursor' and config.get('command_bindings',{}).get(a['id'],{}).get('adapter')=='cursor_cloud':
                 self.agents[a['id']]['native_url']='https://cursor.com/agents/'+a['source_id']
                 if a['name'] not in self.sources or self.sources[a['name']].get('step')=='等待 Agent 首次回報':
                     with self.commands.lock:
                         previous=self.commands.db.execute('SELECT state FROM commands WHERE agent_id=? ORDER BY created_at DESC LIMIT 1',(a['id'],)).fetchone()
                     pending=previous and previous['state'] in {'queued','running','waiting_user','delivery_unknown'}
                     self.sources[a['name']]={'status':'waiting_user' if pending else 'idle','step':'正在恢復原生執行紀錄' if pending else 'Cursor 已接入；等待 OFFICE 指示','provider':'cursor','observed_at':utc(),'changed_at':utc()}
+            if (a['driver']=='cursor' and config.get('command_bindings',{}).get(a['id'],{}).get('adapter')=='cursor_local') or a['driver'] in {'codex_background','grok_sdk'}:
+                if a['name'] not in self.sources or self.sources[a['name']].get('step')=='等待 Agent 首次回報':
+                    with self.commands.lock:
+                        uncertain=self.commands.db.execute("SELECT 1 FROM commands WHERE agent_id=? AND state='delivery_unknown' LIMIT 1",(a['id'],)).fetchone()
+                    self.sources[a['name']]={'status':'waiting_user' if uncertain else 'idle',
+                        'step':'上次執行結果未確認；不會自動重送' if uncertain else 'OFFICE 已登記；等待首次或下一項指示',
+                        'provider':a['provider'],'observed_at':utc(),'changed_at':utc()}
+                if a['driver']=='codex_background':
+                    settings=config.get('command_adapters',{}).get('codex_background',{}).get('sessions',{}).get(a['source_id'],{})
+                    if settings.get('cwd'):self.workspaces.observe(a['id'],settings['cwd'],'codex_background')
         self.config['agents']=config['agents']
         self.config['command_bindings']=config.get('command_bindings',{})
         self.config['command_adapters']=config.get('command_adapters',{})
@@ -442,14 +496,20 @@ class Bridge:
         self.crouton_names={a['source_id']:a['name'] for a in config['agents'] if a['driver']=='crouton'}
         for sid,a in self.codex_targets.items():
             self.agents[a['id']]['native_url']='codex://threads/'+sid
-        for key in ('cursor_cloud','grok_webhook'):
+        for key in ('cursor_cloud','cursor_local','grok_webhook','grok_sdk'):
             adapter=self.commands.adapters.get(key)
             if adapter:adapter.sessions=self.config['command_adapters'].get(key,{}).get('sessions',{})
+        background=self.commands.adapters.get('codex_background')
+        if background:background.sync_config(self.config)
         self.members.sync(config)
         if hasattr(self, 'children'):
             self.children.sync()
         if hasattr(self,'child_events'):
             self.child_events.refresh_index()
+        if hasattr(self,'cursor_cloud_sync'):
+            self.cursor_cloud_sync.sync_members()
+        if hasattr(self,'grok_sdk_sync'):
+            self.grok_sdk_sync.sync_members()
 
     def activate_push_agent(self, agent):
         # Copy-on-write keeps the observer's current iteration stable during enrollment.
@@ -632,6 +692,7 @@ class Bridge:
             agent['child_count']=sum(c['root_agent_id']==agent['id'] for c in child_agents)
         finished=self.history.list(self.history_agents(), terminal=True)
         if hasattr(self,'children'):finished=self.children.decorate_runs(finished)
+        if hasattr(self,'grok_sdk_sync'):finished=[self.grok_sdk_sync.decorate_run(item) for item in finished]
         return {'agents': agents+child_agents, 'finished': finished,
                 'subagent_count':len(child_agents),
                 'subagents_ok':not (self.health.get('subagent_lookup_error') or self.health.get('child_observer_error')),
@@ -940,6 +1001,10 @@ def proxy_handler(bridge):
             return (self.headers.get('Host') in {'127.0.0.1:%s' % bridge.config['port'], 'localhost:%s' % bridge.config['port']}
                     and self.headers.get('Origin') in {None, ORIGIN, 'http://127.0.0.1:%s' % bridge.config['port'], 'http://localhost:%s' % bridge.config['port']})
 
+        def owner_authorized(self):
+            keys = self.headers.get_all('X-Office-Key', [])
+            return len(keys) == 1 and matches_owner_key(bridge.config, keys[0])
+
         def headers_common(self):
             origin = self.headers.get('Origin', ORIGIN)
             self.send_header('Access-Control-Allow-Origin', origin if origin in {ORIGIN, 'http://127.0.0.1:%s' % bridge.config['port'], 'http://localhost:%s' % bridge.config['port']} else ORIGIN)
@@ -977,8 +1042,28 @@ def proxy_handler(bridge):
             if self.headers.get('Origin') not in local_origins:
                 self.close_connection = True
                 return self.small(403, {'error':'forbidden'})
+            if route.startswith('/api/office/mobile/'):
+                if not self.owner_authorized():
+                    self.close_connection=True
+                    return self.small(403,{'error':'private_office_required'})
+                from mobile_auth import MobileAuthError
+                from mobile_service import MobileServiceError
+                try:
+                    length=int(self.headers.get('Content-Length','0'))
+                    if self.headers.get('Transfer-Encoding') or self.headers.get_content_type()!='application/json' or not 0<length<=16384:raise ValueError()
+                    data=json.loads(self.rfile.read(length))
+                    if route=='/api/office/mobile/pairings':
+                        return self.small(201,bridge.mobile.owner_create_pairing(data))
+                    if route=='/api/office/mobile/scopes':
+                        return self.small(200,bridge.mobile.owner_update_scopes(data))
+                    if route=='/api/office/mobile/revoke' and isinstance(data,dict) and set(data)=={'device_id'}:
+                        return self.small(200,bridge.mobile.owner_revoke(data['device_id']))
+                    return self.small(404,{'error':'not_found'})
+                except (MobileAuthError,MobileServiceError) as error:return self.small(error.status,{'error':error.code})
+                except (ValueError,TypeError,KeyError):return self.small(400,{'error':'invalid_mobile_request'})
+                except (OSError,sqlite3.Error):return self.small(503,{'error':'mobile_unavailable'})
             if route == '/api/office/child-observers':
-                if not hmac.compare_digest(self.headers.get('X-Office-Key',''),bridge.config['topic']):
+                if not self.owner_authorized():
                     self.close_connection=True
                     return self.small(403,{'error':'private_office_required'})
                 from child_events import ChildEventError
@@ -1015,7 +1100,7 @@ def proxy_handler(bridge):
                 except (ValueError,TypeError,KeyError):return self.small(400,{'error':'invalid_child_event'})
                 except (OSError,sqlite3.Error):return self.small(503,{'error':'child_events_unavailable'})
             if route in {'/api/office/agents/logout','/api/office/seating'}:
-                if not hmac.compare_digest(self.headers.get('X-Office-Key',''),bridge.config['topic']):
+                if not self.owner_authorized():
                     self.close_connection=True
                     return self.small(403,{'error':'private_office_required'})
                 from office_members import MemberError
@@ -1025,7 +1110,7 @@ def proxy_handler(bridge):
                     data=json.loads(self.rfile.read(length))
                     result=bridge.members.logout(data) if route.endswith('/logout') else bridge.members.assign(data)
                     return self.small(200,result)
-                except MemberError as error:return self.small(error.status,{'error':error.code})
+                except MemberError as error:return self.small(error.status,{**getattr(error,'details',{}),'error':error.code})
                 except (ValueError,TypeError,KeyError):return self.small(400,{'error':'invalid_member_request'})
                 except (OSError,sqlite3.Error):return self.small(503,{'error':'membership_unavailable'})
             if route == '/api/agents/connect':
@@ -1070,7 +1155,7 @@ def proxy_handler(bridge):
                     except (ValueError,KeyError,TypeError):return self.small(400,{'error':'invalid_reporting_setup'})
                     except (OSError,sqlite3.Error):return self.small(503,{'error':'reporting_setup_unavailable'})
             if route == '/api/office/shutdown':
-                if not hmac.compare_digest(self.headers.get('X-Office-Key',''),bridge.config['topic']):
+                if not self.owner_authorized():
                     self.close_connection = True
                     return self.small(403, {'error':'private_office_required'})
                 self.close_connection = True
@@ -1080,7 +1165,7 @@ def proxy_handler(bridge):
                 from agent_inbox import InboxError
                 agent_id=self.headers.get('X-Agent-Id','')
                 if route=='/api/office/conversation':
-                    authorized=hmac.compare_digest(self.headers.get('X-Office-Key',''),bridge.config['topic'])
+                    authorized=self.owner_authorized()
                 else:authorized=bridge.inbox.authenticated(agent_id,self.headers.get('Authorization','').removeprefix('Bearer '))
                 if not authorized:
                     self.close_connection=True
@@ -1107,7 +1192,7 @@ def proxy_handler(bridge):
                 except (ValueError,KeyError,TypeError):return self.small(400,{'error':'invalid_inbox_request'})
                 except (OSError,sqlite3.Error):return self.small(503,{'error':'inbox_unavailable'})
             if route == '/api/office/connections/check':
-                if not hmac.compare_digest(self.headers.get('X-Office-Key',''),bridge.config['topic']):
+                if not self.owner_authorized():
                     self.close_connection=True
                     return self.small(403,{'error':'private_office_required'})
                 from connection_checks import ConnectionCheckError
@@ -1122,8 +1207,64 @@ def proxy_handler(bridge):
                 except CommandError as error:return self.small(error.status,{'error':error.code})
                 except (ValueError,KeyError,TypeError):return self.small(400,{'error':'invalid_connection_check'})
                 except (OSError,sqlite3.Error):return self.small(503,{'error':'connection_check_unavailable'})
+            if route in {'/api/office/grok/sdk/login','/api/office/grok/sdk/login/cancel','/api/office/grok/sdk/connect'}:
+                if not self.owner_authorized():
+                    self.close_connection=True
+                    return self.small(403,{'error':'private_office_required'})
+                from connections import ConnectionError
+                try:
+                    length=int(self.headers.get('Content-Length','0'))
+                    if self.headers.get('Transfer-Encoding') or self.headers.get_content_type()!='application/json' or not 0<length<=16000:raise ValueError()
+                    data=json.loads(self.rfile.read(length))
+                    service=bridge.grok_sdk_connections
+                    action={'/api/office/grok/sdk/login':service.start_login,
+                            '/api/office/grok/sdk/login/cancel':service.cancel_login,
+                            '/api/office/grok/sdk/connect':service.connect}[route]
+                    return self.small(200,action(data))
+                except ConnectionError as error:return self.small(error.status,{'error':error.code})
+                except (ValueError,KeyError,TypeError):return self.small(400,{'error':'invalid_grok_sdk_request'})
+                except (OSError,sqlite3.Error):return self.small(503,{'error':'grok_sdk_unavailable'})
+            if route in {'/api/office/cursor/local/create','/api/office/codex/background/create','/api/office/codex/background/model'}:
+                if not self.owner_authorized():
+                    self.close_connection=True
+                    return self.small(403,{'error':'private_office_required'})
+                from connections import ConnectionError
+                try:
+                    length=int(self.headers.get('Content-Length','0'))
+                    if self.headers.get('Transfer-Encoding') or self.headers.get_content_type()!='application/json' or not 0<length<=16000:raise ValueError()
+                    data=json.loads(self.rfile.read(length))
+                    if route=='/api/office/codex/background/model':
+                        result=bridge.codex_background_connections.update_model(data)
+                    elif route=='/api/office/codex/background/create':
+                        result=bridge.codex_background_connections.create(data)
+                    else:result=bridge.connections.create_cursor_local(data)
+                    return self.small(200,result)
+                except ConnectionError as error:return self.small(error.status,{'error':error.code})
+                except (ValueError,KeyError,TypeError):return self.small(400,{'error':'invalid_connection'})
+                except (OSError,sqlite3.Error):return self.small(503,{'error':'connection_unavailable'})
+            if route == '/api/office/connections/cursor/recover':
+                if not self.owner_authorized():
+                    self.close_connection=True
+                    return self.small(403,{'error':'private_office_required'})
+                from cursor_cloud_recovery import RecoveryError, recover_legacy_run
+                try:
+                    length=int(self.headers.get('Content-Length','0'))
+                    if self.headers.get('Transfer-Encoding') or self.headers.get_content_type()!='application/json' or not 0<length<=4096:raise ValueError()
+                    data=json.loads(self.rfile.read(length))
+                    if (not isinstance(data,dict) or set(data)!={'agent_id','native_run_id','apply'}
+                            or not isinstance(data['agent_id'],str) or not isinstance(data['native_run_id'],str)
+                            or type(data['apply']) is not bool):raise ValueError()
+                    result=recover_legacy_run(bridge.commands,data['agent_id'],data['native_run_id'],apply=data['apply'])
+                    if data['apply'] and (result['applied'] or result['duplicate']):
+                        bridge.commands.restore_observations()
+                    return self.small(200,result)
+                except RecoveryError as error:return self.small(error.status,{'error':error.code})
+                except (ValueError,KeyError,TypeError):
+                    self.close_connection=True
+                    return self.small(400,{'error':'invalid_cursor_recovery'})
+                except (OSError,sqlite3.Error):return self.small(503,{'error':'cursor_recovery_unavailable'})
             if route in {'/api/office/connections/cursor','/api/office/connections/grok'}:
-                if not hmac.compare_digest(self.headers.get('X-Office-Key',''),bridge.config['topic']):
+                if not self.owner_authorized():
                     self.close_connection=True
                     return self.small(403,{'error':'private_office_required'})
                 from connections import ConnectionError
@@ -1137,7 +1278,7 @@ def proxy_handler(bridge):
                 except (ValueError,KeyError,TypeError):return self.small(400,{'error':'invalid_connection'})
                 except (OSError,sqlite3.Error):return self.small(503,{'error':'connection_unavailable'})
             if route in {'/api/office/commands','/api/office/permissions','/api/office/commands/cancel','/api/office/commands/reconcile'}:
-                if not hmac.compare_digest(self.headers.get('X-Office-Key',''),bridge.config['topic']):
+                if not self.owner_authorized():
                     self.close_connection=True
                     return self.small(403,{'error':'private_office_required'})
                 try:
@@ -1161,7 +1302,7 @@ def proxy_handler(bridge):
                     return self.small(400,{'error':'invalid_command'})
                 except (OSError,sqlite3.Error):return self.small(503,{'error':'commands_unavailable'})
             if route in {'/api/office/invitations','/api/office/invitations/revoke','/api/office/workspaces','/api/office/workspaces/assign','/api/agents/join'}:
-                if route.startswith('/api/office/') and not hmac.compare_digest(self.headers.get('X-Office-Key',''),bridge.config['topic']):
+                if route.startswith('/api/office/') and not self.owner_authorized():
                     self.close_connection=True
                     return self.small(403,{'error':'private_office_required'})
                 try:
@@ -1217,9 +1358,48 @@ def proxy_handler(bridge):
             u = urllib.parse.urlsplit(self.path)
             if u.path.startswith('/api/office/'):
                 local_origins = {None, 'http://127.0.0.1:%s' % bridge.config['port'], 'http://localhost:%s' % bridge.config['port']}
-                key = self.headers.get('X-Office-Key', '')
-                if self.headers.get('Origin') not in local_origins or not hmac.compare_digest(key, bridge.config['topic']):
+                if self.headers.get('Origin') not in local_origins or not self.owner_authorized():
                     return self.small(403, {'error': 'private_office_required'})
+                if u.path == '/api/office/mobile':
+                    return self.small(200,bridge.mobile.owner_status())
+                if u.path.startswith('/api/office/grok/sdk/'):
+                    from connections import ConnectionError
+                    routes={'/api/office/grok/sdk/status':{'request_id','login_request_id'},
+                            '/api/office/grok/sdk/login/status':{'login_id'},
+                            '/api/office/grok/sdk/bots':set(),
+                            '/api/office/grok/sdk/sessions':{'bot_id'}}
+                    if u.path not in routes:return self.small(404,{'error':'not_found'})
+                    try:
+                        query=urllib.parse.parse_qs(u.query,keep_blank_values=True)
+                        if set(query)-routes[u.path] or any(len(value)!=1 for value in query.values()):raise ValueError()
+                        service=bridge.grok_sdk_connections
+                        if u.path.endswith('/login/status'):
+                            if set(query)!={'login_id'}:raise ValueError()
+                            result=service.login_status(query['login_id'][0])
+                        elif u.path.endswith('/sessions'):
+                            if set(query)!={'bot_id'}:raise ValueError()
+                            result=service.sessions(query['bot_id'][0])
+                        elif u.path.endswith('/bots'):result=service.bots()
+                        else:result=service.status(request_id=query.get('request_id',[None])[0],login_request_id=query.get('login_request_id',[None])[0])
+                        return self.small(200,result)
+                    except ConnectionError as error:return self.small(error.status,{'error':error.code})
+                    except (ValueError,TypeError,KeyError):return self.small(400,{'error':'invalid_grok_sdk_request'})
+                    except (OSError,sqlite3.Error):return self.small(503,{'error':'grok_sdk_unavailable'})
+                if u.path in {'/api/office/cursor/local/status','/api/office/codex/background/status'}:
+                    from connections import ConnectionError
+                    try:
+                        query=urllib.parse.parse_qs(u.query)
+                        allowed={'request_id','agent_id'} if u.path=='/api/office/codex/background/status' else {'request_id'}
+                        if set(query)-allowed or any(len(query.get(key,[]))>1 for key in allowed):raise ValueError()
+                        request_id=query.get('request_id',[None])[0]
+                        if u.path=='/api/office/codex/background/status':
+                            result=(bridge.codex_background_connections.status(request_id,agent_id=query['agent_id'][0])
+                                    if query.get('agent_id') else bridge.codex_background_connections.status(request_id))
+                        else:result=bridge.connections.cursor_local_status(request_id)
+                        return self.small(200,result)
+                    except ConnectionError as error:return self.small(error.status,{'error':error.code})
+                    except (ValueError,TypeError):return self.small(400,{'error':'invalid_request_id'})
+                    except (OSError,sqlite3.Error):return self.small(503,{'error':'connection_unavailable'})
                 if u.path == '/api/office/connections':
                     return self.small(200,bridge.connections.status())
                 if u.path == '/api/office/connections/check':
@@ -1262,7 +1442,7 @@ def proxy_handler(bridge):
                             allowed=bridge.history_agents()
                             if agent not in allowed:return self.small(404, {'error': 'agent_not_selected'})
                             rows = bridge.history.messages(allowed, agent, run=q.get('run', [None])[0], after=after, before=before)
-                            descriptor=allowed[agent]
+                            descriptor=dict(allowed[agent],selected=agent in bridge.agents)
                     except ValueError:
                         return self.small(400, {'error': 'invalid_cursor'})
                     return self.small(200, {'agent': descriptor, 'messages': rows,
@@ -1275,12 +1455,15 @@ def proxy_handler(bridge):
                         if agent not in allowed:return self.small(404, {'error': 'agent_not_selected'})
                         rows = bridge.history.list(allowed, agent=agent, before=q.get('before', [None])[0])
                         if hasattr(bridge,'children'):rows=bridge.children.decorate_runs(rows)
+                        if hasattr(bridge,'grok_sdk_sync'):rows=[bridge.grok_sdk_sync.decorate_run(item) for item in rows]
                         cursor = rows[-1]['started_at'] + '|' + rows[-1]['id'] if len(rows) == 60 else None
-                        return self.small(200, {'agent': allowed[agent], 'runs': rows, 'next': cursor})
+                        return self.small(200, {'agent': dict(allowed[agent],selected=agent in bridge.agents), 'runs': rows, 'next': cursor})
                 if u.path == '/api/office/run':
                     with bridge.commands.lock,bridge.history.lock:
                         item = bridge.history.detail(q.get('id', [''])[0], bridge.history_agents())
                         if item and hasattr(bridge,'children'):item=bridge.children.decorate_runs([item])[0]
+                        if item and hasattr(bridge,'cursor_cloud_sync'):item=bridge.cursor_cloud_sync.decorate_run(item)
+                        if item and hasattr(bridge,'grok_sdk_sync'):item=bridge.grok_sdk_sync.decorate_run(item)
                         return self.small(200, item) if item else self.small(404, {'error': 'run_not_found'})
                 return self.small(404, {'error': 'not_found'})
             if u.path.startswith(('/office/', '/assets/')):
@@ -1376,7 +1559,7 @@ def main():
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--duration', type=int)
     args = parser.parse_args()
-    config_path = Path(args.config).expanduser().resolve()
+    config_path = Path(args.config).expanduser().absolute()
     if config_path.stat().st_mode & 0o077:
         raise SystemExit('Private configuration must have mode 0600')
     config = load_config(config_path)
@@ -1388,10 +1571,14 @@ def main():
     bridge = Bridge(config, args.dry_run)
     server = http.server.ThreadingHTTPServer(('127.0.0.1', config['port']), proxy_handler(bridge))
     server.daemon_threads = True
+    from mobile_gateway import create_server
+    mobile_server = create_server(bridge, ROOT / 'public')
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: bridge.stop.set())
     atomic_json(bridge.run_dir / 'pid.json', {'pid': os.getpid(), 'stop_target': '/bin/kill -TERM %s' % os.getpid(), 'script': str(Path(__file__).resolve())})
-    threads = [threading.Thread(target=f, daemon=True) for f in (bridge.publish_loop, bridge.observe_loop, lambda:bridge.commands.run(bridge.stop), server.serve_forever)]
+    threads = [threading.Thread(target=f, daemon=True) for f in (bridge.publish_loop, bridge.observe_loop, lambda:bridge.commands.run(bridge.stop), lambda:bridge.cursor_cloud_sync.run(bridge.stop), lambda:bridge.grok_sdk_sync.run(bridge.stop), server.serve_forever)]
+    if mobile_server:
+        threads.append(threading.Thread(target=mobile_server.serve_forever,daemon=True))
     for thread in threads:
         thread.start()
     print(json.dumps({'run_id': config['run_id'], 'pid': os.getpid(), 'state': 'running', 'dry_run': args.dry_run}), flush=True)
@@ -1399,12 +1586,17 @@ def main():
     while not bridge.stop.wait(1):
         if not threads[1].is_alive() or (args.duration and time.monotonic() - started >= args.duration):
             bridge.stop.set()
+    if mobile_server:
+        mobile_server.shutdown()
+        mobile_server.server_close()
     server.shutdown()
-    for thread in threads[:3]:
+    bridge.grok_sdk_sync.close()
+    for thread in threads[:-1]:
         thread.join(timeout=20)
     server.server_close()
     bridge.commands.close()
     bridge.status()
+    bridge.mobile.auth.close()
     bridge.history.close()
 
 

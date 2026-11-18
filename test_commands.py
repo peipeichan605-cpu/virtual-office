@@ -1,3 +1,4 @@
+from security_keys import owner_key
 import json
 from pathlib import Path
 import sqlite3
@@ -129,7 +130,7 @@ class CommandHttpTests(unittest.TestCase):
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             def call(body=None,owner=True,origin=None):
                 headers={'Content-Type':'application/json'}
-                if owner:headers['X-Office-Key']=config['topic']
+                if owner:headers['X-Office-Key']=owner_key(config)
                 else:headers.update({'Authorization':'Bearer agent-credential','X-Agent-Id':AGENT})
                 if origin:headers['Origin']=origin
                 url='http://127.0.0.1:'+str(server.server_address[1])+'/api/office/commands'+('' if body else '?agent='+AGENT)

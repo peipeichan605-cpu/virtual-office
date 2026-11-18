@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requestIdentity,queueHint,receivingHint,receivingSetupLabel,receivingSetupControl } from './public/office/commands.js';
+import { requestIdentity,queueHint,receivingHint,receivingSetupLabel,receivingSetupControl,CommandComposer } from './public/office/commands.js';
 import { mergeMessages } from './public/office/scene/dialogue.js';
 import { officePost } from './public/office/office-api.js';
 
@@ -157,6 +157,78 @@ test('lost response and reloaded composer retain retry identity without storing 
   assert.ok(!JSON.stringify([...map]).includes('private prompt'));
   assert.notEqual(await requestIdentity('other','private prompt',storage),original);
   assert.notEqual(await requestIdentity('selected','a different instruction',storage),original);
+});
+
+function retryFixture(t) {
+  const prior=new Map(['sessionStorage','location'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
+  const saved=new Map();
+  globalThis.sessionStorage={getItem:key=>saved.get(key),setItem:(key,value)=>saved.set(key,value),removeItem:key=>saved.delete(key)};
+  globalThis.location={pathname:'/office/',hash:'#fixture-owner'};
+  t.after(()=>{for(const [key,value] of prior)if(value)Object.defineProperty(globalThis,key,value);else delete globalThis[key];});
+  const agent='fixture:retry',text='Repeat this harmless instruction';
+  const cap={can_send:true,connected:true,same_session:true};
+  const composer=()=>Object.assign(Object.create(CommandComposer.prototype),{
+    agent,epoch:0,readRevision:0,mutationDepth:0,busy:false,refreshing:false,capability:cap,input:{value:''},status:{},
+    bind(id,capability){this.agent=id;this.capability=capability;},renderApprovals(){},renderPending(){},
+    show(command){this.latest=command;},updateButton(){},
+  });
+  const receipt=(id,state='completed')=>({agent_id:agent,id,state,preview:text});
+  const response=body=>({ok:true,json:async()=>body});
+  return {saved,agent,text,cap,composer,receipt,response};
+}
+
+test('reloaded composer retires an authoritative retry receipt before an intentional identical new message',async t=>{
+  const f=retryFixture(t),posted=[];let lost=true;
+  t.mock.method(globalThis,'fetch',async(path,options)=>{
+    if(options.method==='POST'){
+      const body=JSON.parse(options.body);posted.push(body);
+      if(lost){lost=false;throw new Error('Response lost after server accepted command');}
+      return f.response({command:f.receipt(body.request_id,'pending')});
+    }
+    return f.response({capability:f.cap,commands:[f.receipt(posted[0].request_id)],approvals:[]});
+  });
+  const first=f.composer();first.input.value=f.text;await first.send();assert.equal(first.uncertain,true);
+  const reloaded=f.composer();await reloaded.refresh();assert.equal(reloaded.latest.id,posted[0].request_id);
+  assert.equal(f.saved.size,0,'An authoritative matching receipt must retire the persisted retry identity after reload');
+  reloaded.input.value=f.text;await reloaded.send();
+  assert.equal(posted.length,2);assert.notEqual(posted[1].request_id,posted[0].request_id);
+});
+
+test('reloaded composer reconciles an older persisted receipt while continuing to show the newest command',async t=>{
+  const f=retryFixture(t),id=await requestIdentity(f.agent,f.text);
+  t.mock.method(globalThis,'fetch',async()=>f.response({capability:f.cap,commands:[f.receipt('newer-unrelated'),f.receipt(id)],approvals:[]}));
+  const reloaded=f.composer();await reloaded.refresh();
+  assert.equal(reloaded.latest.id,'newer-unrelated');assert.equal(f.saved.size,0);
+});
+
+test('missing or different retry receipts never rotate an uncertain request identity or auto-send',async t=>{
+  const f=retryFixture(t);
+  for(const rows of [[],[{agent_id:'fixture:retry',id:'unrelated',state:'completed',preview:'Other task'}]]){
+    f.saved.clear();
+    const id=await requestIdentity(f.agent,f.text),requests=[];
+    t.mock.method(globalThis,'fetch',async(path,options)=>{requests.push(options.method||'GET');return f.response({capability:f.cap,commands:rows,approvals:[]});});
+    const reloaded=f.composer();await reloaded.refresh();
+    assert.equal(await requestIdentity(f.agent,f.text),id);assert.deepEqual(requests,['GET']);
+  }
+});
+
+test('a receipt for another Agent cannot retire the selected Agent retry identity',async t=>{
+  const f=retryFixture(t),id=await requestIdentity(f.agent,f.text),reloaded=f.composer();
+  reloaded.confirmed({...f.receipt(id),agent_id:'fixture:another-agent'});
+  assert.equal(await requestIdentity(f.agent,f.text),id);
+});
+
+test('two rapid submissions while the first receipt is pending send only one request',async t=>{
+  const f=retryFixture(t),posted=[];let finish;
+  t.mock.method(globalThis,'fetch',async(path,options)=>{
+    posted.push(JSON.parse(options.body));return new Promise(resolve=>{finish=resolve;});
+  });
+  const c=f.composer();c.input.value=f.text;const sending=c.send();
+  for(let i=0;i<50&&!finish;i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof finish,'function');
+  await c.send();assert.equal(posted.length,1);
+  finish(f.response({command:f.receipt(posted[0].request_id,'pending')}));await sending;
+  assert.equal(c.input.value,'');assert.equal(c.latest.state,'pending');assert.equal(f.saved.size,0);
 });
 
 test('a delayed queue shows a conditional manual hint, never assumes execution',()=>{

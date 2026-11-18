@@ -29,6 +29,18 @@ def capability(config, agent_id, binding=None, observer=None):
     binding = binding or {}
     adapter = binding.get('adapter')
     driver = definition.get('driver')
+    if adapter == 'grok_sdk' and driver == 'grok_sdk':
+        try:
+            native = observer(agent_id) if callable(observer) else None
+        except Exception:
+            native = None
+        state = native.get('state') if isinstance(native, dict) else 'connecting'
+        if state not in {'configured', 'connecting', 'recovering', 'unavailable'}:
+            state = 'recovering'
+        active = isinstance(native, dict) and native.get('active') is True and state == 'configured'
+        return descriptor('grok_sdk_observer', 'selected_native_session', state,
+                          configured=True, automatic=active, manual_app_automatic=active,
+                          reason=native.get('reason') if isinstance(native, dict) else 'grok_sdk_sync_connecting')
     if driver == 'codex' or (definition.get('provider') == 'codex'
                              and adapter == 'codex_app' and binding.get('session_id')):
         return descriptor('native_observer', 'selected_conversation', 'configured',
@@ -44,7 +56,20 @@ def capability(config, agent_id, binding=None, observer=None):
                           'configured' if active else 'setup_required',
                           configured=active, automatic=active, manual_app_automatic=active,
                           reason=None if active else 'native_observer_not_bound')
-    if adapter in {'hermes_acp', 'cursor_cloud'}:
+    if adapter == 'cursor_cloud' and callable(observer):
+        try:
+            cloud = observer(agent_id)
+        except Exception:
+            cloud = None
+        if isinstance(cloud, dict) and cloud.get('state') in {'configured','connecting','recovering'}:
+            active = cloud.get('active') is True and cloud['state'] == 'configured'
+            return descriptor('cloud_conversation_observer', 'selected_cloud_agent', cloud['state'],
+                              configured=True, automatic=active, manual_app_automatic=active,
+                              reason=cloud.get('reason'))
+    if adapter == 'codex_background' and driver == 'codex_background':
+        return descriptor('native_rpc_observer', 'office_dispatched_runs', 'limited',
+                          configured=True, automatic=True, reason='office_owned_session_only')
+    if adapter in {'hermes_acp', 'cursor_cloud', 'cursor_local'}:
         return descriptor('native_run_observer', 'office_dispatched_runs', 'limited',
                           configured=True, automatic=True, reason='office_runs_only')
     if driver == 'crouton':

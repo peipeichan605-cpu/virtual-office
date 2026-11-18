@@ -1,3 +1,4 @@
+from security_keys import owner_key
 import hashlib
 import json
 from pathlib import Path
@@ -125,7 +126,7 @@ class PortableHttpTests(unittest.TestCase):
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             def call(route,event=None,credential=token,agent='cursor:chosen',owner=False,origin=None):
                 headers={'Authorization':'Bearer '+credential,'X-Agent-Id':agent}
-                if owner:headers['X-Office-Key']=config['topic']
+                if owner:headers['X-Office-Key']=owner_key(config)
                 if origin:headers['Origin']=origin
                 req=urllib.request.Request('http://127.0.0.1:'+str(b.config['port'])+route,data=json.dumps(event).encode() if event else None,headers=headers)
                 try:
@@ -141,6 +142,8 @@ class PortableHttpTests(unittest.TestCase):
                 self.assertEqual(call('/api/office/messages?agent=cursor%3Achosen')[0],403)
                 code,data=call('/api/office/messages?agent=cursor%3Achosen',owner=True)
                 self.assertEqual(code,200);self.assertEqual(data['messages'][0]['text'],'Make a report')
+                self.assertTrue(data['agent']['selected'])
+                self.assertTrue(call('/api/office/history?agent=cursor%3Achosen',owner=True)[1]['agent']['selected'])
                 self.assertEqual(call('/api/office/messages?agent=cursor%3Aother',owner=True)[0],404)
                 self.assertEqual(call('/api/office/work',owner=True)[1]['agents'][0]['state'],'working')
                 self.assertEqual(b.outbound.qsize(),0)
