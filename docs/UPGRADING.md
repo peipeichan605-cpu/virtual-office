@@ -73,15 +73,19 @@ python3 setup_ui.py
 這一步會下載並校驗固定上游素材及套用新版 UI。若失敗，保留輸出並處理原因，
 不要在 UI 未備妥時啟動；也不要繞過校驗。安裝成功後可保留舊 UI 備份，毋須立即刪除。
 
-## 5. 啟動並核對
+## 5. 準備完整執行環境，再啟動並核對
 
-沿用原設定執行：
+沿用原設定逐行執行，每一步成功才繼續；使用自訂設定時，每行子命令前都加同一份 `--config` 完整路徑。Windows 請把 `python3` 換成已確認可用的 Python 命令或完整路徑：
 
 ```sh
+python3 office.py setup-platforms
+python3 office.py setup-platforms --check
 python3 office.py start
 python3 office.py status
 python3 office.py url
 ```
+
+`setup-platforms` 會在這個 OFFICE 的專用環境準備固定 Cursor SDK，並檢查 Codex 與 Grok 執行環境。缺少 Node.js 或 Codex 時，按 [安裝指引](../README.md#安裝) 補齊官方程式；必須確認 `runtimes_ready=true` 才交付完整安裝。這一步不會替你登入帳戶、重建 Agent 或搬移憑證。已有 Cursor App 不代表已有 SDK。
 
 在瀏覽器重新整理，確認原 Agent 名單、樓層及對話仍在，再以一個已連接 Agent
 確認正常收發。私人網址留在自己的裝置；如果服務回報遷移或相容性問題，先按
