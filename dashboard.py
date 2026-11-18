@@ -28,7 +28,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from history import HistoryStore, redact
+from history import HistoryStore, open_native_rollout, redact
 from configuration import DEFAULT_CONFIG, codex_targets, load_config
 from event_ingest import ingest, EventConflict, validate_event
 from invitations import Invitations, InvitationError
@@ -68,8 +68,7 @@ def atomic_json(path, data):
 
 
 def bounded_json(path, limit=256 * 1024):
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    with os.fdopen(fd) as f:
+    with open_native_rollout(path) as f:
         s = os.fstat(f.fileno())
         if not stat.S_ISREG(s.st_mode) or s.st_size > limit:
             raise ValueError('Invalid source file')
@@ -180,8 +179,7 @@ class CodexTail:
         return {'status': self.state[0], 'step': self.state[1], 'source_time': rec.get('timestamp'), 'run_id':self.run}
 
     def read(self):
-        fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
-        with os.fdopen(fd, 'rb') as f:
+        with open_native_rollout(self.path) as f:
             s = os.fstat(f.fileno())
             if not stat.S_ISREG(s.st_mode):
                 raise ValueError('Invalid rollout')
@@ -1470,8 +1468,8 @@ def proxy_handler(bridge):
                 public = (ROOT / 'public').resolve()
                 target = (public / urllib.parse.unquote(u.path).lstrip('/')).resolve()
                 if target.is_dir():
-                    target = target / 'index.html'
-                if not str(target).startswith(str(public) + '/') or not target.is_file():
+                    target = (target / 'index.html').resolve()
+                if public not in target.parents or not target.is_file():
                     return self.small(404, {'error': 'not_found'})
                 body = target.read_bytes()
                 self.send_response(200)
@@ -1560,8 +1558,7 @@ def main():
     parser.add_argument('--duration', type=int)
     args = parser.parse_args()
     config_path = Path(args.config).expanduser().absolute()
-    if config_path.stat().st_mode & 0o077:
-        raise SystemExit('Private configuration must have mode 0600')
+    # The shared loader enforces the platform's private-file policy.
     config = load_config(config_path)
     if not config.get('run_dir'):
         config['run_id'] = 'office-' + uuid.uuid4().hex[:12]

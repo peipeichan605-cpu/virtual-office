@@ -1,6 +1,6 @@
 """Runtime discovery is generic and never invokes authentication or inference."""
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -55,6 +55,45 @@ class RuntimeSelectionTests(unittest.TestCase):
             self.assertNotEqual(codex_rpc.runtime_info(str(self.desktop))['identity'], before)
             self.assertEqual(codex_rpc.resolve_binary(), str(self.desktop))
             self.assertEqual(run.call_count, 2)
+
+
+class WindowsRuntimeSelectionTests(unittest.TestCase):
+    def setUp(self):
+        self.native = 'C:\\Users\\person\\Apps & Tools\\codex.exe'
+        self.shim = 'C:\\Users\\person\\npm\\codex.CMD'
+        self.platform = patch('codex_rpc.os', SimpleNamespace(name='nt', access=lambda *args: True, X_OK=os.X_OK))
+        self.path = patch('codex_rpc.Path', PureWindowsPath)
+        self.which = patch('codex_rpc.shutil.which', side_effect=lambda name: self.native if name == 'codex.exe' else self.shim)
+        self.platform.start(); self.path.start(); self.which.start()
+        self.addCleanup(self.platform.stop); self.addCleanup(self.path.stop); self.addCleanup(self.which.stop)
+
+    def test_native_path_executable_precedes_npm_shim_after_stdio_check(self):
+        with patch('codex_rpc._desktop_server_available', return_value=True) as compatible:
+            self.assertEqual(codex_rpc.resolve_binary(deadline=123456789.0), self.native)
+        compatible.assert_called_once_with(self.native, 123456789.0)
+
+    def test_explicit_native_override_remains_selected(self):
+        selected = 'D:\\Selected Codex\\codex.exe'
+        with patch('codex_rpc._desktop_server_available') as compatible:
+            self.assertEqual(codex_rpc.resolve_binary({'binary': selected}), selected)
+        compatible.assert_not_called()
+
+    def test_explicit_batch_override_does_not_fall_back_to_another_runtime(self):
+        with patch('codex_rpc._desktop_server_available') as compatible:
+            with self.assertRaises(codex_rpc.RpcError) as error:
+                codex_rpc.resolve_binary({'binary': self.shim})
+        self.assertEqual(error.exception.code, 'codex_native_executable_required')
+        compatible.assert_not_called()
+
+    def test_missing_or_incompatible_native_executable_never_launches_batch_shim(self):
+        for native in [None, self.native]:
+            with self.subTest(native=native), \
+                    patch('codex_rpc.shutil.which', side_effect=lambda name: native if name == 'codex.exe' else self.shim), \
+                    patch('codex_rpc._desktop_server_available', return_value=False) as compatible:
+                with self.assertRaises(codex_rpc.RpcError) as error:
+                    codex_rpc.resolve_binary()
+                self.assertEqual(error.exception.code, 'codex_process_unavailable' if native else 'codex_native_executable_required')
+                self.assertTrue(all(call.args[0] != self.shim for call in compatible.call_args_list))
 
 
 if __name__ == '__main__':

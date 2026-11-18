@@ -5,7 +5,7 @@ import {CodexBackgroundController,codexBackgroundError,codexBackgroundRequestSto
 import {initNewConversationUI} from './public/office/new-conversation-ui.js';
 import {cursorSdkRequestStore} from './public/office/cursor-sdk-ui.js';
 import {receivingHint,publicSyncHint,CommandComposer,codexBackgroundFailureHint} from './public/office/commands.js';
-import {officePost} from './public/office/office-api.js';
+import {officeGet,officePost} from './public/office/office-api.js';
 
 const ID='00000000-0000-4000-8000-000000000101',AGENT='codex:bg-00000000-0000-4000-8000-000000000201';
 const ready={available:true,logged_in:true,model:'configured-model',models:[{id:'selected-model',name:'Selected model',is_default:true}],workspace:'/selected/project',workspaces:[{name:'Project',path:'/selected/project'}]};
@@ -19,6 +19,47 @@ function fixture(overrides={}){
   const controller=new CodexBackgroundController({pendingStore:overrides.pendingStore||storeFixture().store,transport:{read:async id=>{calls.push(['read',id]);return overrides.read?overrides.read(id):ready;},create:async body=>{calls.push(['create',{...body}]);return overrides.create?overrides.create(body):{...session,request_id:body.request_id};}},makeId:()=>number++?ID.replace(/101$/,'102'):ID,onChange:c=>changes.push(c.phase),onCreated:(s,options)=>created.push({session:s,options})});
   return {controller,calls,changes,created};
 }
+
+test('a healthy cold Codex check lasting 6250ms reaches ready with a bounded route-specific budget',async t=>{
+  const budgets=[],calls=[];
+  t.mock.method(AbortSignal,'timeout',ms=>{budgets.push(ms);return {budget:ms};});
+  t.mock.method(globalThis,'fetch',async(url,options)=>{
+    calls.push({url,options});
+    if(options.signal.budget<6250)throw new DOMException('fixture slow startup','TimeoutError');
+    return {ok:true,json:async()=>ready};
+  });
+  const f=fixture({read:id=>officeGet('/api/office/codex/background/status'+(id?'?request_id='+id:''),'fixture-owner')});
+  await f.controller.open();assert.equal(f.controller.phase,'ready');
+  await officeGet('/api/office/codex/background/status?request_id='+ID,'fixture-owner');
+  assert.deepEqual(budgets,[60000,60000]);assert.equal(calls.length,2);
+  assert.ok(calls.every(c=>!c.options.method&&c.options.credentials==='same-origin'&&c.options.headers['X-Office-Key']==='fixture-owner'));
+  assert.equal(f.created.length,0);assert.equal(f.calls.filter(c=>c[0]==='create').length,0);
+});
+
+test('status budget is bounded without widening ordinary reads or changing HTTP errors',async t=>{
+  const budgets=[];t.mock.method(AbortSignal,'timeout',ms=>{budgets.push(ms);return {};});
+  t.mock.method(globalThis,'fetch',async(url)=>url.endsWith('status/adjacent')?{ok:false,status:403,json:async()=>({error:'owner_auth_required'})}:{ok:true,json:async()=>({})});
+  await officeGet('/api/office/state','fixture-owner');
+  await officeGet('/api/office/grok/sdk/status','fixture-owner');
+  await officeGet('/api/office/codex/background/status','fixture-owner');
+  await assert.rejects(officeGet('/api/office/codex/background/status/adjacent','fixture-owner'),e=>e.status===403);
+  assert.deepEqual(budgets,[5000,60000,60000,5000]);
+});
+
+test('status timeout and connection loss show safe actionable text and retry only reads',async t=>{
+  const calls=[];let failure='timeout';
+  t.mock.method(globalThis,'fetch',async(url,options)=>{
+    calls.push({url,options});
+    if(failure==='timeout')throw new DOMException('private startup trace','TimeoutError');
+    if(failure==='network')throw new TypeError('private transport trace');
+    return {ok:true,json:async()=>ready};
+  });
+  const f=fixture({read:()=>officeGet('/api/office/codex/background/status','fixture-owner')});
+  await f.controller.open();assert.equal(f.controller.phase,'failed');assert.match(f.controller.error,/逾時/);assert.match(f.controller.error,/重新檢查/);
+  failure='network';await f.controller.refresh();assert.match(f.controller.error,/無法連接 OFFICE/);assert.doesNotMatch(f.controller.error,/private/);
+  failure=null;await f.controller.refresh();assert.equal(f.controller.phase,'ready');assert.equal(f.controller.error,'');
+  assert.equal(calls.length,3);assert.ok(calls.every(c=>!c.options.method));assert.equal(f.created.length,0);
+});
 
 test('Codex unavailable or unconfirmed login cannot create; public status discards credential-like fields',async()=>{
   for(const home of [{...ready,available:false,reason:'codex_runtime_required'},{...ready,logged_in:false,reason:'codex_login_required'}]){

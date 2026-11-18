@@ -148,6 +148,55 @@ class SetupTests(unittest.TestCase):
         with patch.object(setup.subprocess,'run',return_value=subprocess.CompletedProcess([],1,'','broken import')):
             self.assertIsNone(setup.probe_interpreter('/broken/python'))
 
+    def test_windows_sdk_preflight_uses_interpreter_abi_not_the_host_cpu(self):
+        self.assertTrue(setup.sdk_platform_supported('win32', 'win-amd64'))
+        self.assertFalse(setup.sdk_platform_supported('win32', 'win-arm64'))
+        self.assertFalse(setup.sdk_platform_supported('win32', 'win32'))
+        self.assertTrue(setup.sdk_platform_supported('darwin', 'macosx-arm64'))
+        for tag, supported in [('win-amd64', True), ('win-arm64', False), ('win32', False)]:
+            with self.subTest(tag=tag):
+                data = {'version': [3, 12, 1], 'system': 'win32', 'platform': tag}
+                fake = subprocess.CompletedProcess([], 0, json.dumps(data), '')
+                with patch.object(setup.subprocess, 'run', return_value=fake):
+                    self.assertEqual(bool(setup.probe_interpreter('/fixture/python')), supported)
+
+    def test_windows_discovery_includes_existing_launcher_paths_without_auto_install(self):
+        current = r'C:\Office Python\python.exe'
+        installed = r'C:\User Tools\Python312\python.exe'
+        result = subprocess.CompletedProcess([], 0,
+            ' -V:3.13 * ' + current + '\n -V:3.12 ' + installed + '\nignored text\n', '')
+        binaries = {'python': current, 'py': r'C:\Windows\py.exe'}
+        with patch.object(setup.sys, 'platform', 'win32'), patch.object(setup.sys, 'executable', current), \
+             patch.object(setup.shutil, 'which', side_effect=binaries.get), \
+             patch.dict(os.environ, {'PYLAUNCHER_ALLOW_INSTALL': '1'}), \
+             patch.object(setup.subprocess, 'run', return_value=result) as run:
+            self.assertEqual(setup.interpreter_candidates(), [current, installed])
+        self.assertEqual(run.call_args.args[0], [binaries['py'], '-0p'])
+        environment = run.call_args.kwargs['env']
+        self.assertEqual(environment['PYTHON_MANAGER_AUTOMATIC_INSTALL'], '0')
+        self.assertNotIn('PYLAUNCHER_ALLOW_INSTALL', environment)
+
+    def test_launcher_failure_keeps_existing_candidates_and_explicit_python_skips_discovery(self):
+        with patch.object(setup.sys, 'platform', 'win32'), \
+             patch.object(setup.shutil, 'which', side_effect=lambda name: '/fixture/py' if name == 'py' else None), \
+             patch.object(setup.subprocess, 'run', side_effect=subprocess.TimeoutExpired('py', 15)):
+            self.assertEqual(setup.interpreter_candidates(), [sys.executable])
+        with patch.object(setup.shutil, 'which') as lookup, patch.object(setup.subprocess, 'run') as run:
+            self.assertEqual(setup.interpreter_candidates('/selected/python'), ['/selected/python'])
+        lookup.assert_not_called(); run.assert_not_called()
+
+    def test_windows_run_records_offer_a_usable_process_tree_stop_command(self):
+        commands, probe, launch = self.runner()
+        with patch.object(setup.sys, 'platform', 'win32'), \
+             patch.object(setup, 'probe_interpreter', side_effect=probe), \
+             patch.object(setup.subprocess, 'Popen', side_effect=launch):
+            result = setup.setup_environment(self.config, python='/healthy/python3')
+        record = json.loads((self.root / 'setup-runs' / result['run_id'] / 'status.json').read_text())
+        self.assertEqual(record['stop_target'], 'taskkill /PID ' + str(os.getpid()) + ' /T /F')
+        self.assertEqual(record['child_stop_target'], 'taskkill /PID 424242 /T /F')
+        with patch.object(setup.sys, 'platform', 'darwin'):
+            self.assertEqual(setup.stop_target(1234), '/bin/kill -TERM 1234')
+
     def test_serve_launcher_uses_verified_optional_env_and_retains_existing_config_path(self):
         import office
         config_path=(self.base/'private config.json').resolve()

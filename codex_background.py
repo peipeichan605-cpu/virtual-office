@@ -18,7 +18,8 @@ import uuid
 from pathlib import Path
 
 from command_adapters import DeliveryError
-from codex_rpc import RpcError, StdioRpc, child_environment, resolve_binary, runtime_info
+from codex_rpc import (PROBE_TIMEOUT, RpcError, StdioRpc, child_environment,
+    deadline_lock, process_creation_flags, remaining_timeout, resolve_binary, runtime_info)
 from history import redact, timestamp
 from security_keys import security_secrets
 
@@ -165,58 +166,59 @@ def _copy_probe(value):
     return copied
 
 
-def probe(settings=None):
+def probe(settings=None, *, deadline=None):
     """Read-only CLI/login check, cached; never creates or resumes a thread."""
     settings = settings or {}
+    deadline = time.monotonic() + PROBE_TIMEOUT if deadline is None else deadline
     binary, metadata = None, {}
+    result = {'available': False, 'reason': 'codex_binary_unavailable',
+              'version': None, 'logged_in': False, 'model': None,
+              'models': [], 'model_catalog_status': 'unavailable',
+              'configured_model_listed': None, 'runtime_source': None}
     try:
-        binary = resolve_binary(settings)
+        binary = resolve_binary(settings, deadline=deadline)
         metadata = runtime_info(binary)
         key = metadata['identity']
-    except (RpcError, OSError):
-        key = ('unavailable', settings.get('binary') or '')
-    with _PROBE_LOCK:
-        cached = _PROBES.get(key)
-        if cached and time.monotonic() - cached[0] < 30:
-            return _copy_probe(cached[1])
-        result = {'available': False, 'reason': 'codex_binary_unavailable',
-                  'version': None, 'logged_in': False, 'model': None,
-                  'models': [], 'model_catalog_status': 'unavailable',
-                  'configured_model_listed': None, 'runtime_source':metadata.get('source')}
-        client = None
-        try:
-            if binary is None:
-                raise RpcError('codex_binary_unavailable')
-            version = subprocess.run([binary, '--version'], stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=child_environment(),
-                text=True, timeout=5)
-            match = re.fullmatch(r'codex-cli\s+(\d+\.\d+\.\d+[^\s]*)\s*', version.stdout)
-            if version.returncode or not match:
-                raise RpcError('codex_version_unavailable')
-            result['version'] = match.group(1)
-            client = StdioRpc(binary, os.getcwd(), BASE_OVERRIDES)
-            client.initialize()
-            logged_in, config = _metadata(client)
-            result.update(available=logged_in, logged_in=logged_in,
-                reason=None if logged_in else 'codex_login_required',
-                model=config.get('model'))
-            if logged_in:
-                try:
-                    result['models'] = _model_catalog(client)
-                    result['model_catalog_status'] = 'available'
-                    result['configured_model_listed'] = any(
-                        model['id'] == result['model'] for model in result['models']) if result['model'] else None
-                except RpcError:
-                    # Catalog failure does not change configured model or turn
-                    # a valid CLI login into an installation/login failure.
-                    pass
-        except (RpcError, OSError, subprocess.TimeoutExpired) as error:
-            result['reason'] = getattr(error, 'code', 'codex_probe_unavailable')
-        finally:
-            if client:
-                client.close()
-        _PROBES[key] = (time.monotonic(), result)
-        return _copy_probe(result)
+        result['runtime_source'] = metadata.get('source')
+        with deadline_lock(_PROBE_LOCK, deadline):
+            cached = _PROBES.get(key)
+            if cached and time.monotonic() - cached[0] < 30:
+                return _copy_probe(cached[1])
+            client = None
+            try:
+                version = subprocess.run([binary, '--version'], stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=child_environment(),
+                    text=True, timeout=remaining_timeout(deadline, 5),
+                    creationflags=process_creation_flags())
+                match = re.fullmatch(r'codex-cli\s+(\d+\.\d+\.\d+[^\s]*)\s*', version.stdout)
+                if version.returncode or not match:
+                    raise RpcError('codex_version_unavailable')
+                result['version'] = match.group(1)
+                client = StdioRpc(binary, os.getcwd(), BASE_OVERRIDES, deadline=deadline)
+                client.initialize()
+                logged_in, config = _metadata(client)
+                result.update(available=logged_in, logged_in=logged_in,
+                    reason=None if logged_in else 'codex_login_required',
+                    model=config.get('model'))
+                if logged_in:
+                    try:
+                        result['models'] = _model_catalog(client)
+                        result['model_catalog_status'] = 'available'
+                        result['configured_model_listed'] = any(
+                            model['id'] == result['model'] for model in result['models']) if result['model'] else None
+                    except RpcError:
+                        # An optional catalog cannot consume a fresh timeout
+                        # per page or invalidate an already verified login.
+                        pass
+            except (RpcError, OSError, subprocess.TimeoutExpired) as error:
+                result['reason'] = getattr(error, 'code', 'codex_probe_unavailable')
+            finally:
+                if client:
+                    client.close()
+            _PROBES[key] = (time.monotonic(), result)
+    except (RpcError, OSError, subprocess.TimeoutExpired) as error:
+        result.update(available=False, reason=getattr(error, 'code', 'codex_probe_unavailable'))
+    return _copy_probe(result)
 
 
 def _disabled_integrations(config):

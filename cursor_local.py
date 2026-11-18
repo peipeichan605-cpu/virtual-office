@@ -170,8 +170,13 @@ class SdkRuntime:
     reason = 'cursor_sdk_required'
 
     def available(self):
+        self.version = None
         if sys.version_info < (3, 10):
             self.reason = 'cursor_python_required'
+            return False
+        from cursor_sdk_setup import sdk_platform_supported
+        if not sdk_platform_supported():
+            self.reason = 'cursor_sdk_platform_unsupported'
             return False
         try:
             available = importlib.util.find_spec('cursor_sdk') is not None

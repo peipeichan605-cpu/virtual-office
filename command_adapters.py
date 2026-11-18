@@ -18,8 +18,8 @@ class CodexAppAdapter:
     """Queue on the original session without opening or focusing any App window.
 
     No separate app-server, new session, model override, or App database write.
-    This first adapter supports macOS; other runtimes implement the same submit
-    contract and must supply evidence from their bound original session.
+    macOS and Windows runtimes must expose the same native queue capability
+    and supply evidence from their bound original session.
     """
     mode = 'background_queue'
     def __init__(self, settings=None):
@@ -31,19 +31,28 @@ class CodexAppAdapter:
             return self.binary is not None
         self.checked_at = time.monotonic()
         self.binary = None
-        if sys.platform != 'darwin':
+        if sys.platform not in {'darwin', 'win32'}:
             self.reason = 'platform_not_supported'
             return False
         selected = self.settings.get('binary')
-        candidates = [selected] if selected else [
-            '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
-            '/Applications/Codex.app/Contents/Resources/codex', shutil.which('codex')]
+        executable = 'codex.exe' if sys.platform == 'win32' else 'codex'
+        candidates = [selected] if selected else [shutil.which(executable)]
+        if not selected and sys.platform == 'darwin':
+            candidates[:0] = [
+                '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
+                '/Applications/Codex.app/Contents/Resources/codex',
+            ]
         for candidate in candidates:
             if not candidate or not Path(candidate).is_absolute() or not os.access(candidate, os.X_OK):
                 continue
+            # Windows can route .cmd/.bat through a command shell even when
+            # shell=False. Queue text must reach a native executable literally.
+            if sys.platform == 'win32' and Path(candidate).suffix.lower() != '.exe':
+                continue
             try:
                 result = subprocess.run([candidate, 'queue', '--help'], stdin=subprocess.DEVNULL,
-                    capture_output=True, text=True, timeout=5)
+                    capture_output=True, text=True, timeout=5,
+                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == 'win32' else 0)
                 if result.returncode == 0 and 'Queue a message for an existing session' in result.stdout and '--thread' in result.stdout:
                     self.binary, self.reason = candidate, None
                     return True
@@ -59,7 +68,8 @@ class CodexAppAdapter:
             raise DeliveryError(self.reason)
         try:
             result = subprocess.run([self.binary, 'queue', '--thread', session_id, '--message', text],
-                stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=15)
+                stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=15,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if sys.platform == 'win32' else 0)
         except subprocess.TimeoutExpired:
             raise DeliveryError('delivery_unknown', uncertain=True)
         except OSError:

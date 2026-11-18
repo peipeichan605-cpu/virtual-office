@@ -6,18 +6,21 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import time
 import uuid
 
 SDK_VERSION = '1.3.1'
 MANAGER = 'virtual-office-cursor-sdk'
 REQUIREMENTS = Path(__file__).with_name('requirements-cursor-sdk.txt')
-PROBE = '''import json,sys,ssl,sqlite3,venv,plistlib,platform
+PROBE = '''import json,sys,ssl,sqlite3,venv,plistlib,platform,sysconfig
 assert sys.version_info >= (3,10)
 assert sys.platform != 'darwin' or platform.mac_ver()[0]
-print(json.dumps({'version':list(sys.version_info[:3]),'executable':sys.executable}))
+print(json.dumps({'version':list(sys.version_info[:3]),'executable':sys.executable,
+                  'system':sys.platform,'platform':sysconfig.get_platform()}))
 '''
 SDK_PROBE = PROBE + '''import importlib.metadata,cursor_sdk
+assert sys.platform != 'win32' or sysconfig.get_platform() == 'win-amd64'
 assert importlib.metadata.version('cursor-sdk') == '1.3.1'
 '''
 
@@ -30,16 +33,65 @@ def venv_python(environment):
     return environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
 
 
+def sdk_platform_supported(system=None, platform_tag=None):
+    """The pinned SDK supplies a Windows x64 wheel, not ARM64/32-bit wheels."""
+    system = sys.platform if system is None else system
+    platform_tag = sysconfig.get_platform() if platform_tag is None else platform_tag
+    return system != 'win32' or platform_tag == 'win-amd64'
+
+
+def _probe_environment():
+    environment = dict(os.environ)
+    # A Windows Python alias/launcher must only inspect existing interpreters.
+    environment['PYTHON_MANAGER_AUTOMATIC_INSTALL'] = '0'
+    environment.pop('PYLAUNCHER_ALLOW_INSTALL', None)
+    return environment
+
+
+def interpreter_candidates(python=None):
+    if python:
+        return [str(Path(python).expanduser().absolute())]
+    candidates = [sys.executable]
+    names = ('python3.14', 'python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3')
+    if sys.platform == 'win32':
+        names = ('python',) + names
+    for name in names:
+        binary = shutil.which(name)
+        if binary and binary not in candidates:
+            candidates.append(binary)
+    if sys.platform == 'win32':
+        launcher = shutil.which('py')
+        if launcher:
+            try:
+                result = subprocess.run([launcher, '-0p'], stdin=subprocess.DEVNULL,
+                    capture_output=True, text=True, timeout=15, env=_probe_environment())
+                if result.returncode == 0:
+                    for line in result.stdout.splitlines():
+                        match = re.search(r'([A-Za-z]:[\\/].*?python\.exe)\s*$', line, re.IGNORECASE)
+                        if match and match[1] not in candidates:
+                            candidates.append(match[1])
+            except (OSError, subprocess.SubprocessError):
+                pass
+    return candidates
+
+
+def stop_target(pid):
+    if sys.platform == 'win32':
+        return 'taskkill /PID ' + str(int(pid)) + ' /T /F'
+    return '/bin/kill -TERM ' + str(int(pid))
+
+
 def probe_interpreter(binary, sdk=False):
     """Import-only health check: no bridge, account, model or credential access."""
     try:
         result = subprocess.run([str(binary), '-I', '-c', SDK_PROBE if sdk else PROBE],
                                 stdin=subprocess.DEVNULL, capture_output=True,
-                                text=True, timeout=15)
+                                text=True, timeout=15, env=_probe_environment())
         if result.returncode:
             return None
         data = json.loads(result.stdout.splitlines()[0])
-        return data if data.get('version', [0]) >= [3, 10] else None
+        return data if (data.get('version', [0]) >= [3, 10] and
+            sdk_platform_supported(data.get('system'), data.get('platform'))) else None
     except (OSError, ValueError, IndexError, subprocess.SubprocessError):
         return None
 
@@ -107,7 +159,7 @@ def setup_environment(config, python=None, download_python=False, on_started=Non
     run.mkdir(mode=0o700)
     log_path, status_path = run / 'stdout.log', run / 'status.json'
     record = {'run_id': run_id, 'state': 'starting', 'pid': os.getpid(),
-              'stop_target': '/bin/kill -TERM ' + str(os.getpid()), 'log': str(log_path)}
+              'stop_target': stop_target(os.getpid()), 'log': str(log_path)}
     _atomic_json(run / 'request.json', {'action': 'setup-cursor-sdk', 'sdk_version': SDK_VERSION,
                                       'download_python': bool(download_python)})
     _atomic_json(status_path, record)
@@ -119,7 +171,7 @@ def setup_environment(config, python=None, download_python=False, on_started=Non
             child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log,
                                      stderr=subprocess.STDOUT)
             record.update(state='running', child_pid=child.pid, command=command,
-                          child_stop_target='/bin/kill -TERM ' + str(child.pid))
+                          child_stop_target=stop_target(child.pid))
             _atomic_json(status_path, record)
             try:
                 code = child.wait(timeout=timeout)
@@ -135,12 +187,7 @@ def setup_environment(config, python=None, download_python=False, on_started=Non
             raise RuntimeError('Cursor SDK setup failed; inspect ' + str(log_path))
 
     try:
-        candidates = [str(Path(python).expanduser().absolute())] if python else [sys.executable]
-        if not python:
-            for name in ('python3.14', 'python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3'):
-                binary = shutil.which(name)
-                if binary and binary not in candidates:
-                    candidates.append(binary)
+        candidates = interpreter_candidates(python)
         selected = next((binary for binary in candidates if probe_interpreter(binary)), None)
         if not selected and download_python:
             uv = shutil.which('uv')
@@ -152,7 +199,7 @@ def setup_environment(config, python=None, download_python=False, on_started=Non
             binaries = list(managed.glob('*/bin/python3.12')) + list(managed.glob('*/python.exe'))
             selected = next((str(binary) for binary in binaries if probe_interpreter(binary)), None)
         if not selected:
-            raise ValueError('A healthy Python 3.10+ is needed. Use --python /path/to/python or --download-python with uv.')
+            raise ValueError('A healthy Python 3.10+ is needed (Windows requires x64 Python). Use --python /path/to/python or --download-python with uv.')
         environments = root / 'environments'
         environments.mkdir(exist_ok=True, mode=0o700)
         environment = environments / ('env-' + uuid.uuid4().hex)

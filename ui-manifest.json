@@ -1443,7 +1443,7 @@
     },
     {
       "destination": "office/codex-background-ui.js",
-      "sha256": "62435496c1503a981084c44e7ac981bb9d08734611e58b51b7b9eba3ec42a512"
+      "sha256": "78c353eb0b0c15b9c0b86b7fe8cdc301d10ac0f34e1d7937389bdd42791cced6"
     },
     {
       "destination": "office/codex-model-ui.js",
@@ -1459,7 +1459,7 @@
     },
     {
       "destination": "office/cursor-sdk-ui.js",
-      "sha256": "6c9a3e6dca1874dbf8bdc1dd0c50a33c49d560caee01d49fd0520a6a654bbbf3"
+      "sha256": "b1b6d50b30395fcfe60060d355d6080142ff190708dcba61b4f7fce6f0df13d6"
     },
     {
       "destination": "office/feed.js",
@@ -1555,7 +1555,7 @@
     },
     {
       "destination": "office/office-api.js",
-      "sha256": "0b25000ac9472935dbd5c192fb2953ec136300bdf59f385005e23001636b09bc"
+      "sha256": "b03e03638978c1b06d2beb220cfc5d456b33bc939eb2b5dd525fcde3b32ecbbe"
     },
     {
       "destination": "office/office-controls.js",

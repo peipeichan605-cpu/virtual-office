@@ -67,6 +67,10 @@ def main():
     sdk=sub.add_parser('setup-cursor-sdk',help='Install the optional pinned Cursor SDK in this installation private environment')
     sdk.add_argument('--python',help='Existing healthy Python 3.10+ executable')
     sdk.add_argument('--download-python',action='store_true',help='Use installed uv to download an isolated Python if none is usable')
+    platforms=sub.add_parser('setup-platforms',help='Prepare and verify all supported platform runtimes before first start; never logs in or creates Agents')
+    platforms.add_argument('--check',action='store_true',help='Read-only runtime verification; do not install anything')
+    platforms.add_argument('--python',help='Existing healthy Python 3.10+ for the managed Cursor SDK environment')
+    platforms.add_argument('--download-python',action='store_true',help='Use installed uv to download an isolated Python if none is usable')
     sub.add_parser('security-upgrade',help='Separate owner/feed/internal credentials and disable legacy external feed; restart required')
     mobile=sub.add_parser('mobile-configure',help='Configure the private loopback phone gateway; Tailscale policy is configured separately')
     mobile.add_argument('--origin',required=True);mobile.add_argument('--identity',required=True);mobile.add_argument('--port',type=int)
@@ -91,6 +95,14 @@ def main():
         result=setup_environment(config,args.python,args.download_python,
                                  on_started=lambda data:print(json.dumps(data),flush=True))
         print(json.dumps(result),flush=True);return
+    if args.command=='setup-platforms':
+        from setup_platforms import prepare_platforms
+        result=prepare_platforms(config,check=args.check,python=args.python,
+                                 download_python=args.download_python,
+                                 on_started=lambda data:print(json.dumps(data),flush=True))
+        print(json.dumps(result),flush=True)
+        if not result['runtimes_ready']:raise SystemExit(1)
+        return
     if args.command=='connect-hermes':
         from hermes_acp import connect_session, AcpError
         from configuration import agent_name

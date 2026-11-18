@@ -4,10 +4,10 @@ import os
 from pathlib import Path
 import re
 import secrets
-import stat
 import tempfile
 import unicodedata
 from security_keys import validate_security_keys
+from private_files import ensure_private_directory, prepare_private_file, require_private
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = Path(os.environ.get('OFFICE_CONFIG', ROOT / '.office' / 'config.json')).expanduser()
@@ -41,11 +41,8 @@ def agent_name(value):
 def load_config(path=DEFAULT_CONFIG):
     path = _private_config_path(path)
     fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
-    with os.fdopen(fd) as file:
-        info = os.fstat(file.fileno())
-        if (not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077
-                or (hasattr(os, 'getuid') and info.st_uid != os.getuid())):
-            raise ValueError('Office configuration must be a private owned file')
+    with os.fdopen(fd, encoding='utf-8') as file:
+        require_private(path, fd=file.fileno())
         data = json.load(file)
     data['config_path'] = str(path)
     data['_data_dir_setting'] = data.get('data_dir')
@@ -226,12 +223,10 @@ def _private_config_path(path, create=False):
     if path.is_symlink() or path.parent.is_symlink():
         raise ValueError('Office configuration must not use a symbolic link')
     if create:
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        ensure_private_directory(path.parent)
+    else:
+        require_private(path.parent, directory=True)
     parent = path.parent.resolve()
-    info = parent.stat()
-    if (not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077
-            or (hasattr(os, 'getuid') and info.st_uid != os.getuid())):
-        raise ValueError('Office configuration directory must be private and owned')
     if path.exists() and not path.is_file():
         raise ValueError('Office configuration must be a regular file')
     return parent / path.name
@@ -245,8 +240,8 @@ def save_config(path, config):
         else:clean['data_dir']=config['_data_dir_setting']
     fd, temporary = tempfile.mkstemp(prefix='.'+path.name+'-', suffix='.tmp', dir=path.parent)
     try:
-        with os.fdopen(fd, 'w') as file:
-            os.fchmod(file.fileno(), 0o600)
+        with os.fdopen(fd, 'w', encoding='utf-8') as file:
+            prepare_private_file(temporary, file.fileno())
             file.write(json.dumps(clean, ensure_ascii=False, indent=2)+'\n')
             file.flush()
             os.fsync(file.fileno())

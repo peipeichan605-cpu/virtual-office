@@ -34,16 +34,32 @@ G/F 與原生樓層共用日間、黃昏及夜間光照參數，後方沿用原�
 
 想交給自己的 Agent 自動安裝，可複製 [通用安裝 Prompt](INSTALL-PROMPT.txt)。它會下載目前版本、辨認新安裝或更新、啟動並驗證本機 OFFICE；平台登入及手機接入留待你選擇。
 
-需要 Python 3.9 或以上。基本 Python 服務不用 pip 套件、Node.js、模型 API 或付費帳戶；可選平台接駁另有自己的依賴及帳戶要求。已在 macOS 驗證；其他作業系統仍需實機驗證。前端需要網絡下載固定版本 3D 資源、Three.js 及字型。
+標準安裝會先準備 Codex、Cursor SDK 及 Grok SDK 所需的執行環境，再啟動 OFFICE。請使用 Python 3.10 或以上；已有的 Python 3.9 核心安裝仍可沿用，但 Cursor SDK 須另備相容 Python。前端需要網絡下載固定版本 3D 資源、Three.js 及字型。
+
+| 功能 | 標準安裝需要準備 | 首次使用由用戶完成 |
+| --- | --- | --- |
+| 3D 辦公室及紀錄 | Python、已核對雜湊的 UI 素材 | 自行選擇加入的 Agent |
+| Codex 背景模式 | 相容的本機 Codex `app-server`；Windows 使用原生 `codex.exe` | 自己的 Codex 登入 |
+| Cursor SDK 純對話 | Python 3.10+、本 OFFICE 專用環境內的 `cursor-sdk==1.3.1`；Windows 需要 x64 Python | 在 OFFICE 設定自己的 Cursor User API key |
+| Grok Bot SDK | Node.js 22.13+；固定 SDK 原始碼已隨套件附上，毋須 `npm install` | 瀏覽器登入，再選自己的 Bot／聊天 |
+
+**已安裝 Cursor Desktop 並不代表已安裝 Cursor SDK。** 標準流程會完成 SDK 的一次性安裝；不要只啟動網頁就宣稱全部平台已備妥。執行環境就緒與帳戶接通分開驗證，安裝不會自動加入任何 Agent。原有 App、Cloud、Webhook 和 Hermes 接駁方式繼續保留，按用戶選擇完成各自的綁定。
 
 將套件放在自己選擇的資料夾，在該資料夾執行：
 
 ```sh
 python3 setup_ui.py
 python3 office.py init
+python3 office.py setup-platforms
+python3 office.py setup-platforms --check
 python3 office.py start
+python3 office.py status
 python3 office.py url
 ```
+
+Windows 請將 `python3` 換成已確認可用的 `python`、`py -3` 或 Python 完整路徑。`setup-platforms` 會建立本 OFFICE 專用的 Cursor SDK 環境，並檢查 Grok 的 Node.js 及 Codex 執行程式；不會讀取帳戶憑證或建立聊天。若缺少 Node.js／Codex，安裝 Agent 應依官方安裝方法補齊，再重跑檢查。只有 `runtimes_ready=true` 才表示三個執行環境均已備妥；未登入的帳戶仍需用戶登入，不代表已完成雙向收發。
+
+使用自訂設定時，在每個 `office.py` 子命令前加同一個 `--config "完整設定路徑"`。只需修復 Cursor SDK 時，仍可使用 `setup-cursor-sdk`。已有服務安裝 SDK 後，先妥善處理進行中工作，再用本安裝原有 `stop`／`start` 重載，勿終止其他 OFFICE。
 
 最後一行只在你的終端顯示私人入口。新安裝沒有 Agent，沒有自動掃描聊天，也不使用 ntfy。用 `python3 office.py stop` 停止此 OFFICE；沒有安裝自動啟動服務。
 

@@ -1,13 +1,41 @@
 """Local redacted delivery history. Never published to ntfy."""
+from contextlib import contextmanager
 import datetime as dt
 import hashlib
 import os
 from pathlib import Path
 import re
 import sqlite3
+import stat
 import threading
 
 TERMINAL = {'done', 'error', 'cancelled'}
+
+@contextmanager
+def open_native_rollout(path):
+    """Open a regular source without following a final symlink/reparse point.
+
+    O_NOFOLLOW is not available on Windows. Check file identity around the
+    open as well, so the fallback cannot silently read a replacement file.
+    """
+    path = Path(path)
+    expected = path.lstat()
+    reparse = getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)
+    if not stat.S_ISREG(expected.st_mode) or getattr(expected, 'st_file_attributes', 0) & reparse:
+        raise ValueError('Invalid native rollout path')
+    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)
+    # A file replaced with a FIFO between lstat and open must not block a poll.
+    flags |= getattr(os, 'O_NONBLOCK', 0)
+    with os.fdopen(os.open(path, flags), 'rb') as source:
+        opened, current = os.fstat(source.fileno()), path.lstat()
+        if (not stat.S_ISREG(opened.st_mode)
+                or not stat.S_ISREG(current.st_mode)
+                or getattr(current, 'st_file_attributes', 0) & reparse
+                or not os.path.samestat(expected, opened)
+                or not os.path.samestat(current, opened)):
+            raise ValueError('Native rollout identity changed')
+        yield source
+
 
 def redact(value, secrets=(), limit=24000):
     text = str(value or '')[:256000]

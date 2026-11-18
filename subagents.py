@@ -14,7 +14,7 @@ import sqlite3
 import stat
 import time
 import uuid
-from history import redact, timestamp
+from history import open_native_rollout, redact, timestamp
 
 CAPABILITY = {'enabled': False, 'can_send': False, 'same_session': False,
               'persistent': False, 'mode': 'observation', 'reason': 'observed_subagent'}
@@ -127,8 +127,7 @@ class ChildTail:
     def read(self, max_bytes=FILE_BYTES):
         if not self.path.is_absolute() or self.path.resolve() != self.path:
             raise ValueError('invalid_child_path')
-        fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
-        with os.fdopen(fd, 'rb') as file:
+        with open_native_rollout(self.path) as file:
             info = os.fstat(file.fileno())
             if not stat.S_ISREG(info.st_mode) or (self.inode is not None and (self.inode != info.st_ino or info.st_size < self.offset)):
                 raise ValueError('child_rollout_rotated')

@@ -406,6 +406,17 @@ class CursorLocalTests(unittest.TestCase):
 
 
 class PublicSdkContractTests(unittest.TestCase):
+    def test_unsupported_windows_abi_reports_platform_before_importing_sdk(self):
+        runtime = SdkRuntime()
+        runtime.version = '1.3.1'
+        with patch('cursor_local.sys.version_info', (3, 12)), \
+             patch('cursor_sdk_setup.sdk_platform_supported', return_value=False), \
+             patch('cursor_local.importlib.util.find_spec') as lookup:
+            self.assertFalse(runtime.available())
+        self.assertEqual(runtime.reason, 'cursor_sdk_platform_unsupported')
+        self.assertIsNone(runtime.version)
+        lookup.assert_not_called()
+
     def test_preflight_rejects_untested_sdk_versions_without_starting_a_bridge(self):
         with patch('cursor_local.sys.version_info',(3,12)), patch('cursor_local.importlib.util.find_spec',return_value=Obj()):
             runtime = SdkRuntime()

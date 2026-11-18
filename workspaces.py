@@ -12,7 +12,16 @@ def workspace_path(value):
         raise ValueError('invalid_workspace_path')
     path=Path(value).expanduser()
     if not path.is_absolute():raise ValueError('absolute_workspace_path_required')
-    return str(path.resolve())
+    path = path.resolve()
+    # Codex records local Windows paths with the extended-length prefix.
+    if path.drive.startswith('\\\\?\\') and len(path.drive) == 6 and path.drive.endswith(':'):
+        ordinary = Path(str(path)[4:])
+        try:
+            if path.samefile(ordinary):
+                path = ordinary
+        except OSError:
+            pass
+    return str(path)
 
 def workspace_name(value):
     if not isinstance(value,str):raise ValueError('invalid_workspace_name')

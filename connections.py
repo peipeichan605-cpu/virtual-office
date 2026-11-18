@@ -10,7 +10,8 @@ import uuid
 from configuration import agent_name, codex_targets, load_config, save_config
 from hermes_acp import private_json
 from platform_adapters import HTTPS, RemoteError, cursor_agent_id, cursor_headers, secret_file, validate_key, webhook_url
-from history import timestamp
+from history import open_native_rollout, timestamp
+from workspaces import workspace_path
 from security_keys import integrity_fingerprint, matches_integrity
 from cursor_local import DEFAULT_MODEL, MODEL, LocalStartError, SdkRuntime, durable_state, lifecycle_path, local_agent_id, tool_restrictions
 
@@ -90,12 +91,11 @@ class Connections:
                 with sqlite3.connect(Path(config['codex_db']).resolve().as_uri()+'?mode=ro',uri=True,timeout=2) as db:
                     row=db.execute('SELECT rollout_path,cwd,archived FROM threads WHERE id=?',(session_id,)).fetchone()
                 if not row or row[2] or not row[1]:raise ValueError()
-                native_cwd=Path(row[1]).resolve();actual=Path(workspace).resolve()
+                native_cwd=Path(workspace_path(row[1]));actual=Path(workspace_path(workspace))
                 if actual!=native_cwd and native_cwd not in actual.parents:raise ValueError()
                 # Verify the database points to this exact original session.
-                path=Path(row[0])
-                if path.is_symlink():raise ValueError()
-                with path.open('rb') as source:metadata=json.loads(source.readline(1024*1024))
+                with open_native_rollout(row[0]) as source:
+                    metadata=json.loads(source.readline(1024*1024))
                 if metadata.get('type')!='session_meta' or metadata.get('payload',{}).get('id')!=session_id:raise ValueError()
             except (OSError,sqlite3.Error,ValueError,TypeError):raise ConnectionError('native_session_not_verified',409)
             if not previous:
