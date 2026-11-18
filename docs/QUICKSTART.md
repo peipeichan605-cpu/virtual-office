@@ -10,7 +10,7 @@ Virtual Office 是在你自己的電腦運行的 3D Agent 辦公室。新安裝�
 素材及 Cursor SDK。Windows 的 Cursor SDK 需要 x64 Python；Codex 使用原生
 `codex.exe`。已有 Python 3.9 的 OFFICE 核心仍可沿用，SDK 另用獨立環境。
 
-將套件放在自己選擇的資料夾，在該資料夾執行：
+將套件放在自己選擇的資料夾，在該資料夾逐行執行；每一步成功才繼續。檢查失敗時先修正列出的原因，不要跳到啟動步驟：
 
 ```sh
 python3 setup_ui.py
