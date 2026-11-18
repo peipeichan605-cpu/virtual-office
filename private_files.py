@@ -21,9 +21,13 @@ def _shape(info, directory=False):
 
 def _windows_acl_private(owner, current_user, entries):
     """A conservative local-user ACL policy, independent of SID display names."""
-    if owner != current_user or entries is None:
-        return False
     trusted = {current_user, 'S-1-5-18', 'S-1-5-32-544'}  # SYSTEM / Administrators
+    # Owners do not inherit from the parent. Windows uses the creating token's
+    # default owner, which can be Administrators for an elevated process. These
+    # OS principals already have full access in our private DACL; accepting their
+    # ownership does not admit any additional user or grant any additional ACE.
+    if owner not in trusted or entries is None:
+        return False
     for kind, mask, sid in entries:
         if kind == 1:  # A denial cannot grant additional access.
             continue
@@ -130,7 +134,7 @@ class _WindowsSecurity:
                 mask = w.DWORD.from_address(ace.value + 4).value
                 entries.append((kind, mask, self.sid_text(ace.value + 8)))
             if not _windows_acl_private(self.sid_text(owner), self.user_sid(), entries):
-                raise PrivateFileError('Windows folder or file must belong to your account and allow only you, SYSTEM and Administrators')
+                raise PrivateFileError('Windows folder or file must have a trusted owner and allow only you, SYSTEM and Administrators')
         finally:
             self.kernel.LocalFree(descriptor)
 

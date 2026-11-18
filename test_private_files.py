@@ -23,9 +23,25 @@ class WindowsAclPolicyTests(unittest.TestCase):
 
     def test_null_unknown_and_foreign_owner_fail_closed(self):
         self.assertFalse(_windows_acl_private(self.USER, self.USER, None))
-        self.assertFalse(_windows_acl_private('S-1-5-18', self.USER, []))
+        self.assertFalse(_windows_acl_private('S-1-5-21-101-102-103-1002', self.USER, []))
         self.assertFalse(_windows_acl_private(self.USER, self.USER, [(5, 1, self.USER)]))
         self.assertTrue(_windows_acl_private(self.USER, self.USER, [(1, 1, 'S-1-1-0')]))
+
+    def test_elevated_default_owner_keeps_the_same_private_dacl_boundary(self):
+        # Default object ownership can be an OS principal even when all access
+        # was inherited from a folder explicitly owned by the current user.
+        entries = [(0, 0x1f01ff, sid) for sid in (self.USER, 'S-1-5-18', 'S-1-5-32-544')]
+        for owner in (self.USER, 'S-1-5-18', 'S-1-5-32-544'):
+            with self.subTest(owner=owner):
+                self.assertTrue(_windows_acl_private(owner, self.USER, entries))
+                self.assertFalse(_windows_acl_private(owner, self.USER, None))
+                for outsider in ('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545',
+                                 'S-1-5-21-101-102-103-1002'):
+                    self.assertFalse(_windows_acl_private(owner, self.USER,
+                                                         entries + [(0, 1, outsider)]))
+        for owner in ('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545',
+                      'S-1-5-21-101-102-103-1002'):
+            self.assertFalse(_windows_acl_private(owner, self.USER, entries))
 
     def test_windows_reparse_attributes_are_not_treated_as_regular_storage(self):
         from types import SimpleNamespace
@@ -91,6 +107,8 @@ class NativePrivateFilesTests(unittest.TestCase):
     @unittest.skipUnless(os.name == 'nt', 'Native Windows inherited ACL check')
     def test_new_children_inherit_private_acl(self):
         ensure_private_directory(self.root)
+        # Native elevated Windows runners may assign Administrators ownership
+        # here; the private inherited DACL still has exactly the trusted scope.
         child = self.root / 'child'; child.mkdir()
         require_private(child, directory=True)
         path = child / 'record.json'
