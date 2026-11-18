@@ -1,4 +1,5 @@
 """Contract fixtures, not evidence of an authenticated live vendor run."""
+from security_keys import owner_key
 import io
 import json
 import os
@@ -221,10 +222,10 @@ class PlatformTests(unittest.TestCase):
         def call(headers):
             return urllib.request.urlopen(urllib.request.Request(url,data=body,headers={'Content-Type':'application/json',**headers}),timeout=3)
         try:
-            for headers in ({},{'X-Office-Key':self.config['topic'],'Origin':'https://foreign.example'}):
+            for headers in ({},{'X-Office-Key':owner_key(self.config),'Origin':'https://foreign.example'}):
                 with self.assertRaises(urllib.error.HTTPError) as caught:call(headers)
                 self.assertEqual(caught.exception.code,403)
-            with call({'X-Office-Key':self.config['topic']}) as response:result=response.read().decode()
+            with call({'X-Office-Key':owner_key(self.config)}) as response:result=response.read().decode()
             self.assertNotIn(KEY,result);self.assertIn('native_target_verified',result)
             self.assertEqual(len(self.transport.posts),0,'Connecting must not invoke a model')
         finally:server.shutdown();server.server_close();worker.join()

@@ -1,4 +1,5 @@
 """Native relationship fixtures; no model calls or real Office memberships."""
+from security_keys import owner_key
 import json
 import os
 from pathlib import Path
@@ -206,6 +207,164 @@ class ChildObservationTests(unittest.TestCase):
         self.load_root(); self.poll(); self.assertEqual(self.children()[0]['state'], 'working')
         self.assertEqual(self.children()[0]['parent_run_id'], 'parent-run')
 
+    def advance_parent(self, at=None):
+        at = at or self.start + 2
+        self.append(self.root_path,
+                    record('event_msg', at, type='task_complete', turn_id='parent-run'),
+                    record('event_msg', at + .1, type='task_started', turn_id='next-parent-run',
+                           root_turn_id='next-parent-run', started_at=at + .1))
+        self.load_root()
+
+    def restart_bridge(self):
+        previous = self.bridge
+        self.bridge = Bridge(load_config(self.config_path), dry_run=True)
+        previous.commands.close(); previous.history.close()
+        self.load_root()
+
+    def test_first_discovery_after_parent_changes_turn_keeps_original_delivery_relation(self):
+        _,file,born = self.child()
+        self.advance_parent()
+        self.append(file, record('response_item', self.start + 3, type='message', role='assistant',
+                                 phase='commentary', content=[{'type':'output_text','text':'Original delegated work continues'}]))
+        for _ in range(3): self.poll()
+        self.assertEqual(len(self.children()), 1)
+        child = self.children()[0]
+        self.assertEqual(child['state'], 'working')
+        self.assertEqual(child['parent_run_id'], 'parent-run')
+        self.assertEqual(child['latest_message']['text'], 'Original delegated work continues')
+        self.finish(file, 1, self.start + 4); self.poll()
+        runs = self.bridge.children.decorate_runs(self.bridge.history.list(self.bridge.history_agents(), terminal=True))
+        delivered = next(run for run in runs if run['agent_id'] == child['id'])
+        self.assertEqual(delivered['parent_run_id'], 'parent-run')
+        self.assertEqual(delivered['delivery_preview'], 'Child delivered result')
+
+    def test_late_discovery_keeps_join_cutoff_and_rejects_unverified_root_context(self):
+        config = load_config(self.config_path)
+        config['agents'][0]['native_observe_after'] = timestamp(self.start + .5)
+        save_config(self.config_path, config); self.bridge.refresh_connections(config)
+        self.child(1, born=self.start + .2)
+        self.child(2, born=self.start + 1.1)
+        self.child(3, born=self.start + 1.2, parent_run='unverified-context')
+        self.advance_parent(); self.poll()
+        self.assertEqual(len(self.children()), 1)
+        row = self.bridge.children.rows()[0]
+        self.assertTrue(row['native_id'].endswith('000000000202'))
+        self.assertEqual(row['parent_run_id'], 'parent-run')
+        self.assertEqual(len(self.bridge.children.allowed()), 1)
+
+    def test_restart_reconstructs_original_root_context_for_post_join_late_child(self):
+        config = load_config(self.config_path)
+        config['agents'][0]['native_observe_after'] = timestamp(self.start + .5)
+        save_config(self.config_path, config); self.bridge.refresh_connections(config)
+        self.child(); self.advance_parent(); self.restart_bridge(); self.poll()
+        self.assertEqual(len(self.children()), 1)
+        self.assertEqual(self.children()[0]['state'], 'working')
+        self.assertEqual(self.children()[0]['parent_run_id'], 'parent-run')
+        self.assertIn('Child public progress', json.dumps(self.bridge.history.messages(
+            self.bridge.history_agents(), self.children()[0]['id'])))
+
+    def test_nested_child_first_discovered_after_root_moves_to_next_turn(self):
+        native, _, _ = self.child()
+        self.advance_parent()
+        self.child(2, parent=native, parent_path='/root/helper', path='/root/helper/nested',
+                   born=self.start + 3, parent_run='parent-run')
+        self.poll()
+        self.assertEqual(len(self.children()), 2)
+        nested = next(child for child in self.children() if child['depth'] == 2)
+        parent = next(child for child in self.children() if child['depth'] == 1)
+        self.assertEqual(nested['parent_agent_id'], parent['id'])
+        self.assertEqual(nested['parent_run_id'], 'parent-run')
+
+    def test_legacy_initial_tail_fence_excludes_earlier_mapped_historical_turn(self):
+        historical = record('event_msg', self.start - 30, type='task_started', turn_id='historical-parent',
+                            root_turn_id='historical-parent', started_at=self.start - 30)
+        lines = self.root_path.read_text().splitlines()
+        self.root_path.write_text(lines[0] + '\n' + json.dumps(historical) + '\n' + '\n'.join(lines[1:]) + '\n')
+        self.child(1, born=self.start - 20, parent_run='historical-parent')
+        self.child(2)
+        self.restart_bridge(); self.poll()
+        self.assertEqual(len(self.children()), 1)
+        self.assertEqual(self.children()[0]['parent_run_id'], 'parent-run')
+
+    def reused_child_before_third_parent_turn(self, first_poll):
+        _,file,_ = self.child(finish=True)
+        if first_poll: self.poll()
+        self.advance_parent()
+        self.append(file,
+                    record('event_msg', self.start + 2.2, type='task_started', turn_id='reused-child-run',
+                           root_turn_id='next-parent-run', started_at=self.start + 2.2),
+                    record('response_item', self.start + 2.3, type='message', role='assistant', phase='commentary',
+                           content=[{'type':'output_text','text':'Intermediate delegated progress'}]),
+                    record('event_msg', self.start + 2.4, type='task_complete', turn_id='reused-child-run',
+                           last_agent_message='Intermediate delegated delivery'))
+        self.append(self.root_path, record('event_msg', self.start + 3, type='task_started',
+                                          turn_id='third-parent-run', root_turn_id='third-parent-run', started_at=self.start + 3))
+        self.load_root(); self.poll()
+        self.assertEqual(len(self.children()), 1)
+        child = self.children()[0]
+        self.assertEqual(child['state'], 'done')
+        self.assertEqual(child['parent_run_id'], 'next-parent-run')
+        runs = self.bridge.children.decorate_runs(self.bridge.history.list(self.bridge.history_agents(), agent=child['id']))
+        by_native = {self.bridge.history.detail(run['id'], self.bridge.history_agents())['run_id']:run for run in runs}
+        self.assertEqual(by_native['child-run-1']['parent_run_id'], 'parent-run')
+        self.assertEqual(by_native['reused-child-run']['parent_run_id'], 'next-parent-run')
+        self.assertEqual(by_native['reused-child-run']['delivery_preview'], 'Intermediate delegated delivery')
+        messages = self.bridge.history.messages(self.bridge.history_agents(), child['id'])
+        self.assertTrue(any(message['text']=='Intermediate delegated progress' and
+                            message['run_id']=='reused-child-run' for message in messages))
+
+    def test_reused_child_intermediate_turn_is_not_lost_when_root_advances_again(self):
+        self.reused_child_before_third_parent_turn(first_poll=True)
+
+    def test_first_discovery_after_child_reuse_keeps_both_original_and_intermediate_deliveries(self):
+        self.reused_child_before_third_parent_turn(first_poll=False)
+
+    def test_legacy_empty_initial_tail_freezes_first_later_observed_turn(self):
+        self.root_path.write_text(self.root_path.read_text().splitlines()[0] + '\n')
+        self.restart_bridge()
+        self.append(self.root_path, record('event_msg', self.start, type='task_started', turn_id='parent-run',
+                                          root_turn_id='parent-run', started_at=self.start))
+        self.load_root(); self.child(); self.advance_parent(); self.poll()
+        self.assertEqual(len(self.children()), 1)
+        self.assertEqual(self.children()[0]['parent_run_id'], 'parent-run')
+
+    def test_shared_outer_context_keeps_first_spawn_turn_and_maps_later_reuse_separately(self):
+        rows = [json.loads(line) for line in self.root_path.read_text().splitlines()]
+        rows[1]['payload']['root_turn_id'] = 'shared-outer-context'
+        self.root_path.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+        self.restart_bridge()
+        _,file,_ = self.child(parent_run='shared-outer-context')
+        rows = [json.loads(line) for line in file.read_text().splitlines()]
+        for index in range(4,len(rows)):
+            rows[index]['timestamp'] = timestamp(self.start + 3 + index/100)
+        rows[4]['payload']['started_at'] = self.start + 3
+        file.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+        self.append(self.root_path, record('event_msg', self.start + 2.1, type='task_started',
+                    turn_id='second-parent-run', root_turn_id='shared-outer-context', started_at=self.start + 2.1))
+        self.load_root(); self.poll()
+        child = self.children()[0]
+        self.assertEqual(child['parent_run_id'], 'parent-run')
+        self.append(file,
+                    record('event_msg', self.start + 3.5, type='task_complete', turn_id='child-run-1',
+                           last_agent_message='Original spawn delivery'),
+                    record('event_msg', self.start + 4, type='task_started', turn_id='shared-context-reuse',
+                           root_turn_id='shared-outer-context', started_at=self.start + 4),
+                    record('response_item', self.start + 4.1, type='message', role='assistant', phase='commentary',
+                           content=[{'type':'output_text','text':'Reused under second selected-session turn'}]))
+        self.append(self.root_path, record('event_msg', self.start + 5, type='task_started',
+                    turn_id='third-parent-run', root_turn_id='shared-outer-context', started_at=self.start + 5))
+        self.load_root(); self.poll()
+        self.assertEqual(self.children()[0]['parent_run_id'], 'second-parent-run')
+        self.assertEqual(self.children()[0]['latest_message']['text'], 'Reused under second selected-session turn')
+        runs = self.bridge.children.decorate_runs(self.bridge.history.list(self.bridge.history_agents(), agent=child['id']))
+        parents = {self.bridge.history.detail(run['id'],self.bridge.history_agents())['run_id']:run['parent_run_id'] for run in runs}
+        self.assertEqual(parents, {'child-run-1':'parent-run','shared-context-reuse':'second-parent-run'})
+        self.restart_bridge(); self.poll()
+        self.assertEqual(self.children()[0]['parent_run_id'], 'second-parent-run')
+        replayed = self.bridge.children.decorate_runs(self.bridge.history.list(self.bridge.history_agents(), agent=child['id']))
+        self.assertEqual({self.bridge.history.detail(run['id'],self.bridge.history_agents())['run_id']:run['parent_run_id']
+                          for run in replayed}, parents)
+
     def test_restart_preserves_generation_history_and_does_not_resurrect_old_children(self):
         _, file, _ = self.child(); self.child(2, born=self.start - 100); self.poll(); ident = self.children()[0]['id']
         self.finish(file, 1); self.poll()
@@ -280,7 +439,7 @@ class ChildObservationTests(unittest.TestCase):
         base='http://127.0.0.1:'+str(self.bridge.config['port'])
         def request(route,payload=None,key=True):
             headers={'Content-Type':'application/json'}
-            if key:headers['X-Office-Key']=self.bridge.config['topic']
+            if key:headers['X-Office-Key']=owner_key(self.bridge.config)
             req=urllib.request.Request(base+route,data=json.dumps(payload).encode() if payload is not None else None,headers=headers)
             try:
                 with urllib.request.urlopen(req,timeout=3) as response:return response.status,json.load(response)
