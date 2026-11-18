@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CursorSdkController,cursorSdkError,cursorSdkRequestStore,initCursorSdkUI} from './public/office/cursor-sdk-ui.js';
+import {CursorSdkController,cursorSdkError,cursorSdkSetupMessage,CURSOR_SDK_SETUP_PROMPT,cursorSdkRequestStore,initCursorSdkUI} from './public/office/cursor-sdk-ui.js';
 import {receivingHint,publicSyncHint,CommandComposer} from './public/office/commands.js';
 import {officeGet,officePost} from './public/office/office-api.js';
 
@@ -23,6 +23,18 @@ test('SDK unavailable or failed preflight never creates an Agent or accepts a ke
   assert.equal(f.calls.filter(c=>c[0]==='create').length,0);assert.ok(!JSON.stringify(f.controller).includes('must-not-be-saved'));
   const failure=fixture({read:()=>{throw Object.assign(new Error('private_office_required'),{status:403,code:'private_office_required'});}});await failure.controller.open();
   assert.equal(failure.controller.phase,'failed');assert.match(failure.controller.error,/私人 OFFICE/);assert.equal(await failure.controller.create(values),false);
+});
+
+test('setup diagnostics distinguish missing SDK, old Python, wrong version and Windows ABI',async()=>{
+  const reasons=[['cursor_sdk_required',/未安裝 Cursor SDK/],['cursor_python_required',/Python 3.10/],['cursor_sdk_version_unsupported',/目前版本：2.0.0/],['cursor_sdk_platform_unsupported',/x64 Python/]];
+  for(const [reason,expected] of reasons){
+    const f=fixture({read:()=>({...ready,sdk_available:false,sdk_reason:reason,sdk_version:'2.0.0'})});await f.controller.open();
+    assert.equal(f.controller.home.sdk_reason,reason);assert.match(cursorSdkSetupMessage(f.controller.home),expected);
+    assert.equal(await f.controller.create(values),false);assert.equal(f.calls.length,1);
+  }
+  const f=fixture({read:()=>({...ready,sdk_available:false,sdk_reason:'private error /path/key',sdk_version:'secret-value: token'})});await f.controller.open();
+  assert.equal(f.controller.home.sdk_reason,null);assert.equal(f.controller.home.sdk_version,null);
+  assert.ok(!JSON.stringify(f.controller.home).includes('private error'));assert.ok(!cursorSdkSetupMessage(f.controller.home).includes('token'));
 });
 
 test('first setup requires a key but saved per-install account data is reusable without reposting it',async()=>{
@@ -150,6 +162,30 @@ class Element{
   }
 }
 function dom(){const doc={createElement:tag=>new Element(tag,doc)};doc.body=new Element('body',doc);return doc;}
+
+test('missing SDK exposes one-time setup guidance and copy does not install, post or create an Agent',async t=>{
+  const doc=dom(),events=new EventTarget(),calls=[],copied=[];let home={...ready,sdk_available:false,sdk_reason:'cursor_sdk_required'};
+  t.mock.method(globalThis,'fetch',async(url,options)=>{calls.push({url,options});return {ok:true,json:async()=>home};});
+  const ui=initCursorSdkUI({document:doc,events,key:()=> 'fixture-owner',pendingStore:storeFixture().store,copyText:async text=>copied.push(text)});
+  events.dispatchEvent(new Event('office:new-conversation'));await wait();
+  assert.equal(ui.dialog.querySelector('.cursor-sdk-setup').hidden,false);assert.match(ui.dialog.querySelector('.cursor-sdk-status').textContent,/未安裝/);
+  await ui.dialog.querySelector('.cursor-sdk-copy-setup').fire('click');
+  assert.deepEqual(copied,[CURSOR_SDK_SETUP_PROMPT]);assert.match(ui.dialog.querySelector('.cursor-sdk-setup-notice').textContent,/已複製/);
+  assert.equal(calls.length,1);assert.ok(!calls[0].options?.method);assert.ok(!copied[0].includes('fixture-owner'));
+  home=ready;await ui.dialog.querySelector('.cursor-sdk-refresh').fire('click');
+  assert.equal(ui.dialog.querySelector('.cursor-sdk-setup').hidden,true);assert.equal(ui.dialog.querySelector('form').hidden,false);
+  assert.equal(calls.length,2);assert.ok(calls.every(c=>c.options?.method!=='POST'));ui.dispose();
+});
+
+test('clipboard denial leaves a manually copyable setup prompt without claiming success',async t=>{
+  const doc=dom(),events=new EventTarget();
+  t.mock.method(globalThis,'fetch',async()=>({ok:true,json:async()=>({...ready,sdk_available:false,sdk_reason:'cursor_python_required'})}));
+  const ui=initCursorSdkUI({document:doc,events,key:()=> 'fixture-owner',pendingStore:storeFixture().store,copyText:async()=>{throw new Error('denied');}});
+  events.dispatchEvent(new Event('office:new-conversation'));await wait();await ui.dialog.querySelector('.cursor-sdk-copy-setup').fire('click');
+  assert.equal(ui.dialog.querySelector('.cursor-sdk-setup-prompt').value,CURSOR_SDK_SETUP_PROMPT);
+  assert.match(ui.dialog.querySelector('.cursor-sdk-setup-notice').textContent,/手動複製/);
+  assert.ok(!ui.dialog.querySelector('.cursor-sdk-setup-notice').textContent.includes('已複製'));ui.dispose();
+});
 
 test('new dialog opens only on an explicit action and masks/clears its key while preserving failure intent',async t=>{
   const doc=dom(),events=new EventTarget(),calls=[],post=deferred();

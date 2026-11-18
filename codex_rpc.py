@@ -5,6 +5,7 @@ created here is terminated. Notifications are queued so synchronous receipts
 can be committed before any public observation is delivered.
 """
 import json
+from contextlib import contextmanager
 import os
 import queue
 import signal
@@ -15,11 +16,38 @@ import threading
 import time
 from pathlib import Path
 
+PROBE_TIMEOUT = 45
+
 
 class RpcError(Exception):
     def __init__(self, code, sent=False):
         self.code, self.sent = code, sent
         super().__init__(code)
+
+
+def remaining_timeout(deadline, maximum=None):
+    """Share one monotonic budget across a metadata probe's nested operations."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise RpcError('codex_rpc_timeout')
+    return min(remaining, maximum) if maximum is not None else remaining
+
+
+@contextmanager
+def deadline_lock(lock, deadline=None):
+    if deadline is None:
+        lock.acquire()
+    elif not lock.acquire(timeout=remaining_timeout(deadline)):
+        raise RpcError('codex_rpc_timeout')
+    try:
+        yield
+    finally:
+        lock.release()
+
+
+def process_creation_flags():
+    """Native Windows helpers stay in the background without a console window."""
+    return getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0
 
 
 def child_environment():
@@ -64,16 +92,17 @@ def runtime_info(binary):
     return {'source': source, 'identity': identity}
 
 
-def _desktop_server_available(binary):
+def _desktop_server_available(binary, deadline=None):
     identity = runtime_info(binary)['identity']
-    with _RUNTIME_CHECK_LOCK:
+    with deadline_lock(_RUNTIME_CHECK_LOCK, deadline):
         cached = _RUNTIME_CHECKS.get(identity)
         if cached and time.monotonic() - cached[0] < 30:
             return cached[1]
         try:
             result = subprocess.run([binary, 'app-server', '--help'], stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=child_environment(),
-                text=True, timeout=5)
+                text=True, timeout=remaining_timeout(deadline, 5) if deadline is not None else 5,
+                creationflags=process_creation_flags())
             available = result.returncode == 0 and '--listen' in result.stdout and 'stdio' in result.stdout
         except (OSError, subprocess.TimeoutExpired):
             available = False
@@ -83,12 +112,40 @@ def _desktop_server_available(binary):
         return available
 
 
-def resolve_binary(settings=None):
+def resolve_binary(settings=None, *, deadline=None):
+    if deadline is not None:
+        remaining_timeout(deadline)
     selected = (settings or {}).get('binary')
+    if os.name == 'nt':
+        # Windows may run a batch file through cmd.exe even with shell=False.
+        # Only native executables receive app-server arguments and stdio input.
+        if selected:
+            if str(selected).lower().endswith(('.cmd', '.bat')):
+                raise RpcError('codex_native_executable_required')
+            candidates = [selected]
+        else:
+            candidates = list(dict.fromkeys(filter(None, [shutil.which('codex.exe'), shutil.which('codex')])))
+        batch_found, native_found = False, False
+        for candidate in candidates:
+            if str(candidate).lower().endswith(('.cmd', '.bat')):
+                batch_found = True
+                continue
+            if not isinstance(candidate, str) or not Path(candidate).is_absolute() or not os.access(candidate, os.X_OK):
+                continue
+            native_found = True
+            if deadline is not None:
+                remaining_timeout(deadline)
+            if selected or _desktop_server_available(candidate, deadline):
+                return candidate
+        if native_found:
+            raise RpcError('codex_process_unavailable')
+        raise RpcError('codex_native_executable_required' if batch_found else 'codex_binary_unavailable')
     if not selected:
         for candidate in _desktop_candidates():
-            if os.access(candidate, os.X_OK) and _desktop_server_available(candidate):
+            if os.access(candidate, os.X_OK) and _desktop_server_available(candidate, deadline):
                 return candidate
+    if deadline is not None:
+        remaining_timeout(deadline)
     candidates = [selected] if selected else [shutil.which('codex'),
         '/opt/homebrew/bin/codex', '/usr/local/bin/codex']
     for candidate in candidates:
@@ -101,7 +158,10 @@ class StdioRpc:
     MAX_LINE = 8 * 1024 * 1024
     WRITE_TIMEOUT = 10
 
-    def __init__(self, binary, cwd, overrides=()):
+    def __init__(self, binary, cwd, overrides=(), *, deadline=None):
+        if os.name == 'nt' and str(binary).lower().endswith(('.cmd', '.bat')):
+            raise RpcError('codex_native_executable_required')
+        self.deadline = deadline
         self.lock = threading.RLock()
         self.write_lock = threading.Lock()
         self.pending = {}
@@ -114,9 +174,12 @@ class StdioRpc:
             argv.extend(['-c', override])
         argv.extend(['app-server', '--listen', 'stdio://'])
         try:
+            if deadline is not None:
+                remaining_timeout(deadline)
             self.child = subprocess.Popen(argv, cwd=cwd, env=child_environment(),
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                bufsize=0, close_fds=True, start_new_session=(os.name == 'posix'))
+                bufsize=0, close_fds=True, start_new_session=(os.name == 'posix'),
+                creationflags=process_creation_flags())
         except OSError:
             raise RpcError('codex_process_unavailable')
         self.reader = threading.Thread(target=self._read, daemon=True, name='office-codex-rpc')
@@ -127,24 +190,24 @@ class StdioRpc:
         self.stderr_reader.start()
         self.writer.start()
 
-    def _signal_owned(self, sig):
+    def _signal_owned(self, *, force=False):
         try:
             if os.name == 'posix':
-                os.killpg(self.child.pid, sig)
-            elif sig == signal.SIGTERM:
-                self.child.terminate()
-            else:
+                os.killpg(self.child.pid, signal.SIGKILL if force else signal.SIGTERM)
+            elif force:
                 self.child.kill()
+            else:
+                self.child.terminate()
         except ProcessLookupError:
             pass
         except PermissionError:
             # macOS can report EPERM for an already reaped process group.
             # Re-check our owned launcher before any PID-only fallback.
             if self.child.poll() is None:
-                if sig == signal.SIGTERM:
-                    self.child.terminate()
-                else:
+                if force:
                     self.child.kill()
+                else:
+                    self.child.terminate()
 
     def _write_loop(self):
         while not self.closed.is_set():
@@ -208,7 +271,7 @@ class StdioRpc:
 
     def _write(self, value):
         raw = (json.dumps(value, ensure_ascii=False, separators=(',', ':')) + '\n').encode()
-        with self.write_lock:
+        with deadline_lock(self.write_lock, self.deadline):
             if self.closed.is_set():
                 raise RpcError('codex_process_closed')
             item = {'raw': raw, 'event': threading.Event(), 'ok': False}
@@ -216,10 +279,12 @@ class StdioRpc:
                 self.writes.put_nowait(item)
             except queue.Full:
                 raise RpcError('codex_write_queue_full')
-            if not item['event'].wait(self.WRITE_TIMEOUT) or not item['ok']:
+            # Once enqueued, expiry is an uncertain write, never an unsent RPC.
+            budget = max(0, min(self.WRITE_TIMEOUT, self.deadline - time.monotonic())) if self.deadline is not None else self.WRITE_TIMEOUT
+            if not item['event'].wait(budget) or not item['ok']:
                 self._fail()
                 if self.child.poll() is None:
-                    self._signal_owned(signal.SIGTERM)
+                    self._signal_owned()
                 # A partial write cannot be distinguished from accepted input.
                 raise RpcError('codex_write_unknown', sent=True)
 
@@ -233,7 +298,8 @@ class StdioRpc:
         try:
             self._write({'id': ident, 'method': method, 'params': params})
             sent = True
-            if not waiting['event'].wait(timeout):
+            budget = remaining_timeout(self.deadline, timeout) if self.deadline is not None else timeout
+            if not waiting['event'].wait(budget):
                 raise RpcError('codex_rpc_timeout', sent=True)
             response = waiting['message']
             if response is None:
@@ -270,20 +336,22 @@ class StdioRpc:
 
     def close(self):
         self._fail()
-        if self.child.poll() is None:
-            self._signal_owned(signal.SIGTERM)
-            try:
-                self.child.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                self._signal_owned(signal.SIGKILL)
-                self.child.wait(timeout=2)
-            # A launcher can exit before a child that ignored SIGTERM. This
-            # group was allocated exclusively for our still-live launcher.
-            if os.name == 'posix':
-                self._signal_owned(signal.SIGKILL)
-        for stream in (self.child.stdin, self.child.stdout, self.child.stderr):
-            try:
-                stream.close()
-            except (OSError, ValueError):
-                pass
+        try:
+            if self.child.poll() is None:
+                self._signal_owned()
+                try:
+                    self.child.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    self._signal_owned(force=True)
+                    self.child.wait(timeout=2)
+                # A launcher can exit before a child that ignored SIGTERM. This
+                # group was allocated exclusively for our still-live launcher.
+                if os.name == 'posix':
+                    self._signal_owned(force=True)
+        finally:
+            for stream in (self.child.stdin, self.child.stdout, self.child.stderr):
+                try:
+                    stream.close()
+                except (OSError, ValueError):
+                    pass
 

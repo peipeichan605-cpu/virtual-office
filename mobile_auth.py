@@ -14,12 +14,12 @@ from pathlib import Path
 import re
 import secrets
 import sqlite3
-import stat
 import threading
 import time
 import uuid
 from collections import OrderedDict
 from contextlib import contextmanager
+from private_files import ensure_private_directory, prepare_private_file, require_private
 
 
 class MobileAuthError(ValueError):
@@ -97,22 +97,26 @@ class MobileAuth:
         self._issuer = object()
         self._rates = OrderedDict()
         root = Path(config['data_dir']).expanduser()
-        root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        info = root.lstat()
-        if (not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077
-                or hasattr(os, 'getuid') and info.st_uid != os.getuid()):
-            raise MobileAuthError('mobile_private_directory_required', 503)
+        try:
+            ensure_private_directory(root)
+        except (ValueError, OSError) as error:
+            raise MobileAuthError('mobile_private_directory_required', 503) from error
         path = root / 'mobile-auth.sqlite3'
         try:
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, 'O_NOFOLLOW', 0), 0o600)
         except FileExistsError:
             pass
         else:
-            os.close(fd)
-        info = path.lstat()
-        if (not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077
-                or hasattr(os, 'getuid') and info.st_uid != os.getuid()):
-            raise MobileAuthError('mobile_private_database_required', 503)
+            try:
+                prepare_private_file(path, fd)
+            except (ValueError, OSError) as error:
+                raise MobileAuthError('mobile_private_database_required', 503) from error
+            finally:
+                os.close(fd)
+        try:
+            require_private(path)
+        except (ValueError, OSError) as error:
+            raise MobileAuthError('mobile_private_database_required', 503) from error
         self.db = sqlite3.connect(str(path), check_same_thread=False, timeout=3, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.execute('PRAGMA secure_delete=ON')

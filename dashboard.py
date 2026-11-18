@@ -28,7 +28,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from history import HistoryStore, redact
+from history import HistoryStore, open_native_rollout, redact
 from configuration import DEFAULT_CONFIG, codex_targets, load_config
 from event_ingest import ingest, EventConflict, validate_event
 from invitations import Invitations, InvitationError
@@ -68,8 +68,7 @@ def atomic_json(path, data):
 
 
 def bounded_json(path, limit=256 * 1024):
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    with os.fdopen(fd) as f:
+    with open_native_rollout(path) as f:
         s = os.fstat(f.fileno())
         if not stat.S_ISREG(s.st_mode) or s.st_size > limit:
             raise ValueError('Invalid source file')
@@ -84,6 +83,17 @@ def alive(pid):
         return True
     except OSError:
         return False
+
+
+def process_stop_metadata(pid):
+    """Describe an exact owned-process stop; never execute it here."""
+    if type(pid) is not int or pid < 2:
+        raise ValueError('Invalid Office process ID')
+    if sys.platform == 'win32':
+        argv = ['taskkill', '/PID', str(pid), '/T', '/F']
+    else:
+        argv = ['/bin/kill', '-TERM', str(pid)]
+    return {'stop_target': ' '.join(argv), 'stop_argv': argv}
 
 
 class CodexTail:
@@ -180,8 +190,7 @@ class CodexTail:
         return {'status': self.state[0], 'step': self.state[1], 'source_time': rec.get('timestamp'), 'run_id':self.run}
 
     def read(self):
-        fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
-        with os.fdopen(fd, 'rb') as f:
+        with open_native_rollout(self.path) as f:
             s = os.fstat(f.fileno())
             if not stat.S_ISREG(s.st_mode):
                 raise ValueError('Invalid rollout')
@@ -927,7 +936,7 @@ class Bridge:
 
     def status(self):
         state = {'run_id': self.config['run_id'], 'pid': os.getpid(),
-                 'stop_target': '/bin/kill -TERM %s' % os.getpid(), 'updated_at': utc(),
+                 **process_stop_metadata(os.getpid()), 'updated_at': utc(),
                  'state': 'running' if not self.stop.is_set() else 'stopped', 'dry_run': self.dry_run,
                  'counts': self.counts.copy(), 'queue_depth': self.outbound.qsize(),
                  'source_count': len(self.sources), 'sources': self.sources.copy(),
@@ -1470,8 +1479,8 @@ def proxy_handler(bridge):
                 public = (ROOT / 'public').resolve()
                 target = (public / urllib.parse.unquote(u.path).lstrip('/')).resolve()
                 if target.is_dir():
-                    target = target / 'index.html'
-                if not str(target).startswith(str(public) + '/') or not target.is_file():
+                    target = (target / 'index.html').resolve()
+                if public not in target.parents or not target.is_file():
                     return self.small(404, {'error': 'not_found'})
                 body = target.read_bytes()
                 self.send_response(200)
@@ -1560,8 +1569,7 @@ def main():
     parser.add_argument('--duration', type=int)
     args = parser.parse_args()
     config_path = Path(args.config).expanduser().absolute()
-    if config_path.stat().st_mode & 0o077:
-        raise SystemExit('Private configuration must have mode 0600')
+    # The shared loader enforces the platform's private-file policy.
     config = load_config(config_path)
     if not config.get('run_dir'):
         config['run_id'] = 'office-' + uuid.uuid4().hex[:12]
@@ -1575,7 +1583,7 @@ def main():
     mobile_server = create_server(bridge, ROOT / 'public')
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: bridge.stop.set())
-    atomic_json(bridge.run_dir / 'pid.json', {'pid': os.getpid(), 'stop_target': '/bin/kill -TERM %s' % os.getpid(), 'script': str(Path(__file__).resolve())})
+    atomic_json(bridge.run_dir / 'pid.json', {'pid': os.getpid(), **process_stop_metadata(os.getpid()), 'script': str(Path(__file__).resolve())})
     threads = [threading.Thread(target=f, daemon=True) for f in (bridge.publish_loop, bridge.observe_loop, lambda:bridge.commands.run(bridge.stop), lambda:bridge.cursor_cloud_sync.run(bridge.stop), lambda:bridge.grok_sdk_sync.run(bridge.stop), server.serve_forever)]
     if mobile_server:
         threads.append(threading.Thread(target=mobile_server.serve_forever,daemon=True))

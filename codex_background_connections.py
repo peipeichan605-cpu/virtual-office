@@ -18,6 +18,7 @@ from connections import ConnectionError
 from history import timestamp
 from security_keys import integrity_fingerprint, matches_integrity
 from workspaces import workspace_path
+from codex_rpc import PROBE_TIMEOUT, RpcError, deadline_lock
 
 
 def request_uuid(value):
@@ -29,9 +30,9 @@ def request_uuid(value):
     return value
 
 
-def _default_probe(settings):
+def _default_probe(settings, *, deadline=None):
     from codex_background import probe
-    return probe(settings)
+    return probe(settings, deadline=deadline)
 
 
 def _model_metadata(value, configured):
@@ -81,51 +82,67 @@ class CodexBackgroundConnections:
                 state TEXT NOT NULL, response TEXT NOT NULL, reason TEXT, created_at TEXT NOT NULL)''')
 
     def _probe(self):
+        # Concurrent readers share cached work, but waiting for that work must
+        # consume the same budget as discovery and the native metadata reads.
+        deadline = time.monotonic() + PROBE_TIMEOUT
+        try:
+            with deadline_lock(self._probe_lock, deadline):
+                return self._probe_before(deadline)
+        except RpcError:
+            return {'available': False, 'logged_in': False, 'reason': 'codex_rpc_timeout',
+                    'version': None, 'model': None, 'runtime_source': None,
+                    **_model_metadata({}, None)}
+
+    def _probe_before(self, deadline):
         settings = self.bridge.config.get('command_adapters', {}).get('codex_background', {})
         cache_key = settings.get('binary')
         if self._default_runtime_probe:
             # App upgrades and an installation switching to a usable bundled
             # runtime invalidate cached failure/model metadata immediately.
-            from codex_rpc import RpcError, resolve_binary, runtime_info
+            from codex_rpc import resolve_binary, runtime_info
             try:
-                cache_key = runtime_info(resolve_binary(settings))['identity']
-            except (RpcError, OSError):
+                cache_key = runtime_info(resolve_binary(settings, deadline=deadline))['identity']
+            except RpcError as error:
+                if error.code == 'codex_rpc_timeout':
+                    raise
                 cache_key = ('unavailable', cache_key)
-        with self._probe_lock:
-            if self._probe_cache and self._probe_cache[0] == cache_key and time.monotonic() < self._probe_cache[1]:
-                return copy.deepcopy(self._probe_cache[2])
-            try:
-                callback = self.runtime_probe if callable(self.runtime_probe) else self.runtime_probe.probe
-                value = callback(settings)
-                if not isinstance(value, dict):
-                    raise ValueError()
-            except Exception:
-                value = {'available': False, 'reason': 'codex_probe_failed', 'logged_in': None}
-            # Only capability metadata crosses the owner-facing API. In
-            # particular, never forward account/read or auth details verbatim.
-            available = value.get('available') is True
-            logged_in = value.get('logged_in') if type(value.get('logged_in')) is bool else None
-            reason = None if available and logged_in is True else (
-                'codex_login_required' if available and logged_in is False else
-                'codex_login_unknown' if available else 'codex_runtime_required')
-            safe_reasons = {'codex_binary_unavailable', 'codex_version_unavailable',
-                'codex_login_required', 'codex_login_unknown', 'codex_process_unavailable',
-                'codex_process_closed', 'codex_rpc_timeout', 'codex_rpc_rejected',
-                'codex_probe_unavailable', 'codex_probe_failed', 'codex_runtime_required'}
-            if isinstance(value.get('reason'), str) and value['reason'] in safe_reasons:
-                reason = value['reason']
-            version = value.get('version')
-            if not isinstance(version, str) or not re.fullmatch(r'[A-Za-z0-9 .+_-]{1,80}', version):
-                version = None
-            model = value.get('model')
-            if not isinstance(model, str) or not re.fullmatch(CODEX_BACKGROUND_MODEL, model):
-                model = None
-            result = {'available': available, 'logged_in': logged_in,
-                      'reason': reason, 'version': version, 'model': model,
-                      'runtime_source':value.get('runtime_source') if value.get('runtime_source') in {'desktop_app','cli'} else None,
-                      **_model_metadata(value, model)}
-            self._probe_cache = (cache_key, time.monotonic() + 30, result)
-            return copy.deepcopy(result)
+            except OSError:
+                cache_key = ('unavailable', cache_key)
+        if self._probe_cache and self._probe_cache[0] == cache_key and time.monotonic() < self._probe_cache[1]:
+            return copy.deepcopy(self._probe_cache[2])
+        try:
+            callback = self.runtime_probe if callable(self.runtime_probe) else self.runtime_probe.probe
+            value = callback(settings, deadline=deadline) if callback is _default_probe else callback(settings)
+            if not isinstance(value, dict):
+                raise ValueError()
+        except Exception:
+            value = {'available': False, 'reason': 'codex_probe_failed', 'logged_in': None}
+        # Only capability metadata crosses the owner-facing API. In
+        # particular, never forward account/read or auth details verbatim.
+        available = value.get('available') is True
+        logged_in = value.get('logged_in') if type(value.get('logged_in')) is bool else None
+        reason = None if available and logged_in is True else (
+            'codex_login_required' if available and logged_in is False else
+            'codex_login_unknown' if available else 'codex_runtime_required')
+        safe_reasons = {'codex_binary_unavailable', 'codex_version_unavailable',
+            'codex_native_executable_required',
+            'codex_login_required', 'codex_login_unknown', 'codex_process_unavailable',
+            'codex_process_closed', 'codex_rpc_timeout', 'codex_rpc_rejected',
+            'codex_probe_unavailable', 'codex_probe_failed', 'codex_runtime_required'}
+        if isinstance(value.get('reason'), str) and value['reason'] in safe_reasons:
+            reason = value['reason']
+        version = value.get('version')
+        if not isinstance(version, str) or not re.fullmatch(r'[A-Za-z0-9 .+_-]{1,80}', version):
+            version = None
+        model = value.get('model')
+        if not isinstance(model, str) or not re.fullmatch(CODEX_BACKGROUND_MODEL, model):
+            model = None
+        result = {'available': available, 'logged_in': logged_in,
+                  'reason': reason, 'version': version, 'model': model,
+                  'runtime_source':value.get('runtime_source') if value.get('runtime_source') in {'desktop_app','cli'} else None,
+                  **_model_metadata(value, model)}
+        self._probe_cache = (cache_key, time.monotonic() + 30, result)
+        return copy.deepcopy(result)
 
     def _epoch(self, ident):
         db = self.bridge.history.db

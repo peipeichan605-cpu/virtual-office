@@ -1,30 +1,33 @@
 請使用你能操作的本機工具，幫我從 GitHub 下載、安裝及啟動 Virtual Office。請實際完成並以繁體中文回覆，不要只提供教學。一般下載、檢查及可逆的安裝步驟請自行處理；只有需要登入、系統批准、改動既有工作或缺少必要資料時才問我。
 
 官方專案：https://github.com/peipeichan605-cpu/virtual-office
-本 Prompt 核對版本：0.2.0-preview（2026-11-18）。下載以此倉庫執行當時的 main 為準，記錄實際 VERSION 及完整 commit；不要假設版本號就是 Git tag，也不要使用舊版 Release 下載連結。若版本有變，先閱讀下載版本的文件及安裝程式，按其實際介面操作。
+本 Prompt 核對版本：0.2.1-preview（2026-11-18）。下載以此倉庫執行當時的 main 為準，記錄實際 VERSION 及完整 commit；不要假設版本號就是 Git tag，也不要使用舊版 Release 下載連結。若版本有變，先閱讀下載版本的文件及安裝程式，按其實際介面操作。
 
 1. 確認執行位置與安裝環境
 先確認你能操作我的電腦，檢查作業系統、Python、Git 及預定資料夾。雲端沙盒不能當成我的本機；無法操作本機就如實回報未安裝，不要把雲端 localhost 當成我的入口。
-基本 OFFICE 需要 Python 3.9 或以上、可寫入的資料夾及下載 UI 素材的網絡；基本服務不需要 pip 套件、Node.js、平台帳戶或模型 API key。可選平台另有依賴，例如 Grok SDK 需要 Node.js 22.13 或以上，不要為基本安裝預先安裝全部平台環境。目前 macOS 已有實機驗證，其他系統先核對相容性；不要宣稱已全面支援，也不要擅自另建虛擬機或容器。
+本次要做完整功能安裝，先準備好 Codex、Cursor SDK、Grok SDK 三種接駁的執行環境，再交付。需要可寫入的資料夾及下載 UI／固定 SDK 的網絡。選用健康的 Python 3.10 或以上（須能匯入 ssl、sqlite3、venv、plistlib）；Windows 的 Cursor SDK 需要 x64 Python。已有 Python 3.9 的 OFFICE 核心可保留，SDK 使用安裝專用的相容 Python，不覆寫系統 Python。
+檢查 Node.js 22.13 或以上及相容的本機 Codex app-server；缺少時依該平台官方安裝方法準備，正常可逆的依賴安裝毋須逐項問我，遇系統批准則停在確切批准步驟。優先沿用已裝且健康的程式；Windows Codex 使用可驗證的原生 codex.exe，不以 .cmd／.bat 或任意 shell 指令代替。不要從我的另一部電腦搬程式或憑證，不掃描全機聊天、不另建虛擬機或容器。不要因某平台不能支援，就宣稱所有功能已備妥。
 
 2. 選擇獨立資料夾並下載
 在我有寫入權限的位置選擇獨立的 virtual-office 資料夾，簡短告知位置；不要掃描整個家目錄。先按第 3 項檢查是否已有安裝；只有確定是新安裝才下載到新資料夾。優先使用 Git，將以下目標換成實際新資料夾：
 git clone --branch main https://github.com/peipeichan605-cpu/virtual-office.git "<安裝目錄>"
 進入該資料夾，記錄 git rev-parse HEAD 及 VERSION。公開倉庫下載不需要我提供 GitHub 密碼或 token。沒有 Git 時，可從該倉庫已確認的完整 commit 下載 GitHub 原始碼 ZIP，記錄 commit 並檢查解壓路徑不能逃出新資料夾；不要猜測不存在的 Release 資產。
-先閱讀 README.md、docs/QUICKSTART.md、NOTICE.md、office.py 及 setup_ui.py。只使用這個安裝自己的檔案和設定。
+先閱讀 README.md、docs/QUICKSTART.md、docs/CURSOR-SDK.md、docs/CODEX-BACKGROUND.md、docs/GROK-SDK.md、NOTICE.md、office.py 及 setup_ui.py。只使用這個安裝自己的檔案和設定。Git checkout 必須遵守 .gitattributes 的 LF 規則；不要為了 Windows 換行而改寫 UI 雜湊或略過校驗。
 
 3. 分清全新安裝與已有 OFFICE
 若目標已存在、已有 .office/ 或自訂設定，先辨認原安裝；不要覆寫、重複 clone 或重新 init。最新版已正常運行便沿用。需要更新舊版時，依 docs/UPGRADING.md 保留私人資料、原設定及自訂修改；有工作進行中先安排合適的更新時間。不要強制 reset、停止不相關程式或直接刪掉 public/。重建 UI 前按更新指南備份不同版本的 public/，保留可回復副本。
 
 4. 只對全新安裝執行初始化及啟動
-確認 4318 是空閒埠；被佔用就選另一個已確認空閒的非特權埠，不停止原程式。在安裝目錄執行以下命令，將 python3 換成已確認可用的 Python 3.9+，並把 <空閒埠> 換成實際數字：
+確認 4318 是空閒埠；被佔用就選另一個已確認空閒的非特權埠，不停止原程式。在安裝目錄執行以下命令，將 python3 換成已確認可用的 Python（Windows 可用 python／py -3 或完整路徑），並把 <空閒埠> 換成實際數字：
 
 python3 setup_ui.py
 python3 office.py --config .office/config.json init --port <空閒埠>
+python3 office.py --config .office/config.json setup-platforms
+python3 office.py --config .office/config.json setup-platforms --check
 python3 office.py --config .office/config.json start
 python3 office.py --config .office/config.json status
 
-每一步成功才繼續。setup_ui.py 必須完成固定素材的雜湊校驗並回報 ui_installed=true；失敗就排查，不繞過校驗。每個 office.py 命令都明確使用這份安裝設定，--config 放在子命令之前，避免環境中的 OFFICE_CONFIG 指向別的 OFFICE。已有安裝則沿用其原本完整設定路徑。
+每一步成功才繼續。setup_ui.py 必須完成固定素材的雜湊校驗並回報 ui_installed=true；失敗就排查，不繞過校驗。setup-platforms 會在本 OFFICE 專用環境安裝固定版本 Cursor SDK，並核對 Node.js／Codex；已有 Cursor Desktop 不等於已有 SDK。setup-platforms --check 必須回報 runtimes_ready=true，否則依逐項原因補齊官方環境，再檢查；不要只重試網頁或宣稱完整安裝完成。Grok SDK 原始碼已隨套件提供，不需要另跑 npm install。每個 office.py 命令都明確使用這份安裝設定，--config 放在子命令之前，避免環境中的 OFFICE_CONFIG 指向別的 OFFICE。已有安裝則沿用其原本完整設定路徑；補裝環境後只在工作妥善處理後重載這個 OFFICE。
 start 自己會背景執行；保存它回傳的 run_id、PID、日誌位置及精確 stop_command。不要另開無限等待迴圈、額外服務或開機啟動項目。保留本機 loopback 存取，不為安裝更改防火牆、VPN 或公開網絡設定。
 
 5. 驗證成功後才交付
@@ -33,8 +36,8 @@ start 自己會背景執行；保存它回傳的 run_id、PID、日誌位置及�
 python3 office.py --config .office/config.json url
 有本機瀏覽器工具就直接開啟該私人入口，確認 3D 辦公室、基本介面及新安裝的空 Agent 名單正常；不能操作瀏覽器時，分開說明「服務已驗證，畫面待用戶確認」。錯誤只讀取本次安裝所需日誌，不輸出憑證；不要靠停用 3D、光影或功能掩蓋問題。
 
-6. 保留用戶自行選擇 Agent 及手機功能
+6. 環境準備好後，保留用戶自行登入及選擇 Agent
 全新安裝先保持空辦公室；更新或沿用原安裝則保留已有 Agent 名單及資料。不要自動加入你自己、掃描全部聊天、預設 Grok 或替我建立 Bots。告訴我之後按「＋ 邀請 Agent」或「＋ 新對話」選平台，再按該平台助手操作。SDK、Cloud 與已有 App 聊天有不同能力；角色入場不等於雙向收發已驗證。平台登入及一次性批准由我在原平台完成，不索取聊天中的密碼或金鑰。
 手機是可選步驟，不是基本安裝的前置條件。只有我選擇使用手機時，才依 docs/MOBILE-QUICKSTART.md 和「手機接入」助手，教我在手機下載官方 Tailscale、用同一帳戶登入並確認 Connected，再選權限及掃碼配對；主機設定按同版本指南完成。不要自行擴大 Agent 權限、啟用「記住手機」或更改現有 VPN；不需要 ADB 或 USB 線。
 
-最後用簡短清單交付：實際版本及 commit、安裝資料夾、服務與畫面的驗證結果、私人入口、run_id/PID（如有新啟動）、日誌位置及精確停止命令。私人入口只交給我本人或在本機瀏覽器開啟；不要公開上傳入口、.office/、憑證、配對碼或對話。仍有未完成步驟時，列明原因及我需要做的最少操作，不要宣稱全部完成。
+最後用簡短清單交付：實際版本及 commit、安裝資料夾、三個平台各自的執行環境檢查結果、服務與畫面驗證、私人入口、run_id/PID（如有新啟動）、日誌位置及精確停止命令。分清「環境已備妥」「等待本人登入／選擇 Agent」「已實測收發」；安裝完成不等於已替我登入全部帳戶。私人入口只交給我本人或在本機瀏覽器開啟；不要公開上傳入口、.office/、憑證、配對碼或對話。仍有未完成步驟時，列明原因及我需要做的最少操作，不要宣稱全部完成。

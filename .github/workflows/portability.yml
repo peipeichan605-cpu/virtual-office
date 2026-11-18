@@ -1,0 +1,25 @@
+name: Portable installation contracts
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  portability:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify native filesystem and platform contracts
+        run: python -m unittest -v test_package_portability test_private_files test_core_portability test_setup_platforms test_codex_probe_budget test_codex_runtime_selection.WindowsRuntimeSelectionTests

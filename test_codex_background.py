@@ -507,7 +507,7 @@ class ModelMetadataTests(unittest.TestCase):
     def test_probe_preserves_configured_model_and_never_starts_thread(self):
         calls = []
         class ProbeRpc:
-            def __init__(self, *args):
+            def __init__(self, *args, **kwargs):
                 pass
             def initialize(self):
                 pass

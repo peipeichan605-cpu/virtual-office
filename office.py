@@ -25,6 +25,22 @@ def request(config,path,body=None):
     with urllib.request.urlopen(req,timeout=3) as response:return json.load(response)
 
 
+def stop_metadata(config_path):
+    """Return the same installation's graceful stop command without running it."""
+    argv = [sys.executable, str(ROOT / 'office.py'), '--config', str(config_path), 'stop']
+    if sys.platform == 'win32':
+        # PowerShell single-quoted literals preserve spaces, apostrophes, $ and
+        # backticks in installation paths. The call operator invokes the Python.
+        command = '& ' + ' '.join("'" + value.replace("'", "''") + "'" for value in argv)
+        shell = 'powershell'
+    else:
+        # Keep the existing POSIX display command for compatibility; automation
+        # can use exact argv with the current interpreter from any directory.
+        command = 'python3 office.py --config ' + shlex.quote(str(config_path)) + ' stop'
+        shell = 'posix'
+    return {'stop_command': command, 'stop_shell': shell, 'stop_argv': argv}
+
+
 def require_offline(config):
     """Fail closed before security-sensitive config changes to a live service.
 
@@ -67,6 +83,10 @@ def main():
     sdk=sub.add_parser('setup-cursor-sdk',help='Install the optional pinned Cursor SDK in this installation private environment')
     sdk.add_argument('--python',help='Existing healthy Python 3.10+ executable')
     sdk.add_argument('--download-python',action='store_true',help='Use installed uv to download an isolated Python if none is usable')
+    platforms=sub.add_parser('setup-platforms',help='Prepare and verify all supported platform runtimes before first start; never logs in or creates Agents')
+    platforms.add_argument('--check',action='store_true',help='Read-only runtime verification; do not install anything')
+    platforms.add_argument('--python',help='Existing healthy Python 3.10+ for the managed Cursor SDK environment')
+    platforms.add_argument('--download-python',action='store_true',help='Use installed uv to download an isolated Python if none is usable')
     sub.add_parser('security-upgrade',help='Separate owner/feed/internal credentials and disable legacy external feed; restart required')
     mobile=sub.add_parser('mobile-configure',help='Configure the private loopback phone gateway; Tailscale policy is configured separately')
     mobile.add_argument('--origin',required=True);mobile.add_argument('--identity',required=True);mobile.add_argument('--port',type=int)
@@ -91,6 +111,14 @@ def main():
         result=setup_environment(config,args.python,args.download_python,
                                  on_started=lambda data:print(json.dumps(data),flush=True))
         print(json.dumps(result),flush=True);return
+    if args.command=='setup-platforms':
+        from setup_platforms import prepare_platforms
+        result=prepare_platforms(config,check=args.check,python=args.python,
+                                 download_python=args.download_python,
+                                 on_started=lambda data:print(json.dumps(data),flush=True))
+        print(json.dumps(result),flush=True)
+        if not result['runtimes_ready']:raise SystemExit(1)
+        return
     if args.command=='connect-hermes':
         from hermes_acp import connect_session, AcpError
         from configuration import agent_name
@@ -220,7 +248,7 @@ def main():
         with (run/'stdout.log').open('ab',buffering=0) as log:
             child=subprocess.Popen([binary,str(ROOT/'dashboard.py'),'--config',str(path)],cwd=ROOT,
                                    stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
-        print(json.dumps({'run_id':run_id,'pid':child.pid,'log':str(run/'stdout.log'),'stop_command':'python3 office.py --config '+shlex.quote(str(path))+' stop'}),flush=True)
+        print(json.dumps({'run_id':run_id,'pid':child.pid,'log':str(run/'stdout.log'),**stop_metadata(path)}),flush=True)
         for _ in range(40):
             if child.poll() is not None:raise RuntimeError('Office exited; inspect the recorded stdout log')
             try:request(config,'/api/office/work');print('Office ready.');return

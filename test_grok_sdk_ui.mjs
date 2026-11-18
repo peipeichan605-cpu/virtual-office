@@ -180,7 +180,7 @@ test('SDK network budget covers bounded login and connection reads without chang
   await officePost('/api/office/codex/background/create','fixture-key',{});
   await officePost('/api/office/cursor/local/create','fixture-key',{});
   await officePost('/api/office/commands','fixture-key',{});
-  assert.deepEqual(timeouts,[60000,60000,60000,5000,30000,30000,10000]);
+  assert.deepEqual(timeouts,[60000,60000,60000,60000,30000,30000,10000]);
   assert.ok(calls.every(row=>row.options.headers['X-Office-Key']==='fixture-key'&&row.options.credentials==='same-origin'));
 });
 

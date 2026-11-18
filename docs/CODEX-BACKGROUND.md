@@ -22,6 +22,10 @@ OFFICE 會檢查實際的 `app-server` 能力，按以下順序選擇執行程�
 2. macOS 自動檢查 `/Applications` 及 `~/Applications` 內的 App：`ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex`，以及 `Codex.app/Contents/Resources/codex`。
 3. 沒有相容 App 執行程式時，檢查 PATH 及一般安裝位置中的獨立 Codex CLI。
 
+Windows 按 PATH 尋找相容的原生 `codex.exe`，不寫死某位用戶的安裝路徑。為保持原生參數及標準輸入／輸出邊界，`.cmd`／`.bat` 啟動器不能代替執行檔；只有 npm shim 時，請安裝 Agent 按官方安裝資料提供原生執行檔。明確指定的路徑無效時不會偷偷改用另一個版本。標準完整安裝使用 `setup-platforms --check` 預先檢查 `app-server` 能力；這項檢查不會登入或建立聊天。
+
+首次讀取背景設定可能需要數秒。畫面為此項狀態檢查預留 60 秒，後端的整次原生探測共用 45 秒期限（另有有界的程序清理時間），避免一般 5 秒網頁請求誤報失敗。真正超時時會顯示檢查逾時，不會自動重送指示或更換模型。
+
 畫面會區分使用 Desktop App 隨附程式或獨立 CLI。每個安裝按自己的 App 及 CLI 版本檢查，不綁定開發者電腦的版本。背景模式仍使用獨立程序，不需要開啟或切換 App 聊天視窗，也不會為選擇執行環境而複製登入資料。
 
 ## 登入、模型與權限
