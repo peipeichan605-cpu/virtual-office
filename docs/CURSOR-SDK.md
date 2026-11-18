@@ -6,11 +6,15 @@
 
 ## 一次設定
 
-OFFICE 核心仍支援 Python 3.9。Cursor SDK 需要 Python 3.10 或以上及官方 `cursor-sdk==1.3.1`；使用以下通用命令建立本安裝專用的私人環境：
+標準完整安裝的 `setup-platforms` 已包含這一步。已有 Cursor Desktop 不等於已安裝 Cursor SDK；未做完整安裝或要單獨修復此環境時，可使用以下命令。
+
+OFFICE 核心仍支援 Python 3.9。Cursor SDK 需要 Python 3.10 或以上及官方 `cursor-sdk==1.3.1`；Windows 需要 x64 Python（此固定版本未提供 Windows ARM64／32 位 wheel）。使用以下通用命令建立本安裝專用的私人環境：
 
 ```sh
 python3 office.py setup-cursor-sdk
 ```
+
+Windows 請將 `python3` 換成已確認的 `python`、`py -3` 或 Python 完整路徑。安裝器會核對目前 Python、PATH 及 Windows Python launcher 已登記的執行環境；偵測過程不會暗中下載 Python。
 
 如果有可用的 `uv`，亦可明確允許下載獨立 Python：
 
@@ -18,7 +22,9 @@ python3 office.py setup-cursor-sdk
 python3 office.py setup-cursor-sdk --download-python
 ```
 
-使用自訂 OFFICE 設定時，在命令前加 `--config /absolute/path/to/config.json`。程式會檢查 Python 的實際匯入能力，保留系統 Python，並將獨立環境及安裝紀錄放在這個 OFFICE 的私人資料目錄。環境就緒後，用原有 `office.py stop`、`office.py start` 重載 OFFICE。後續啟動會辨認已驗證的私人 SDK 環境；未安裝 SDK 的普通 OFFICE 保留原來的啟動方式。
+使用自訂 OFFICE 設定時，在子命令前加 `--config "完整設定路徑"`。程式會檢查 Python 的實際匯入能力，保留系統 Python，並將獨立環境及安裝紀錄放在這個 OFFICE 的私人資料目錄。新安裝在首次啟動前準備；已有服務則先妥善處理工作，再用同一設定的 `office.py stop`、`office.py start` 重載。後續啟動會辨認已驗證的私人 SDK 環境。
+
+如果畫面仍未備妥，會分開顯示「尚未安裝 SDK」「服務 Python 太舊」「SDK 版本不符」或「Windows Python 架構不支援」，並提供可交給安裝 Agent 的設定 Prompt。SDK 裝到另一個 Python 並不等於 OFFICE 已使用它；重載後再檢查本安裝的狀態。`setup-platforms --check` 只檢查環境，不讀取帳戶憑證。
 
 ## 建立對話
 

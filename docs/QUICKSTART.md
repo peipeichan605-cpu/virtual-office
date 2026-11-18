@@ -5,19 +5,28 @@ Virtual Office 是在你自己的電腦運行的 3D Agent 辦公室。新安裝�
 
 ## 全新安裝
 
-需要 Python 3.9 或以上及網絡連線下載固定版本的 UI 素材。基本 Python 服務
-使用標準函式庫；可選平台有各自的執行環境及登入要求。已在 macOS 驗證，
-其他作業系統仍需實機驗證。
+標準安裝準備完整的 Codex、Cursor SDK、Grok SDK 執行環境。需要 Python 3.10
+或以上、Node.js 22.13 或以上、相容的本機 Codex，以及網絡連線下載固定 UI
+素材及 Cursor SDK。Windows 的 Cursor SDK 需要 x64 Python；Codex 使用原生
+`codex.exe`。已有 Python 3.9 的 OFFICE 核心仍可沿用，SDK 另用獨立環境。
 
 將套件放在自己選擇的資料夾，在該資料夾執行：
 
 ```sh
 python3 setup_ui.py
 python3 office.py init
+python3 office.py setup-platforms
+python3 office.py setup-platforms --check
 python3 office.py start
 python3 office.py status
 python3 office.py url
 ```
+
+Windows 把 `python3` 換成已確認的 `python`、`py -3` 或完整執行檔路徑。
+`setup-platforms` 安裝固定版本 Cursor SDK 到這個 OFFICE 的私人環境，並檢查
+Node.js／Codex。缺少環境時會逐項列出原因，補齊官方執行程式後重新檢查；
+`runtimes_ready=true` 才算完成環境準備。這一步不讀取帳戶憑證或建立聊天，
+帳戶登入及實際收發另行驗證。已有 Cursor App 並不代表已裝好 Cursor SDK。
 
 最後一行在你的終端顯示私人入口，請自己開啟，不要公開分享。設定、登入資料、
 Agent 綁定、對話與資料庫存於此安裝的 `.office/`，不要上傳 GitHub。
