@@ -1,7 +1,8 @@
 """Portable file/queue fixtures; no live Office, native queue or account access."""
 import io
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+import shlex
 import stat
 import subprocess
 import tempfile
@@ -10,8 +11,9 @@ import unittest
 from unittest.mock import Mock, patch
 
 from command_adapters import CodexAppAdapter, DeliveryError
-from dashboard import bounded_json, proxy_handler
+from dashboard import bounded_json, process_stop_metadata, proxy_handler
 from history import open_native_rollout
+from office import stop_metadata
 from workspaces import workspace_path
 
 
@@ -174,6 +176,47 @@ class WindowsWorkspaceTests(unittest.TestCase):
             extended = '\\\\?\\' + ordinary
             self.assertEqual(workspace_path(extended), workspace_path(ordinary))
             self.assertEqual(workspace_path(extended + '\\child'), workspace_path(ordinary + '\\child'))
+
+
+class StopMetadataTests(unittest.TestCase):
+    def test_windows_graceful_stop_uses_current_python_and_literal_installation_paths(self):
+        executable = "C:\\Python's Folder\\python.exe"
+        root = PureWindowsPath("C:/External User/Office O'Brien")
+        config = str(root / 'data' / 'custom $(literal) `name`.json')
+        with patch('office.sys.platform', 'win32'), \
+                patch('office.sys.executable', executable), patch('office.ROOT', root):
+            metadata = stop_metadata(config)
+        self.assertEqual(metadata['stop_argv'],
+                         [executable, str(root / 'office.py'), '--config', config, 'stop'])
+        self.assertEqual(metadata['stop_shell'], 'powershell')
+        self.assertEqual(metadata['stop_command'],
+                         "& 'C:\\Python''s Folder\\python.exe' 'C:\\External User\\Office O''Brien\\office.py' "
+                         "'--config' 'C:\\External User\\Office O''Brien\\data\\custom $(literal) `name`.json' 'stop'")
+
+    def test_posix_display_is_compatible_and_argv_is_independent_of_cwd_and_path(self):
+        root = Path('/external/Office Project')
+        config = "/external/Office Project/private's/config.json"
+        with patch('office.sys.platform', 'darwin'), \
+                patch('office.sys.executable', '/chosen/python'), patch('office.ROOT', root):
+            metadata = stop_metadata(config)
+        self.assertEqual(metadata['stop_argv'],
+                         ['/chosen/python', str(root / 'office.py'), '--config', config, 'stop'])
+        self.assertEqual(shlex.split(metadata['stop_command']),
+                         ['python3', 'office.py', '--config', config, 'stop'])
+        self.assertEqual(metadata['stop_shell'], 'posix')
+
+    def test_process_stop_is_scoped_to_pid_and_preserves_posix_target(self):
+        with patch('dashboard.sys.platform', 'win32'):
+            metadata = process_stop_metadata(54321)
+        self.assertEqual(metadata['stop_target'], 'taskkill /PID 54321 /T /F')
+        self.assertEqual(metadata['stop_argv'], ['taskkill', '/PID', '54321', '/T', '/F'])
+        with patch('dashboard.sys.platform', 'darwin'):
+            metadata = process_stop_metadata(54321)
+        self.assertEqual(metadata['stop_target'], '/bin/kill -TERM 54321')
+        self.assertEqual(metadata['stop_argv'], ['/bin/kill', '-TERM', '54321'])
+        for invalid in (0, 1, -1, True, '54321 & another-command'):
+            with self.assertRaises(ValueError):
+                process_stop_metadata(invalid)
 
 
 if __name__ == '__main__':

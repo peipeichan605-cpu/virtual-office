@@ -25,6 +25,22 @@ def request(config,path,body=None):
     with urllib.request.urlopen(req,timeout=3) as response:return json.load(response)
 
 
+def stop_metadata(config_path):
+    """Return the same installation's graceful stop command without running it."""
+    argv = [sys.executable, str(ROOT / 'office.py'), '--config', str(config_path), 'stop']
+    if sys.platform == 'win32':
+        # PowerShell single-quoted literals preserve spaces, apostrophes, $ and
+        # backticks in installation paths. The call operator invokes the Python.
+        command = '& ' + ' '.join("'" + value.replace("'", "''") + "'" for value in argv)
+        shell = 'powershell'
+    else:
+        # Keep the existing POSIX display command for compatibility; automation
+        # can use exact argv with the current interpreter from any directory.
+        command = 'python3 office.py --config ' + shlex.quote(str(config_path)) + ' stop'
+        shell = 'posix'
+    return {'stop_command': command, 'stop_shell': shell, 'stop_argv': argv}
+
+
 def require_offline(config):
     """Fail closed before security-sensitive config changes to a live service.
 
@@ -232,7 +248,7 @@ def main():
         with (run/'stdout.log').open('ab',buffering=0) as log:
             child=subprocess.Popen([binary,str(ROOT/'dashboard.py'),'--config',str(path)],cwd=ROOT,
                                    stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
-        print(json.dumps({'run_id':run_id,'pid':child.pid,'log':str(run/'stdout.log'),'stop_command':'python3 office.py --config '+shlex.quote(str(path))+' stop'}),flush=True)
+        print(json.dumps({'run_id':run_id,'pid':child.pid,'log':str(run/'stdout.log'),**stop_metadata(path)}),flush=True)
         for _ in range(40):
             if child.poll() is not None:raise RuntimeError('Office exited; inspect the recorded stdout log')
             try:request(config,'/api/office/work');print('Office ready.');return

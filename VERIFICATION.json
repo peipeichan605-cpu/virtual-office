@@ -1,77 +1,13 @@
 {
-  "release": "0.2.0-preview",
-  "verified_at_utc": "2026-11-18T07:49:30.225277+00:00",
-  "verification_scope": "This release: relocated fresh pinned UI install, 36 selected UI test files, and Python syntax compilation. Historical feature tests below retain their original dates and do not represent a full rerun.",
+  "release": "0.2.1-preview",
+  "verified_at_utc": "2026-11-18T10:16:43.850629+00:00",
+  "verification_scope": "This release: generic platform-runtime setup, Windows portability contracts, isolated Windows dependency install and empty-office HTTP/start/stop smoke, plus relevant Mac regressions. Account inference and visual rendering were not newly tested; historical feature records retain their own dates.",
   "release_validation": {
-    "installed_ui": {
-      "expected_files": 126,
-      "actual_files": 126,
-      "hash_mismatches": [],
-      "upstream_commit": "76232f7af1a94d3cbd3d0b1cf05e460c85637acf"
-    },
-    "node_counts": {
-      "tests": 400,
-      "suites": 0,
-      "pass": 400,
-      "fail": 0,
-      "cancelled": 0,
-      "skipped": 0,
-      "todo": 0
-    },
-    "node_test_files": [
-      "test_aura_cache.mjs",
-      "test_capture_restore.mjs",
-      "test_codex_background_ui.mjs",
-      "test_codex_model_ui.mjs",
-      "test_commands.mjs",
-      "test_composer_scope.mjs",
-      "test_connection_assistant.mjs",
-      "test_cursor_sdk_ui.mjs",
-      "test_dialogue_layout.mjs",
-      "test_dialogue_portal.mjs",
-      "test_dialogue_scope.mjs",
-      "test_dialogue_window.mjs",
-      "test_feed_connection.mjs",
-      "test_follower_geometry.mjs",
-      "test_gaussian_kernel.mjs",
-      "test_graphics_settings.mjs",
-      "test_graphics_settings_ui.mjs",
-      "test_grok_sdk_commands.mjs",
-      "test_grok_sdk_ui.mjs",
-      "test_ground_layout.mjs",
-      "test_header_actions.mjs",
-      "test_history_detail.mjs",
-      "test_idle_render.mjs",
-      "test_lighting_layout.mjs",
-      "test_logout_controls.mjs",
-      "test_mesh_bounds.mjs",
-      "test_platform_identity.mjs",
-      "test_post_pipeline.mjs",
-      "test_render_pacing.mjs",
-      "test_scene_graphics_settings.mjs",
-      "test_seating.mjs",
-      "test_static_furniture.mjs",
-      "test_subagent_layout.mjs",
-      "test_sunpatch_instancing.mjs",
-      "test_ui_navigation.mjs",
-      "test_workspace_scope.mjs"
-    ],
-    "excluded_js_files": [
-      "test_grok_sdk_worker.mjs",
-      "test_mobile_owner.mjs",
-      "test_mobile_pairing_input.mjs",
-      "test_mobile_session_controls.mjs",
-      "test_mobile_session_recovery.mjs",
-      "test_mobile_ui.mjs"
-    ],
-    "three_fixture_version": "0.180.0",
-    "python_files_compiled": 122,
-    "python_runtime_tests_run": false,
     "passed": true,
-    "limitations": [
-      "Unit/packaging checks are not browser rendering, real phone, live provider, deployment-policy or security assurance.",
-      "Mobile auth/session suites and SDK authentication-worker fixture excluded; previous verification records remain separately dated."
-    ]
+    "details": "windows_complete_install",
+    "previous_release_details": "previous_release_validation_0_2_0",
+    "authenticated_inference_tested": false,
+    "live_browser_rendering_tested": false
   },
   "initial_release_0_1_0": {
     "release": "0.1.0-preview",
@@ -575,6 +511,145 @@
       "network": "offline cached modules; GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local",
       "scope": "Exact POST renewal and remember routes through the private tsnet boundary.",
       "live_phone_tested_by_this_suite": false
+    }
+  },
+  "windows_complete_install": {
+    "verified_date": "2026-11-18",
+    "code_commit": "c3e8b66f9e1342e66466bbcf480f5cef478b7526",
+    "github_ci": {
+      "run_id": 44282783467,
+      "windows": "passed",
+      "macos": "passed",
+      "ubuntu": "passed"
+    },
+    "windows_native": {
+      "tests_run": 48,
+      "passed": 44,
+      "skipped": 4,
+      "skip_reason": "POSIX mode test and host symlink permissions",
+      "python": "3.12.2 x64",
+      "ui_files_verified": 126,
+      "runtime_setup_exit": 0,
+      "runtime_check_exit": 0,
+      "runtimes_ready": true,
+      "fresh_office": {
+        "state": "running",
+        "local_ok": true,
+        "selected": 0,
+        "static_http": 200,
+        "stopped_after_test": true
+      },
+      "codex_status": {
+        "http": 200,
+        "elapsed_ms": 2937,
+        "available": true,
+        "logged_in": true,
+        "version": "0.169.0-alpha.11.1"
+      },
+      "cursor_status": {
+        "http": 200,
+        "elapsed_ms": 32,
+        "sdk_available": true,
+        "sdk_version": "1.3.1",
+        "credential_configured": false
+      }
+    },
+    "mac_regression": {
+      "python_run": 264,
+      "python_passed": 262,
+      "python_skipped": 2,
+      "node_run": 476,
+      "node_passed": 450,
+      "node_skipped": 26,
+      "private_file_followup_run": 72,
+      "private_file_followup_passed": 70,
+      "private_file_followup_skipped": 2
+    },
+    "limits": [
+      "No authenticated Cursor SDK inference or new Codex dialogue was created in this verification.",
+      "Fresh installation HTTP/static-byte checks do not prove visual rendering on every device.",
+      "The user installation test used an isolated folder; existing installations and accounts were preserved."
+    ],
+    "stop_metadata_followup": {
+      "mac_tests_run": 75,
+      "passed": 73,
+      "skipped": 2,
+      "windows_native_metadata_verification": "pending_final_candidate"
+    }
+  },
+  "previous_release_validation_0_2_0": {
+    "verified_at_utc": "2026-11-18T07:49:30.225277+00:00",
+    "verification_scope": "This release: relocated fresh pinned UI install, 36 selected UI test files, and Python syntax compilation. Historical feature tests below retain their original dates and do not represent a full rerun.",
+    "release_validation": {
+      "installed_ui": {
+        "expected_files": 126,
+        "actual_files": 126,
+        "hash_mismatches": [],
+        "upstream_commit": "76232f7af1a94d3cbd3d0b1cf05e460c85637acf"
+      },
+      "node_counts": {
+        "tests": 400,
+        "suites": 0,
+        "pass": 400,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "node_test_files": [
+        "test_aura_cache.mjs",
+        "test_capture_restore.mjs",
+        "test_codex_background_ui.mjs",
+        "test_codex_model_ui.mjs",
+        "test_commands.mjs",
+        "test_composer_scope.mjs",
+        "test_connection_assistant.mjs",
+        "test_cursor_sdk_ui.mjs",
+        "test_dialogue_layout.mjs",
+        "test_dialogue_portal.mjs",
+        "test_dialogue_scope.mjs",
+        "test_dialogue_window.mjs",
+        "test_feed_connection.mjs",
+        "test_follower_geometry.mjs",
+        "test_gaussian_kernel.mjs",
+        "test_graphics_settings.mjs",
+        "test_graphics_settings_ui.mjs",
+        "test_grok_sdk_commands.mjs",
+        "test_grok_sdk_ui.mjs",
+        "test_ground_layout.mjs",
+        "test_header_actions.mjs",
+        "test_history_detail.mjs",
+        "test_idle_render.mjs",
+        "test_lighting_layout.mjs",
+        "test_logout_controls.mjs",
+        "test_mesh_bounds.mjs",
+        "test_platform_identity.mjs",
+        "test_post_pipeline.mjs",
+        "test_render_pacing.mjs",
+        "test_scene_graphics_settings.mjs",
+        "test_seating.mjs",
+        "test_static_furniture.mjs",
+        "test_subagent_layout.mjs",
+        "test_sunpatch_instancing.mjs",
+        "test_ui_navigation.mjs",
+        "test_workspace_scope.mjs"
+      ],
+      "excluded_js_files": [
+        "test_grok_sdk_worker.mjs",
+        "test_mobile_owner.mjs",
+        "test_mobile_pairing_input.mjs",
+        "test_mobile_session_controls.mjs",
+        "test_mobile_session_recovery.mjs",
+        "test_mobile_ui.mjs"
+      ],
+      "three_fixture_version": "0.180.0",
+      "python_files_compiled": 122,
+      "python_runtime_tests_run": false,
+      "passed": true,
+      "limitations": [
+        "Unit/packaging checks are not browser rendering, real phone, live provider, deployment-policy or security assurance.",
+        "Mobile auth/session suites and SDK authentication-worker fixture excluded; previous verification records remain separately dated."
+      ]
     }
   }
 }

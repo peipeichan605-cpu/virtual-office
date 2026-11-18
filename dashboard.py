@@ -85,6 +85,17 @@ def alive(pid):
         return False
 
 
+def process_stop_metadata(pid):
+    """Describe an exact owned-process stop; never execute it here."""
+    if type(pid) is not int or pid < 2:
+        raise ValueError('Invalid Office process ID')
+    if sys.platform == 'win32':
+        argv = ['taskkill', '/PID', str(pid), '/T', '/F']
+    else:
+        argv = ['/bin/kill', '-TERM', str(pid)]
+    return {'stop_target': ' '.join(argv), 'stop_argv': argv}
+
+
 class CodexTail:
     """Verify session identity, then consume only event types and timestamps."""
     def __init__(self, identity, path, on_history=None, on_message=None):
@@ -925,7 +936,7 @@ class Bridge:
 
     def status(self):
         state = {'run_id': self.config['run_id'], 'pid': os.getpid(),
-                 'stop_target': '/bin/kill -TERM %s' % os.getpid(), 'updated_at': utc(),
+                 **process_stop_metadata(os.getpid()), 'updated_at': utc(),
                  'state': 'running' if not self.stop.is_set() else 'stopped', 'dry_run': self.dry_run,
                  'counts': self.counts.copy(), 'queue_depth': self.outbound.qsize(),
                  'source_count': len(self.sources), 'sources': self.sources.copy(),
@@ -1572,7 +1583,7 @@ def main():
     mobile_server = create_server(bridge, ROOT / 'public')
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: bridge.stop.set())
-    atomic_json(bridge.run_dir / 'pid.json', {'pid': os.getpid(), 'stop_target': '/bin/kill -TERM %s' % os.getpid(), 'script': str(Path(__file__).resolve())})
+    atomic_json(bridge.run_dir / 'pid.json', {'pid': os.getpid(), **process_stop_metadata(os.getpid()), 'script': str(Path(__file__).resolve())})
     threads = [threading.Thread(target=f, daemon=True) for f in (bridge.publish_loop, bridge.observe_loop, lambda:bridge.commands.run(bridge.stop), lambda:bridge.cursor_cloud_sync.run(bridge.stop), lambda:bridge.grok_sdk_sync.run(bridge.stop), server.serve_forever)]
     if mobile_server:
         threads.append(threading.Thread(target=mobile_server.serve_forever,daemon=True))

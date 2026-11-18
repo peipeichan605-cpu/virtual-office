@@ -1,3 +1,22 @@
+# 0.2.1-preview
+
+發布日期：2026-11-18。
+
+標準安裝現在先準備 Codex、Cursor SDK、Grok SDK 三個執行環境，再交付 OFFICE。`setup-platforms` 會安裝本 OFFICE 專用的固定 Cursor SDK，檢查 Codex 原生執行程式及 Grok 的 Node.js；任何一項未備妥便回報失敗及下一步。帳戶登入、Agent 選擇及實際對話驗證保持分開，新安裝仍是空名單。
+
+- 修正 Codex 狀態檢查超過 5 秒便被介面中斷的問題；整個原生探測有共用期限，介面等待時間與其配合。
+- Windows 使用相容的原生 `codex.exe`，避免把 `.cmd`／`.bat` 當成原生背景入口；程序以隱藏視窗啟動，清理只針對本次建立的程序。
+- Cursor 顯示具體 SDK 缺失、版本或 Python 相容原因。標準安裝處理固定 SDK 及專用環境；已有 Cursor Desktop 不代表已有 SDK。
+- 修正 Windows 原生路徑、靜態頁面、設定檔 UTF-8 及私人檔案權限檢查；使用 Windows ACL，保留對其他帳戶授權的拒絕規則，不自行修改已有資料夾權限。
+- Windows 啟動回條提供可直接使用的 PowerShell 停止指令及精確 argv；服務紀錄使用對應平台的指定 PID 停止方式。
+- 加入跨平台換行規則與 Windows／macOS／Linux 自動驗證。既有 3D 場景、光影、效能設定、手機與子 Agent 功能保留。
+
+Windows 隔離新安裝已實際完成三平台 runtime 準備、126 個 UI 檔案校驗、空白 OFFICE 啟動、HTTP 狀態檢查及停止。Codex 原生入口回報可用及已登入；Cursor SDK 1.3.1 可用，該測試安裝未配置 Cursor API key，因此沒有宣稱完成新帳戶對話收發。測試數量、版本與限制見 `VERIFICATION.json`。GitHub 自動測試不代替每個帳戶的真實收發或 3D 畫面檢查。
+
+更新請依 [更新指南](docs/UPGRADING.md) 保留自己的設定及私人資料，再依 [安裝指引](README.md#安裝) 補齊執行環境。不要用其他電腦的憑證或設定覆蓋本機安裝。
+
+---
+
 # 0.2.0-preview
 
 發布日期：2026-11-18。
