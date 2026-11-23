@@ -1,5 +1,10 @@
 {
-  "release": "0.2.2-preview",
+  "release": "0.2.2-preview.1",
+  "documentation_revision": {
+    "language": "English",
+    "runtime_version_verified": "0.2.2-preview",
+    "scope": "Documentation and distribution metadata only. Runtime tests and provider evidence below belong to their stated original versions."
+  },
   "verified_at_utc": "2026-11-23T09:11:08+00:00",
   "verification_scope": "The Windows desktop upgrade and 19 focused Windows tests covered the OpenRouter preview. The published package adds repository installation instructions, restores the macOS launcher after ZIP extraction and uses native private permissions for new invitation files, and binds local HTTP listeners without reverse DNS. Historical checks retain their original scope.",
   "release_validation": {

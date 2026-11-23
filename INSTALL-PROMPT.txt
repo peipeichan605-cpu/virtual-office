@@ -1,43 +1,58 @@
-請使用你能操作的本機工具，幫我從 GitHub 下載、安裝及啟動 Virtual Office。請實際完成並以繁體中文回覆，不要只提供教學。一般下載、檢查及可逆的安裝步驟請自行處理；只有需要登入、系統批准、改動既有工作或缺少必要資料時才問我。
+Install and start Virtual Office on the user's computer
 
-官方專案：https://github.com/peipeichan605-cpu/virtual-office
-本指引隨 0.2.2-preview 提供。Agent 可從倉庫根目錄 AGENTS.md 直接開始。用戶指定版本時沿用該版本，否則使用首頁連結的發佈版。核對 VERSION 及完整 Git commit，或核對發佈 ZIP 與同版 .sha256，再使用該版本的安裝文件。
+Official repository: https://github.com/peipeichan605-cpu/virtual-office
+Release: 0.2.2-preview.1
+Entry point for agents: AGENTS.md at the root of the repository.
 
-1. 確認執行位置與安裝環境
-先確認你能操作我的電腦，檢查作業系統、Python、Git 及預定資料夾。雲端沙盒不能當成我的本機；無法操作本機就如實回報未安裝，不要把雲端 localhost 當成我的入口。
-本次要做完整功能安裝，先準備好 Codex、Cursor SDK、Grok SDK 三種接駁的執行環境，再交付。OpenRouter 免費文字模式由 Python 核心提供；用家首次在「加入 Agent → OpenRouter」自行設定本 OFFICE 的金鑰。安裝驗收只需核對入口及免費模型清單，實際模型回覆另行驗證。需要可寫入的資料夾及下載 UI／固定 SDK 的網絡。選用健康的 Python 3.10 或以上（須能匯入 ssl、sqlite3、venv、plistlib）；Windows 的 Cursor SDK 需要 x64 Python。已有 Python 3.9 的 OFFICE 核心可保留，SDK 使用安裝專用的相容 Python，不覆寫系統 Python。
-檢查 Node.js 22.13 或以上及相容的本機 Codex app-server；缺少時依該平台官方安裝方法準備，正常可逆的依賴安裝毋須逐項問我，遇系統批准則停在確切批准步驟。優先沿用已裝且健康的程式；Windows Codex 使用可驗證的原生 codex.exe，不以 .cmd／.bat 或任意 shell 指令代替。不要從我的另一部電腦搬程式或憑證，不掃描全機聊天、不另建虛擬機或容器。不要因某平台不能支援，就宣稱所有功能已備妥。
+If the user asks for installation, perform the steps with your local tools and report what actually worked. A repository link and a short installation request are enough. Use the user's preferred language when handing over.
 
-2. 選擇獨立資料夾並下載
-在我有寫入權限的位置選擇獨立的 virtual-office 資料夾，簡短告知位置；不要掃描整個家目錄。先按第 3 項檢查是否已有安裝。全新安裝如已指定 ZIP，將它解壓到新資料夾並使用該副本；如要從官方倉庫下載此發佈版，將以下目標換成實際新資料夾：
-git clone --branch v0.2.2-preview --depth 1 https://github.com/peipeichan605-cpu/virtual-office.git "<安裝目錄>"
-進入該資料夾，記錄 VERSION。Git 安裝記錄 git rev-parse HEAD；指定的 ZIP 安裝記錄檔案的 SHA-256。公開倉庫下載不需要我提供 GitHub 密碼或 token。沒有 Git 時，從 README 指定的 Release 選取安裝 ZIP 和同名 .sha256，核對完整 SHA-256 後解壓到新資料夾。
-先閱讀 README.md、docs/QUICKSTART.md、docs/CURSOR-SDK.md、docs/CODEX-BACKGROUND.md、docs/GROK-SDK.md、NOTICE.md、office.py 及 setup_ui.py。只使用這個安裝自己的檔案和設定。Git checkout 必須遵守 .gitattributes 的 LF 規則；不要為了 Windows 換行而改寫 UI 雜湊或略過校驗。
+1. Identify the host and prerequisites
 
-3. 分清全新安裝與已有 OFFICE
-若目標已存在、已有 .office/ 或自訂設定，先辨認原安裝；不要覆寫、重複 clone 或重新 init。最新版已正常運行便沿用。需要更新舊版時，依 docs/UPGRADING.md 保留私人資料、原設定及自訂修改；有工作進行中先安排合適的更新時間。不要強制 reset、停止不相關程式或直接刪掉 public/。重建 UI 前按更新指南備份不同版本的 public/，保留可回復副本。
+Confirm that your tools operate on the computer the user intends to host OFFICE. A cloud sandbox has its own localhost. Choose a writable folder and inspect that location for an existing install. Full setup needs a healthy Python 3.10+ with ssl, sqlite3, venv and plistlib, Node.js 22.13+, a compatible local Codex app-server, and network access for pinned UI files and the Cursor SDK. The pinned Cursor SDK requires x64 Python on Windows. An existing Python 3.9 OFFICE core may use a separate compatible interpreter for the SDK.
 
-4. 只對全新安裝執行初始化及啟動
-確認 4318 是空閒埠；被佔用就選另一個已確認空閒的非特權埠，不停止原程式。在安裝目錄執行以下命令，將 python3 換成已確認可用的 Python（Windows 可用 python／py -3 或完整路徑），並把 <空閒埠> 換成實際數字：
+Prefer healthy programs already installed. On Windows use the verified native codex.exe. A .cmd or .bat shim cannot serve as the app-server executable. Use official installation methods for missing prerequisites and pause at the specific step where the owner must sign in or give OS approval. Use this computer's own accounts and executables. Keep the host's VPN and firewall settings as they are for local installation.
+
+2. Obtain the requested release
+
+For an empty target folder, clone the requested tag or the current version listed at the top of the README. This version can be cloned with the following command. Replace the destination before running it.
+
+git clone --branch v0.2.2-preview.1 --depth 1 https://github.com/peipeichan605-cpu/virtual-office.git "<installation-folder>"
+
+Record VERSION and git rev-parse HEAD. For the ZIP route, obtain the named installation ZIP and matching .sha256 file from the same release page, verify the full SHA-256, then extract into a new folder. These public downloads require no GitHub credentials. Preserve .gitattributes when checking out on Windows. The UI hashes depend on the exact file contents.
+
+Read AGENTS.md, README.md, docs/QUICKSTART.md, the relevant platform guides, NOTICE.md, office.py and setup_ui.py. Use the config and files belonging to this installation.
+
+3. Recognize an existing OFFICE
+
+Identify any existing .office/ folder, custom private data directory or running instance before cloning or initializing. Reuse a healthy installation of the requested version. For an upgrade, follow docs/UPGRADING.md. Let active work finish, back up private data, preserve local changes and the original config, and move the old generated public/ directory to a backup before rebuilding the UI. Keep backups outside the public checkout. Reinitialization would create a different OFFICE.
+
+4. Initialize and start a fresh OFFICE
+
+Use a verified free unprivileged loopback port, normally 4318. Run each command in the folder containing office.py. Replace <port> with a number and, on Windows, use the verified Python or py -3.
 
 python3 setup_ui.py
-python3 office.py --config .office/config.json init --port <空閒埠>
+python3 office.py --config .office/config.json init --port <port>
 python3 office.py --config .office/config.json setup-platforms
 python3 office.py --config .office/config.json setup-platforms --check
 python3 office.py --config .office/config.json start
 python3 office.py --config .office/config.json status
 
-每一步成功才繼續。setup_ui.py 必須完成固定素材的雜湊校驗並回報 ui_installed=true；失敗就排查，不繞過校驗。setup-platforms 會在本 OFFICE 專用環境安裝固定版本 Cursor SDK，並核對 Node.js／Codex；已有 Cursor Desktop 不等於已有 SDK。setup-platforms --check 必須回報 runtimes_ready=true，否則依逐項原因補齊官方環境，再檢查；不要只重試網頁或宣稱完整安裝完成。Grok SDK 原始碼已隨套件提供，不需要另跑 npm install。每個 office.py 命令都明確使用這份安裝設定，--config 放在子命令之前，避免環境中的 OFFICE_CONFIG 指向別的 OFFICE。已有安裝則沿用其原本完整設定路徑；補裝環境後只在工作妥善處理後重載這個 OFFICE。
-Windows 的 start 若提示目前工作環境會在結束時終止子程序，預設安裝請引導用戶在檔案總管雙擊安裝資料夾的 Start Office.cmd；自訂設定則從開始選單開啟一般 PowerShell，用原 config 執行 start。啟動後由另一個命令核對 status。start 自己會背景執行；保存它回傳的 run_id、PID、日誌位置及精確 stop_command。不要另開無限等待迴圈、額外服務或開機啟動項目。保留本機 loopback 存取，不為安裝更改防火牆、VPN 或公開網絡設定。
+Proceed after each successful step. setup_ui.py verifies all pinned assets and returns ui_installed=true. setup-platforms prepares the pinned Cursor SDK in this installation and checks Node.js and Codex. The Grok SDK source is bundled. Resolve any reported prerequisite and recheck until runtimes_ready=true. An installed Cursor Desktop app and an installed Cursor SDK are separate things. OpenRouter free text uses the Python core. The owner enters their key in their own OFFICE if they select that route.
 
-5. 驗證成功後才交付
-檢查同一安裝的 status JSON 必須是 state=running、local_ok=true；全新安裝還應 selected=0。命令 exit 0、顯示 Office ready 或產生網址都不能單獨代替驗證。
-確認同一埠的 /office/ 能載入，再取得私人入口。以下是全新安裝的示例；已有安裝的 status、url、start、stop 全部必須沿用原設定的完整路徑：
+Each office.py command takes --config before its subcommand. Reuse an existing installation's original config path. On Windows, if the terminal will terminate a child process at exit, open Start Office.cmd from Explorer for an initialized default installation, or run start from a normal PowerShell window using the same config. Save the run ID, PID, log path and stop command from the start receipt. The standard service runs in the background without adding a startup task.
+
+5. Verify the installation
+
+Check the same instance for state=running and local_ok=true. A fresh roster has selected=0. Verify that /office/ loads on the chosen port and obtain the private URL.
+
 python3 office.py --config .office/config.json url
-有本機瀏覽器工具就直接開啟該私人入口，確認 3D 辦公室、基本介面及新安裝的空 Agent 名單正常；不能操作瀏覽器時，分開說明「服務已驗證，畫面待用戶確認」。錯誤只讀取本次安裝所需日誌，不輸出憑證；不要靠停用 3D、光影或功能掩蓋問題。
 
-6. 環境準備好後，保留用戶自行登入及選擇 Agent
-全新安裝先保持空辦公室；更新或沿用原安裝則保留已有 Agent 名單及資料。不要自動加入你自己、掃描全部聊天、預設 Grok 或替我建立 Bots。告訴我之後按「＋ 邀請 Agent」或「＋ 新對話」選平台，再按該平台助手操作。SDK、Cloud 與已有 App 聊天有不同能力；角色入場不等於雙向收發已驗證。平台登入及一次性批准由我在原平台完成，不索取聊天中的密碼或金鑰。
-手機是可選步驟，不是基本安裝的前置條件。只有我選擇使用手機時，才依 docs/MOBILE-QUICKSTART.md 和「手機接入」助手，教我在手機下載官方 Tailscale、用同一帳戶登入並確認 Connected，再選權限及掃碼配對；主機設定按同版本指南完成。不要自行擴大 Agent 權限、啟用「記住手機」或更改現有 VPN；不需要 ADB 或 USB 線。
+Open it in a browser on the target host and check the 3D lobby, controls and empty roster. With terminal-only access, report the HTTP result and identify the remaining visual check. Read only this installation's relevant logs and keep secrets out of the report.
 
-最後用簡短清單交付：實際版本及 commit、安裝資料夾、三個平台各自的執行環境檢查結果、服務與畫面驗證、私人入口、run_id/PID（如有新啟動）、日誌位置及精確停止命令。分清「環境已備妥」「等待本人登入／選擇 Agent」「已實測收發」；安裝完成不等於已替我登入全部帳戶。私人入口只交給我本人或在本機瀏覽器開啟；不要公開上傳入口、.office/、憑證、配對碼或對話。仍有未完成步驟時，列明原因及我需要做的最少操作，不要宣稱全部完成。
+6. Hand the office to its owner
+
+Provide the release and commit or archive digest, folder, runtime results, service and browser checks, and instructions to reopen and stop this instance. A newly started instance also has a run ID, PID and log path. Show the private dashboard only to the owner. Keep .office/, pairing codes, keys and chats out of GitHub and shared logs.
+
+The owner chooses an agent using Invite Agent or New conversation. Existing App chats, Cloud Agents and OFFICE-managed sessions have different scopes. Account sign-in, any one-time approval and a real message/reply check belong to the selected route. The owner's choice of a phone is optional. If requested, follow docs/MOBILE-QUICKSTART.md for official Tailscale installation, same-account login, Connected status, separate view/send permissions and QR pairing. Remembering a phone is the owner's choice.
+
+If an essential step could not be completed, report the specific cause, what passed and the smallest action still needed.
