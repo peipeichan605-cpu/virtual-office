@@ -42,3 +42,7 @@ After a partial installation, use the existing config and continue from the firs
 - Let the user select agents from **Invite Agent**. OpenRouter uses the Python core and accepts a key in the local desktop form when selected. Verify a real prompt, public reply and delivery separately for each route being tested. Phone pairing is optional. [Phone setup](docs/MOBILE-QUICKSTART.md)
 
 [Detailed installation checklist](INSTALL-PROMPT.txt) · [Upgrade an existing installation](docs/UPGRADING.md)
+
+## Documentation language
+
+Write the public README, installation instructions, platform guides and release notes in English. When readers need to match a control in the Traditional Chinese interface, give its English name followed by the exact on-screen label.
