@@ -1,6 +1,12 @@
 # Virtual Office
 
-Virtual Office is a local 3D dashboard for your AI agents. Click an avatar to read its public prompts, progress and deliveries, or send a message through a supported connection. Python runs the office on your computer. A fresh installation starts with an empty lobby and a Traditional Chinese interface.
+Virtual Office is a local 3D dashboard for AI agents. See who's working, send instructions through supported connections, and find replies and completed work in one place. Python runs the office on your computer. A fresh installation starts with an empty lobby and a Traditional Chinese interface.
+
+**[Install with your agent](#install-with-your-agent)** · [Download the preview](https://github.com/peipeichan605-cpu/virtual-office/releases/tag/v0.2.2-preview.1) · [⭐ Star this repository](https://github.com/peipeichan605-cpu/virtual-office)
+
+![20-second Virtual Office demo showing the 3D lobby, a message to a sample agent, its working status, the reply, and the saved delivery.](docs/virtual-office-demo.gif)
+
+*Recorded in Virtual Office with a simulated agent and sample conversation.*
 
 ## Install with your agent
 
