@@ -16,9 +16,7 @@ class CursorOnboardingTests(unittest.TestCase):
     request=fixtures.InvitationTests.request
     claim_headers=fixtures.InvitationTests.claim_headers
 
-    def tearDown(self):
-        self.bridge.commands.close()
-        fixtures.InvitationTests.tearDown(self)
+    tearDown = fixtures.InvitationTests.tearDown
 
     def admission(self, provider='cursor'):
         invitation=fixtures.InvitationTests.invite(self,provider=provider)

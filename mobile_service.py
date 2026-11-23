@@ -320,33 +320,56 @@ class MobileService:
             return {'command': self._command(result['command']), 'duplicate': result['duplicate']}
 
     def owner_status(self):
+        from mobile_host import host_hint
         from mobile_setup import connection_setup, host_setup_prompt
         settings = self.config.get('mobile', {})
-        setup = connection_setup(self.config, configured=self.ready())
+        if not isinstance(settings, dict):
+            raise MobileServiceError(503, 'invalid_mobile_configuration')
+        configured = self.ready()
+        setup = connection_setup(self.config, configured=configured)
+        if configured and getattr(getattr(self.bridge, 'mobile_lifecycle', None), 'listener_error', False):
+            setup.update(pairing_available=False, local_listener_ready=False)
+            setup['transport'].update(state='listener_unavailable', listening=False)
         setup['setup_prompt'] = host_setup_prompt(self.config)
-        return {'configured': self.ready(), 'enabled': settings.get('enabled') is True,
-                'setup': setup,
+        # Selecting a phone grant needs the registered binding. A live native
+        # capability check can start a cold SDK probe for each listed Agent.
+        return {'configured': configured, 'enabled': settings.get('enabled') is True,
+                'setup': setup, 'host_assistant': host_hint(self.config),
                 'credentials_separated': upgraded_security(self.config), 'public_origin': public_origin(self.config),
                 'identity': settings.get('identity') or None, 'devices': self.auth.list_devices(),
+                **({'pairing_node_ids': self.auth.pairing_nodes()} if 'mobile_peer_gate' in self.config else {}),
                 'agents': [{'id': row['id'], 'name': self._clean(row.get('name', ''), 80), 'provider': row.get('provider'),
-                            'connected': bool(self.bridge.commands.capability(row['id']).get('connected'))}
-                           for row in self.bridge.agents.values()]}
+                            'connected': bool(self.bridge.commands.binding(row['id']))}
+                           for row in list(self.bridge.agents.values())]}
 
     def owner_create_pairing(self, data):
+        from mobile_setup import assistant_pending
         self._require_ready()
+        if getattr(getattr(self.bridge, 'mobile_lifecycle', None), 'listener_error', False):
+            raise MobileServiceError(503, 'mobile_listener_unavailable')
+        if assistant_pending(self.config):
+            raise MobileServiceError(409, 'mobile_setup_pending')
         required = {'identity', 'label', 'view_agents', 'send_agents'}
         if (not isinstance(data, dict) or not required <= set(data)
-                or set(data) - required - {'view_mode', 'send_mode'}):
+                or set(data) - required - {'view_mode', 'send_mode', 'node_id'}):
             raise MobileServiceError(400, 'invalid_pairing')
         if data['identity'] != self.config['mobile']['identity']:
             raise MobileServiceError(403, 'mobile_identity_mismatch')
+        node_id = self.auth.pairing_node(data.get('node_id'))
+        if node_id is not None:
+            # Do the bounded native probes before entering any dispatch or
+            # history locks. The transaction below rechecks the same node ID.
+            onboarding = getattr(self.bridge, 'phone_onboarding', None)
+            if onboarding is None or not onboarding.pairing_ready(node_id):
+                raise MobileServiceError(409, 'mobile_setup_pending')
+            data = dict(data, node_id=node_id)
         with self.bridge.commands.lock:
             if not isinstance(data['send_agents'], list):
                 raise MobileServiceError(400, 'invalid_pairing')
             _, selected_sends = self.auth._scopes(data['view_agents'], data['send_agents'],
                                                   data.get('view_mode', 'selected'), data.get('send_mode', 'selected'))
             for agent in selected_sends:
-                if not isinstance(agent, str) or agent not in self.bridge.agents or not self.bridge.commands.capability(agent).get('connected'):
+                if not isinstance(agent, str) or agent not in self.bridge.agents or not self.bridge.commands.binding(agent):
                     raise MobileServiceError(400, 'mobile_agent_not_connected')
             result = self.auth.create_pairing(**data)
         result['public_origin'] = public_origin(self.config)
@@ -374,7 +397,7 @@ class MobileService:
         principal = self._principal(principal)
         return self.owner_revoke(principal['device_id'])
 
-    def logout_renewal(self, token, identity):
+    def logout_renewal(self, token, identity, *, node_id=None):
         """Revoke a remembered phone even after its short session expires.
 
         The gateway separately requires a same-origin, explicit renewal header.
@@ -384,7 +407,7 @@ class MobileService:
         if identity != self.config['mobile']['identity']:
             raise MobileServiceError(403, 'mobile_identity_mismatch')
         with self.bridge.commands.lock:
-            device = self.auth.renewal_device(token, identity)
+            device = self.auth.renewal_device(token, identity, node_id=node_id)
             return self.owner_revoke(device['device_id'])
 
     def invalidate_agent(self, agent_id):

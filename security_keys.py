@@ -59,7 +59,7 @@ def upgraded_security(config):
 
 
 def upgrade_security(config):
-    """Return a migrated copy. Caller saves while Office is safely stopped.
+    """Return a migrated copy. Caller serializes and persists the update.
 
     The old topic remains a feed identifier and legacy receipt-verification key;
     it loses owner authority. Existing dedupe records remain verifiable without

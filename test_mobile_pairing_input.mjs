@@ -14,17 +14,18 @@ class Element {
   async emit(type,event={}){await Promise.all((this.listeners.get(type)||[]).map(handler=>handler(event)));}
 }
 
-function fixture(t,{hash='',remember=false,checkbox=true,fetcher=async()=>reply({paired:true})}={}){
+function fixture(t,{hash='',state=null,remember=false,checkbox=true,readSession=async()=>reply({error:'mobile_auth_required'},401),fetcher=async()=>reply({paired:true})}={}){
   const form=new Element(),input=new Element(),notice=new Element(),button=new Element(),rememberDevice=new Element();
   rememberDevice.checked=remember;
   const nodes=new Map([['mobile-pair-form',form],['pair-token',input],['pair-notice',notice]]);
   if(checkbox)nodes.set('remember-device',rememberDevice);
   form.querySelector=selector=>selector.includes('button')?button:null;
-  const doc={getElementById:id=>nodes.get(id)||null},calls=[],replacements=[],navigations=[],events=[];
+  const view=new Element();
+  const doc={getElementById:id=>nodes.get(id)||null,defaultView:view},calls=[],sessionReads=[],replacements=[],navigations=[],events=[];
   const values={
     document:doc,
     location:{origin:ORIGIN,protocol:'https:',pathname:'/mobile/pair',search:'',hash,href:`${ORIGIN}/mobile/pair${hash}`,replace:path=>navigations.push(path)},
-    history:{replaceState(_state,_title,path){events.push('fragment-cleared');replacements.push(path);values.location.hash='';}},
+    history:{state,replaceState(value,_title,path){this.state=value;events.push('fragment-cleared');replacements.push(path);values.location.hash='';}},
     sessionStorage:{length:0,key(){return null;},removeItem(){}},
     localStorage:{setItem(){assert.fail('pairing must not persist a pairing token in localStorage');}},
   };
@@ -34,9 +35,13 @@ function fixture(t,{hash='',remember=false,checkbox=true,fetcher=async()=>reply(
     Object.defineProperty(globalThis,name,{configurable:true,writable:true,value});
   }
   t.after(()=>{for(const [name,value] of prior){if(value)Object.defineProperty(globalThis,name,value);else delete globalThis[name];}});
-  const fetch=async(url,options)=>{events.push('request');calls.push({url,options,body:JSON.parse(options.body)});return fetcher(url,options);};
+  const fetch=async(url,options)=>{
+    if(url==='/api/mobile/session'){sessionReads.push({url,options});return readSession(url,options);}
+    events.push('request');calls.push({url,options,body:JSON.parse(options.body)});return fetcher(url,options);
+  };
   pairing.initMobilePair(doc,fetch);
-  return {form,input,notice,button,rememberDevice,calls,replacements,navigations,events,
+  return {form,input,notice,button,rememberDevice,calls,sessionReads,replacements,navigations,events,view,
+    async scan(hash){values.location.hash=hash;await view.emit('hashchange');},
     async submit(value=input.value){input.value=value;let prevented=false;await form.emit('submit',{preventDefault(){prevented=true;}});assert.equal(prevented,true);},
   };
 }
@@ -206,4 +211,89 @@ test('already-paired phones have an ordinary same-origin return link without rep
   assert.match(html,/舊配對連結只能使用一次/);
   assert.match(html,/手機登入/);
   assert.doesNotMatch(html,/<meta[^>]+http-equiv=["']refresh/i);
+});
+
+const flush=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('a tokenless pairing bookmark resumes only a currently authorized or renewable Office login',async t=>{
+  for(const [state,response,resumes] of [
+    ['active',reply({authenticated:true,csrf_token:'fixture-csrf'}),true],
+    ['remembered',reply({error:'mobile_session_renewal_required'},401),true],
+    ['unpaired',reply({error:'mobile_auth_required'},401),false],
+    ['revoked',reply({error:'mobile_session_revoked'},403),false],
+    ['backend unavailable',reply({error:'mobile_unavailable'},503),false],
+    ['unexpected body',reply({}),false],
+  ])await t.test(state,async t=>{
+    const f=fixture(t,{readSession:async()=>response});
+    await flush();
+    assert.deepEqual(f.navigations,resumes?['/mobile/']:[]);
+    assert.equal(f.calls.length,0);
+    assert.equal(f.sessionReads.length,1);
+    assert.equal(f.sessionReads[0].options.credentials,'same-origin');
+    assert.equal(f.sessionReads[0].options.cache,'no-store');
+    assert.equal(f.sessionReads[0].options.body,undefined);
+  });
+});
+
+test('explicit QR never performs a session lookup or submits automatically',async t=>{
+  const f=fixture(t,{hash:'#pair='+TOKEN,readSession:async()=>reply({authenticated:true,csrf_token:'fixture-csrf'})});
+  await flush();assert.equal(f.sessionReads.length,0);assert.equal(f.calls.length,0);
+  assert.deepEqual(f.navigations,[]);assert.equal(f.input.value,TOKEN);
+});
+
+test('an updated QR fragment in the same tab is consumed and replaces the previous token',async t=>{
+  const f=fixture(t,{hash:'#pair='+TOKEN}),other=TOKEN+'-other';
+  await f.scan('#pair='+other);
+  assert.equal(f.input.value,other);
+  assert.deepEqual(f.replacements,['/mobile/pair','/mobile/pair']);
+  assert.equal(location.hash,'');
+  assert.equal(f.calls.length,0);
+  await f.submit();
+  assert.deepEqual(f.calls.map(c=>c.body.token),[other]);
+});
+
+test('a delayed bookmark check cannot interrupt a manual login or a new QR',async t=>{
+  for(const action of ['scan','type','submit'])await t.test(action,async t=>{
+    let release;
+    const f=fixture(t,{readSession:()=>new Promise(resolve=>{release=resolve;})});
+    if(action==='scan')await f.scan('#pair='+TOKEN);
+    else if(action==='type'){f.input.value=TOKEN;await f.form.emit('input');}
+    else await f.submit('short');
+    release(reply({authenticated:true,csrf_token:'fixture-csrf'}));await flush();
+    assert.deepEqual(f.navigations,[]);
+    assert.equal(f.calls.length,0);
+  });
+});
+
+test('rejected old code explains how to retain existing access without claiming a new pairing',async t=>{
+  const f=fixture(t,{hash:'#pair='+TOKEN,fetcher:async()=>reply({error:'invalid_mobile_pairing'},401)});
+  await f.submit();assert.match(f.notice.textContent,/返回 OFFICE/);assert.match(f.notice.textContent,/新配對碼/);
+  assert.deepEqual(f.navigations,[]);assert.equal(f.calls.length,1);assert.equal(f.sessionReads.length,0);
+});
+
+
+test('reloading an unfinished QR form cannot silently switch to a previously authorized session',async t=>{
+  const f=fixture(t,{state:{officePairingForm:true},readSession:async()=>reply({authenticated:true,csrf_token:'fixture'})});
+  await flush();
+  assert.equal(f.sessionReads.length,0);
+  assert.deepEqual(f.navigations,[]);
+});
+
+test('a completed old request cannot replace a new QR opened in the same document',async t=>{
+  let release;
+  const f=fixture(t,{hash:'#pair='+TOKEN,fetcher:()=>new Promise(resolve=>{release=resolve;})});
+  const pending=f.submit(),replacement=TOKEN+'new';
+  await f.scan('#pair='+replacement);
+  release(reply({authenticated:true}));await pending;
+  assert.equal(f.input.value,replacement);
+  assert.equal(f.calls.length,1);
+  assert.deepEqual(f.navigations,[]);
+  assert.equal(f.button.disabled,false);
+  assert.deepEqual(history.state,{officePairingForm:true});
+});
+
+test('before the pairing module loads the native form is disabled and there is same-tab recovery guidance',async()=>{
+  const html=await readFile(new URL('./public/office/mobile-pair.html',import.meta.url),'utf8');
+  assert.match(html,/<button[^>]*type="submit"[^>]*disabled/);
+  assert.match(html,/<p id="pair-notice"[^>]*>[^<]+這個分頁[^<]+重新載入/);
 });

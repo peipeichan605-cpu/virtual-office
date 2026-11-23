@@ -11,12 +11,15 @@ from private_files import ensure_private_directory, prepare_private_file, requir
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = Path(os.environ.get('OFFICE_CONFIG', ROOT / '.office' / 'config.json')).expanduser()
-PROVIDERS = {'codex','crouton','cursor','grok_bot','generic','hermes'}
+PROVIDERS = {'codex','crouton','cursor','grok_bot','generic','hermes','openrouter'}
 CODEX_BACKGROUND_ID = r'bg-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
 CODEX_BACKGROUND_MODEL = r'[A-Za-z0-9][A-Za-z0-9._:-]{0,127}'
 GROK_SDK_ID = r'sdk-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
 GROK_BOT_ID = r'[A-Za-z0-9_-]{1,128}'
 GROK_SESSION_ID = r'[A-Za-z0-9_.:-]{0,256}'
+
+OPENROUTER_ID = r'or-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
+OPENROUTER_MODEL = r'[a-z0-9][a-z0-9._-]{0,79}/[a-z0-9][a-z0-9._-]{0,155}:free'
 
 def codex_targets(config):
     """Native session -> selected Office identity, including invited aliases."""
@@ -71,13 +74,15 @@ def load_config(path=DEFAULT_CONFIG):
         a.setdefault('driver','codex' if a['provider']=='codex' else 'crouton' if a['provider']=='crouton' else 'push')
         background = a['driver']=='codex_background' and a['provider']=='codex' and re.fullmatch(CODEX_BACKGROUND_ID,a['source_id'])
         grok_sdk = a['driver']=='grok_sdk' and a['provider']=='grok_bot' and re.fullmatch(GROK_SDK_ID,a['source_id'])
-        if a['driver'] not in {'codex','crouton','push','hermes','cursor','codex_background','grok_sdk'} or (a['driver']!='push' and a['driver']!=a['provider'] and not background and not grok_sdk):
+        if a['driver'] not in {'codex','crouton','push','hermes','cursor','codex_background','grok_sdk','openrouter'} or (a['driver']!='push' and a['driver']!=a['provider'] and not background and not grok_sdk):
             raise ValueError('Invalid source driver')
+        if a['provider']=='openrouter' and (a['driver']!='openrouter' or not re.fullmatch(OPENROUTER_ID,a['source_id'])):
+            raise ValueError('OpenRouter agents require an OFFICE conversation')
         if a['driver']=='push' and not re.fullmatch(r'[0-9a-f]{64}',a.get('token_sha256','')):
             raise ValueError('Push agents require a scoped credential')
         ids.add(a['id']);names.add(a['name'])
     data['agents'] = agents
-    for key,pattern in (('logged_out_agent_ids',r'(?:codex|crouton|cursor|grok_bot|generic|hermes):[A-Za-z0-9_.-]{1,160}'),('revoked_invitation_ids',r'[0-9a-f]{32}')):
+    for key,pattern in (('logged_out_agent_ids',r'(?:codex|crouton|cursor|grok_bot|generic|hermes|openrouter):[A-Za-z0-9_.-]{1,160}'),('revoked_invitation_ids',r'[0-9a-f]{32}')):
         values=data.get(key,[])
         if not isinstance(values,list) or any(not isinstance(v,str) or not re.fullmatch(pattern,v) for v in values) or len(set(values))!=len(values):
             raise ValueError('Invalid Office membership retirement records')
@@ -91,14 +96,26 @@ def load_config(path=DEFAULT_CONFIG):
         agent=selected.get(ident)
         if not agent or not isinstance(binding,dict) or set(binding)!={'adapter','session_id'}:
             raise ValueError('Command target must be an explicitly selected agent')
-        expected = {'codex_app':'codex','codex_background':'codex_background','hermes_acp':'hermes','cursor_cloud':'cursor','cursor_local':'cursor','grok_webhook':'push','grok_sdk':'grok_sdk'}.get(binding['adapter'])
-        pattern = GROK_SDK_ID if binding['adapter']=='grok_sdk' else CODEX_BACKGROUND_ID if binding['adapter']=='codex_background' else r'agent-[A-Za-z0-9_.-]{1,140}' if binding['adapter']=='cursor_local' else r'bc-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}' if binding['adapter']=='cursor_cloud' else r'[A-Za-z0-9_.-]{1,160}' if binding['adapter']=='grok_webhook' else r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
+        expected = {'codex_app':'codex','codex_background':'codex_background','hermes_acp':'hermes','cursor_cloud':'cursor','cursor_local':'cursor','grok_webhook':'push','grok_sdk':'grok_sdk','openrouter':'openrouter'}.get(binding['adapter'])
+        pattern = OPENROUTER_ID if binding['adapter']=='openrouter' else GROK_SDK_ID if binding['adapter']=='grok_sdk' else CODEX_BACKGROUND_ID if binding['adapter']=='codex_background' else r'agent-[A-Za-z0-9_.-]{1,140}' if binding['adapter']=='cursor_local' else r'bc-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}' if binding['adapter']=='cursor_cloud' else r'[A-Za-z0-9_.-]{1,160}' if binding['adapter']=='grok_webhook' else r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
         invited_codex=binding['adapter']=='codex_app' and agent['provider']=='codex' and agent['driver']=='push'
         if not expected or (not invited_codex and (agent['driver']!=expected or binding['session_id']!=agent['source_id'])) or not isinstance(binding['session_id'],str) or not re.fullmatch(pattern,binding['session_id']) or (binding['adapter']=='grok_webhook' and agent['provider']!='grok_bot'):
             raise ValueError('Command target must match the selected native session')
     codex_targets(data)
     adapters=data.get('command_adapters',{})
-    if not isinstance(adapters,dict) or set(adapters)-{'codex_app','codex_background','hermes_acp','cursor_cloud','cursor_local','grok_webhook','grok_sdk'}:raise ValueError('Unknown command adapter')
+    if not isinstance(adapters,dict) or set(adapters)-{'codex_app','codex_background','hermes_acp','cursor_cloud','cursor_local','grok_webhook','grok_sdk','openrouter'}:raise ValueError('Unknown command adapter')
+    router = adapters.get('openrouter', {})
+    if not isinstance(router, dict) or set(router) - {'sessions'} or not isinstance(router.get('sessions', {}), dict):
+        raise ValueError('Invalid OpenRouter settings')
+    router_agents = {a['source_id']: a['id'] for a in agents if a['driver']=='openrouter'}
+    sessions = router.get('sessions', {})
+    if set(sessions) != set(router_agents):
+        raise ValueError('OpenRouter sessions must match selected agents')
+    for sid, item in sessions.items():
+        if (not isinstance(item, dict) or set(item) != {'model'} or not isinstance(item['model'], str)
+                or not re.fullmatch(OPENROUTER_MODEL, item['model'])
+                or bindings.get(router_agents[sid]) != {'adapter':'openrouter', 'session_id':sid}):
+            raise ValueError('OpenRouter requires a bound free model')
     grok=adapters.get('grok_sdk',{})
     if not isinstance(grok,dict) or set(grok)-{'sessions','node_binary','client_version'} or not isinstance(grok.get('sessions',{}),dict):
         raise ValueError('Invalid Grok SDK settings')

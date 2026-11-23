@@ -215,7 +215,9 @@ while True: time.sleep(.05)
     def test_transient_identity_failure_is_not_stop_confirmation(self):
         result = self._start_fake()
         identity = frontend._active(self.root)['process_identity']
-        with mock.patch.object(frontend, '_process_identity', side_effect=[identity, identity, None, None]), mock.patch.object(frontend.os, 'kill') as kill:
+        with mock.patch.object(frontend, 'STOP_WAIT_SECONDS', 0), \
+                mock.patch.object(frontend, '_process_identity', side_effect=[identity, identity, None, None]), \
+                mock.patch.object(frontend.os, 'kill') as kill:
             stopped = frontend.stop_frontend(self.config, run_id=result['run_id'])
         self.assertFalse(stopped['stopped'])
         self.assertEqual(stopped['state'], 'stop_requested')
@@ -229,6 +231,17 @@ while True: time.sleep(.05)
         self.assertEqual(status['state'], 'process_identity_unknown')
         self.assertFalse(status['listening'])
         self.assertFalse(status['auth_url_available'])
+
+    def test_stop_waits_for_pid_disappearance_after_process_arguments_disappear(self):
+        result = self._start_fake()
+        identity = frontend._active(self.root)['process_identity']
+        with mock.patch.object(frontend, '_process_identity', side_effect=[identity, identity, None, None]), \
+                mock.patch.object(frontend, '_pid_absent', side_effect=[False, True]) as absent, \
+                mock.patch.object(frontend.os, 'kill', wraps=os.kill) as signal_worker:
+            stopped = frontend.stop_frontend(self.config, run_id=result['run_id'])
+        self.assertTrue(stopped['stopped'])
+        self.assertEqual(absent.call_count, 2)
+        signal_worker.assert_called_once_with(result['pid'], signal.SIGTERM)
 
     def test_missing_stale_or_future_status_does_not_advertise_health(self):
         result = self._start_fake()

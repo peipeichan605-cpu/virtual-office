@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shlex
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -25,11 +26,12 @@ class CursorChildInstallTests(unittest.TestCase):
     def test_one_installation_hook_observes_directory_instead_of_hardcoded_session(self):
         value=install.merged({'version':1,'hooks':{}},'/tmp/Office with space/observers')
         self.assertEqual(set(value['hooks']),set(install.EVENTS))
-        for rows in value['hooks'].values():
+        for name, rows in value['hooks'].items():
             self.assertEqual(len(rows),1)
             self.assertIn('--observer-dir',rows[0]['command'])
-            argv=shlex.split(rows[0]['command'])
-            self.assertEqual(argv[argv.index('--observer-dir')+1],str(Path('/tmp/Office with space/observers').resolve()))
+            expected=install.shell_command([sys.executable,str(Path(install.__file__).with_name('cursor_children.py').resolve()),
+                '--observer-dir',str(Path('/tmp/Office with space/observers').resolve()),'--event',name])
+            self.assertEqual(rows[0]['command'],expected)
             self.assertFalse(rows[0]['failClosed'])
             self.assertNotIn('token',rows[0]['command'])
 
@@ -39,8 +41,8 @@ class CursorChildInstallTests(unittest.TestCase):
 
     def test_upgrade_removes_only_exact_own_legacy_observer_without_reading_credentials(self):
         legacy=Path(install.__file__).with_name('cursor_hook.py')
-        own='/tmp/selected parent.json'
-        same={'command':shlex.join(['/usr/bin/python3',str(legacy),'--credential',own])}
+        own=str(Path('/tmp/selected parent.json').resolve())
+        same={'command':install.shell_command([str(Path(sys.executable).resolve()),str(legacy),'--credential',own])}
         other={'command':shlex.join(['/usr/bin/python3',str(legacy),'--credential','/tmp/other.json'])}
         policy={'command':'security-policy','failClosed':True}
         wrapper={'command':same['command']+' && security-policy'}

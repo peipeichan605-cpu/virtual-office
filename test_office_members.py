@@ -21,10 +21,7 @@ class MemberTests(unittest.TestCase):
     invite=test_invitations.InvitationTests.invite
     claim_headers=test_invitations.InvitationTests.claim_headers
 
-    def tearDown(self):
-        self.bridge.stop.set()
-        self.bridge.commands.close()
-        test_invitations.InvitationTests.tearDown(self)
+    tearDown = test_invitations.InvitationTests.tearDown
 
     def member(self,name='Fixture one',index=1):
         invitation=self.invite(name=name,provider='generic',request_id='member-fixture-%02d'%index)

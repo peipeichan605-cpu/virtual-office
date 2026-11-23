@@ -4,6 +4,7 @@ This is a separate application boundary, never a proxy carrying an owner key.
 No native transports, login APIs, invitations or arbitrary files are forwarded.
 """
 from http.cookies import SimpleCookie
+import hmac
 import http.client
 import http.server
 import json
@@ -12,12 +13,16 @@ from pathlib import Path
 import re
 import secrets
 import socket
+import sys
 import threading
+import time
 import urllib.parse
 
 COOKIE = '__Host-OfficePhone'
 RENEW_COOKIE = '__Host-OfficePhoneRenew'
 MAX_BODY = 32768
+# Browsers require these MIME types for modules and styles when nosniff is set.
+WEB_CODE_TYPES = {'.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8'}
 
 
 def settings(config):
@@ -47,7 +52,7 @@ def settings(config):
 
 class BoundedHTTPServer(http.server.ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    allow_reuse_address = sys.platform != 'win32'
     request_queue_size = 16
 
     def __init__(self, address, handler, *, limit=16, deadline=10):
@@ -57,9 +62,15 @@ class BoundedHTTPServer(http.server.ThreadingHTTPServer):
         self.request_deadline = deadline
         super().__init__(address, handler)
 
+    def server_bind(self):
+        if sys.platform == 'win32':
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
     def get_request(self):
         connection, address = super().get_request()
-        connection.settimeout(5)
+        # A pending read on Windows may outlive shutdown() from the timer thread.
+        connection.settimeout(min(5, self.request_deadline))
         return connection, address
 
     def process_request(self, request, client_address):
@@ -106,8 +117,13 @@ class HeaderReader:
         return line
 
 
-def handler(service, config, public_root):
-    opts = settings(config)
+def handler(service, config, public_root, prepared_config=None):
+    from phone_peer_gate import PeerGate, read_proxy_v2, validate_peer_gate
+    bound_config = config if prepared_config is None else prepared_config
+    opts = settings(bound_config)
+    gate = None
+    if 'mobile_peer_gate' in bound_config:
+        gate = PeerGate(validate_peer_gate(bound_config['mobile_peer_gate'])['host_id'], opts)
     origin = opts['public_origin']
     host = urllib.parse.urlsplit(origin).hostname
     root = Path(public_root).resolve()
@@ -120,7 +136,40 @@ def handler(service, config, public_root):
         def log_message(self, *args):
             pass
 
+        def handle(self):
+            self.peer_node = None
+            self.proof_only = False
+            if gate is not None:
+                try:
+                    if self.client_address[0] != '127.0.0.1':
+                        return
+                    if self.rfile.peek(1)[:1] == b'G':
+                        # The local installer can ask only for its signed proof.
+                        self.proof_only = True
+                    else:
+                        source, destination = read_proxy_v2(self.rfile, opts['port'])
+                        self.peer_node = gate.resolve(source, destination)
+                        if self.peer_node is None or not self.config_matches():
+                            return
+                except (OSError, ValueError, KeyError):
+                    return
+            super().handle()
+
+        def config_matches(self):
+            if not service.ready() or settings(config) != opts:
+                return False
+            if gate is None:
+                return 'mobile_peer_gate' not in config
+            current = validate_peer_gate(config.get('mobile_peer_gate'))
+            return (current['host_id'] == gate.host_id and
+                    (self.proof_only or self.peer_node in current['node_ids']))
+
         def parse_request(self):
+            if self.proof_only and self.raw_requestline not in (
+                    b'GET /_office/local/gateway-proof HTTP/1.1\r\n',
+                    b'GET /_office/local/gateway-proof HTTP/1.0\r\n'):
+                self.close_connection = True
+                return False
             original = self.rfile
             self.rfile = HeaderReader(original)
             try:
@@ -131,7 +180,7 @@ def handler(service, config, public_root):
         def send_error(self, code, message=None, explain=None):
             self.respond(code, {'error': 'invalid_request'})
 
-        def respond(self, code, value, *, content_type='application/json; charset=utf-8', cookie=None, nonce=None):
+        def respond(self, code, value, *, content_type='application/json; charset=utf-8', cookie=None, nonce=None, retry_after=None):
             data = value if isinstance(value, bytes) else json.dumps(value, ensure_ascii=False).encode()
             self.close_connection = True
             self.send_response(code)
@@ -139,6 +188,8 @@ def handler(service, config, public_root):
             self.send_header('Content-Length', str(len(data)))
             self.send_header('Connection', 'close')
             self.send_header('Cache-Control', 'no-store')
+            if retry_after is not None:
+                self.send_header('Retry-After', str(retry_after))
             self.send_header('Referrer-Policy', 'no-referrer')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('X-Frame-Options', 'DENY')
@@ -159,11 +210,15 @@ def handler(service, config, public_root):
             return values[0] if values else default
 
         def boundary(self, write=False):
-            if not service.ready() or settings(config) != opts or self.client_address[0] != '127.0.0.1':
+            if not self.config_matches() or self.proof_only or self.client_address[0] != '127.0.0.1':
                 raise PermissionError()
             if self.one('Host') not in {host, host + ':443'}:
                 raise PermissionError()
-            if self.one('Tailscale-User-Login') != opts['identity']:
+            if gate is not None:
+                if any(name.lower() in {'forwarded', 'x-real-ip'} or
+                       name.lower().startswith(('tailscale-', 'x-forwarded-')) for name in self.headers):
+                    raise PermissionError()
+            elif self.one('Tailscale-User-Login') != opts['identity']:
                 raise PermissionError()
             if self.one('Origin') not in ({origin} if write else {None, origin}):
                 raise PermissionError()
@@ -213,7 +268,8 @@ def handler(service, config, public_root):
                 str(max(0, int(renewed['device']['expires_at'] - service.auth.clock())))
 
         def principal(self, write=False):
-            return service.auth.authenticate(self.token(), opts['identity'], csrf=self.one('X-Mobile-CSRF'), write=write)
+            return service.auth.authenticate(self.token(), opts['identity'], csrf=self.one('X-Mobile-CSRF'),
+                                             write=write, node_id=self.peer_node)
 
         def body(self):
             raw = self.one('Content-Length', '0')
@@ -224,6 +280,7 @@ def handler(service, config, public_root):
             if not 0 < n <= MAX_BODY or self.headers.get_content_type() != 'application/json':
                 raise ValueError('invalid_body')
             data = self.rfile.read(n)
+            self.body_consumed = True
             if len(data) != n:
                 raise ValueError('invalid_body')
             def unique(items):
@@ -238,14 +295,53 @@ def handler(service, config, public_root):
                 raise ValueError('invalid_body')
             return result
 
+        def pairing_document(self):
+            if self.command != 'GET' or self.path != '/mobile/pair':
+                return False
+            mode = self.headers.get_all('Sec-Fetch-Mode', [])
+            dest = self.headers.get_all('Sec-Fetch-Dest', [])
+            if mode or dest:
+                return mode == ['navigate'] and dest == ['document']
+            # Older browsers negotiate HTML without Fetch Metadata.
+            accept = self.headers.get('Accept', '').split(',', 1)[0].split(';', 1)[0]
+            return accept.strip().lower() in ('text/html', 'application/xhtml+xml')
+
         def failure(self, error):
             if isinstance(error, PermissionError):
                 return self.respond(403, {'error': 'mobile_forbidden'})
             status = getattr(error, 'status', None)
             code = getattr(error, 'code', None)
+            if status == 429 and code == 'mobile_rate_limited':
+                delay = getattr(error, 'retry_after', None)
+                if type(delay) is int and 1 <= delay <= 300:
+                    if self.command == 'GET' and self.path in ('/', '/mobile/'):
+                        page = ('<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
+                                '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                                '<title>稍後開啟 OFFICE</title></head><body><main>'
+                                '<h1>OFFICE 載入太頻密</h1>'
+                                f'<p>請等 {delay} 秒，再開啟手機版 OFFICE。</p>'
+                                '<p><a href="/mobile/">重新開啟 OFFICE</a></p></main></body></html>')
+                        return self.respond(429, page.encode('utf-8'),
+                                            content_type='text/html; charset=utf-8', retry_after=delay)
+                    if self.pairing_document():
+                        # A link to /mobile/pair would drop an unused QR fragment.
+                        # Reload the same tab only on an explicit user click.
+                        nonce = secrets.token_urlsafe(18)
+                        page = ('<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
+                                '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                                '<title>稍後繼續配對</title></head><body><main><h1>稍後繼續配對</h1>'
+                                f'<p>請等約 {delay} 秒，然後重新載入這個分頁，繼續使用剛掃描的配對碼。</p>'
+                                '<button type="button" id="retry" hidden>重新載入配對頁</button>'
+                                '</main>'
+                                f'<script nonce="{nonce}">const retry=document.getElementById("retry");'
+                                'retry.hidden=false;retry.addEventListener("click",()=>location.reload());'
+                                '</script></body></html>')
+                        return self.respond(429, page.encode('utf-8'), content_type='text/html; charset=utf-8',
+                                            nonce=nonce, retry_after=delay)
+                    return self.respond(429, {'error': code}, retry_after=delay)
             if status == 401 and code == 'mobile_auth_required' and self.path != '/api/mobile/renew':
                 try:
-                    service.auth.renewal_device(self.token(RENEW_COOKIE), opts['identity'])
+                    service.auth.renewal_device(self.token(RENEW_COOKIE), opts['identity'], node_id=self.peer_node)
                 except Exception:
                     pass
                 else:
@@ -257,7 +353,7 @@ def handler(service, config, public_root):
             return self.respond(503, {'error': 'mobile_unavailable'})
 
         def page(self, name):
-            text = (root / 'office' / name).read_text()
+            text = (root / 'office' / name).read_text(encoding='utf-8')
             nonce = secrets.token_urlsafe(18)
             if 'name="office-access"' not in text:
                 text = text.replace('<head>', '<head><meta name="office-access" content="mobile">', 1)
@@ -269,21 +365,47 @@ def handler(service, config, public_root):
 
         def do_GET(self):
             try:
+                if self.path == '/_office/local/gateway-proof':
+                    # The desktop setup helper verifies the exact loopback
+                    # destination before configuring a private HTTPS proxy.
+                    # Proxied requests and requests from a browser cannot use it.
+                    from mobile_host import local_setup_nonce
+                    nonce = local_setup_nonce(self, opts['port'], signed_request=gate is not None)
+                    if nonce is None or self.peer_node is not None or not self.config_matches():
+                        raise PermissionError()
+                    from phone_setup_assistant import gateway_proof, gateway_proof_request
+                    if gate is not None:
+                        proof = self.one('X-Office-Setup-Request', '')
+                        if (not re.fullmatch('[0-9a-f]{64}', proof) or
+                                not hmac.compare_digest(proof, gateway_proof_request(config, nonce))):
+                            raise PermissionError()
+                    return self.respond(200, {'proof': gateway_proof(config, nonce)})
                 u = self.boundary()
                 if not u.path.startswith('/api/mobile/'):
-                    service.auth.allow_request(opts['identity'], 'asset')
+                    # The managed transport has already verified the individual
+                    # device. Older frontends authenticate only the account.
+                    subject = 'node:' + self.peer_node if gate is not None else opts['identity']
+                    service.auth.allow_request(subject, 'asset')
                 if u.path in {'/', '/mobile/', '/mobile/pair'}:
                     if u.query:
                         raise ValueError('unexpected_query')
                     return self.page('mobile-pair.html' if u.path.endswith('/pair') else 'mobile.html')
                 if u.path == '/mobile/agent':
-                    self.principal()
+                    from mobile_auth import MobileAuthError
+                    try:
+                        self.principal()
+                    except MobileAuthError as error:
+                        if error.code != 'mobile_auth_required' or error.status != 401:
+                            raise
+                        # A restored history tab needs its static shell before it
+                        # can renew. The shell contains no history or Agent data.
+                        service.auth.renewal_device(self.token(RENEW_COOKIE), opts['identity'], node_id=self.peer_node)
                     return self.page('mobile-agent.html')
                 if u.path.startswith('/api/mobile/'):
                     if u.path == '/api/mobile/session':
                         if u.query:
                             raise ValueError('unexpected_query')
-                        data = service.auth.session_status(self.token(), opts['identity'])
+                        data = service.auth.session_status(self.token(), opts['identity'], node_id=self.peer_node)
                         return self.respond(200, dict(data, authenticated=True))
                     principal = self.principal()
                     service.auth.allow_request(principal['device_id'], 'read')
@@ -293,13 +415,15 @@ def handler(service, config, public_root):
                 target = mobile_static_file(root, u.path)
                 if not target:
                     return self.respond(404, {'error': 'not_found'})
-                return self.respond(200, target.read_bytes(), content_type=mimetypes.guess_type(str(target))[0] or 'application/octet-stream')
+                content_type = WEB_CODE_TYPES.get(target.suffix) or mimetypes.guess_type(str(target))[0]
+                return self.respond(200, target.read_bytes(), content_type=content_type or 'application/octet-stream')
             except (BrokenPipeError, ConnectionResetError, socket.timeout):
                 self.close_connection = True
             except Exception as error:
                 self.failure(error)
 
         def do_POST(self):
+            self.body_consumed = False
             try:
                 u = self.boundary(write=True)
                 if u.query:
@@ -309,26 +433,28 @@ def handler(service, config, public_root):
                     body = self.body()
                     if 'token' not in body or set(body) - {'token', 'remember_device'}:
                         raise ValueError('invalid_pairing')
-                    paired = service.auth.pair(body['token'], opts['identity'], remember_device=body.get('remember_device', False))
+                    paired = service.auth.pair(body['token'], opts['identity'], remember_device=body.get('remember_device', False),
+                                               node_id=self.peer_node)
                     device = paired['device']
                     return self.respond(200, {'authenticated': True, 'device': device, 'csrf_token': paired['csrf_token']}, cookie=self.cookies(paired))
                 if u.path == '/api/mobile/renew':
                     if self.one('X-Mobile-Renew') != '1' or self.body():
                         raise ValueError('invalid_renewal')
-                    renewed = service.auth.renew(self.token(RENEW_COOKIE), opts['identity'])
+                    renewed = service.auth.renew(self.token(RENEW_COOKIE), opts['identity'], node_id=self.peer_node)
                     return self.respond(200, {'authenticated': True, 'device': renewed['device'],
                         'csrf_token': renewed['csrf_token']}, cookie=self.access_cookie(renewed))
                 if u.path == '/api/mobile/remember':
                     body = self.body()
                     if set(body) != {'remember_device'}:
                         raise ValueError('invalid_remember_choice')
-                    paired = service.auth.remember(self.token(), opts['identity'], self.one('X-Mobile-CSRF'), body['remember_device'])
+                    paired = service.auth.remember(self.token(), opts['identity'], self.one('X-Mobile-CSRF'),
+                                                   body['remember_device'], node_id=self.peer_node)
                     return self.respond(200, {'authenticated': True, 'device': paired['device'],
                         'csrf_token': paired['csrf_token']}, cookie=self.cookies(paired))
                 if u.path == '/api/mobile/logout' and self.one('X-Mobile-Renew') == '1':
                     if self.body():
                         raise ValueError('invalid_logout')
-                    result = service.logout_renewal(self.token(RENEW_COOKIE), opts['identity'])
+                    result = service.logout_renewal(self.token(RENEW_COOKIE), opts['identity'], node_id=self.peer_node)
                     return self.respond(200, result, cookie=[name + '=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Strict'
                         for name in (RENEW_COOKIE, COOKIE)])
                 principal = self.principal(write=True)
@@ -348,6 +474,28 @@ def handler(service, config, public_root):
                 self.close_connection = True
             except Exception as error:
                 self.failure(error)
+                if not self.body_consumed:
+                    self.finish_rejected_post()
+
+        def finish_rejected_post(self):
+            # A client may still be sending when its session is rejected. Send
+            # the complete response first, then briefly drain before closing so
+            # Windows does not reset the connection and discard the response.
+            end = time.monotonic() + 0.25
+            remaining = MAX_BODY
+            try:
+                self.connection.shutdown(socket.SHUT_WR)
+                while remaining:
+                    timeout = end - time.monotonic()
+                    if timeout <= 0:
+                        break
+                    self.connection.settimeout(timeout)
+                    chunk = self.rfile.read1(min(8192, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+            except OSError:
+                pass
 
         def do_OPTIONS(self):
             self.respond(403, {'error': 'cross_origin_not_supported'})
@@ -355,11 +503,12 @@ def handler(service, config, public_root):
     return Handler
 
 
-def create_server(bridge, public_root):
-    opts = settings(bridge.config)
+def create_server(bridge, public_root, prepared_config=None):
+    target = bridge.config if prepared_config is None else prepared_config
+    opts = settings(target)
     if not opts['enabled']:
         return None
     from security_keys import upgraded_security
-    if not upgraded_security(bridge.config):
+    if not upgraded_security(target):
         raise ValueError('Upgrade separate Office credentials before enabling mobile access')
-    return BoundedHTTPServer(('127.0.0.1', opts['port']), handler(bridge.mobile, bridge.config, public_root))
+    return BoundedHTTPServer(('127.0.0.1', opts['port']), handler(bridge.mobile, bridge.config, public_root, target))

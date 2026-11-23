@@ -1,13 +1,150 @@
 {
-  "release": "0.2.1-preview",
-  "verified_at_utc": "2026-11-18T10:16:43.850629+00:00",
-  "verification_scope": "This release: generic platform-runtime setup, Windows portability contracts, isolated Windows dependency install and empty-office HTTP/start/stop smoke, plus relevant Mac regressions. Account inference and visual rendering were not newly tested; historical feature records retain their own dates.",
+  "release": "0.2.2-preview",
+  "verified_at_utc": "2026-11-23T09:11:08+00:00",
+  "verification_scope": "Published preview with repository-native onboarding. Runtime tests are for the identical OpenRouter preview sources. Historical reports retain their original scope.",
   "release_validation": {
-    "passed": true,
-    "details": "windows_complete_install",
-    "previous_release_details": "previous_release_validation_0_2_0",
-    "authenticated_inference_tested": false,
-    "live_browser_rendering_tested": false
+    "macos_python_discovered": 1221,
+    "macos_python_skipped": 3,
+    "macos_python_failed": 0,
+    "javascript_passed": 560,
+    "windows_native_passed": 19,
+    "windows_native_run": 19,
+    "pinned_ui_files_verified": 127,
+    "windows_in_place_update_preserved_private_state": true,
+    "windows_desktop_chrome_3d_lobby": true,
+    "live_openrouter_free_catalog_on_windows_and_macos": true,
+    "two_turns_and_history_in_macos_browser": "deterministic provider fixture",
+    "authenticated_openrouter_inference": "not tested"
+  },
+  "previous_release_validation_0_2_2_rc_1": {
+    "release": "0.2.2-rc.1",
+    "verified_at_utc": "2026-11-20T13:29:26+00:00",
+    "verification_scope": "Release candidate, native computer and isolated browser regression. Historical provider and phone records below retain their original dates.",
+    "release_validation": {
+      "status": "release_candidate",
+      "tested_runtime_commit": "6e1b60ce92a34960408ac374d77aa468fa3fda11",
+      "python_macos": {
+        "run": 1211,
+        "passed": 1208,
+        "skipped_native_windows": 3,
+        "failed": 0
+      },
+      "javascript": {
+        "run": 560,
+        "passed": 560,
+        "skipped": 0,
+        "failed": 0
+      },
+      "go_private_mobile_transport": "passed",
+      "repeated_private_frontend_stop": {
+        "passed": 20,
+        "fixture": "owned local worker, no external VPN"
+      },
+      "clean_macos_zip": {
+        "path_contains_spaces_and_chinese": true,
+        "ui_files": 126,
+        "platforms": {
+          "cursor": true,
+          "grok": true,
+          "codex": true
+        },
+        "selected": 0,
+        "local_ok": true
+      },
+      "all_installed_asset_hashes_match": true,
+      "upgrade_from_0_2_1_preview": {
+        "upgraded": true,
+        "member_count": 1,
+        "preserved_messages": 2,
+        "preserved_runs": 1,
+        "original_owner_access": true,
+        "credential_unchanged": true
+      },
+      "desktop_chromium_with_external_resources_blocked": {
+        "rendered": true,
+        "ground_floor": true,
+        "settings_open": true,
+        "simple_mode": true,
+        "return_full": true,
+        "page_errors": []
+      },
+      "desktop_owner_flow": {
+        "third_party_network": false,
+        "platform_choice_neutral": true,
+        "invited_joined_two_events": true,
+        "floating_dialogue": true,
+        "assigned_another_desk": true,
+        "logout_removed_avatar": true
+      },
+      "runtime_tree_sha256": "eb20d1cd590ef52e969e20e57bfdb70b2c64375c28143e6c744e6e5a2adac297",
+      "mobile_browser_engines": {
+        "chromium": {
+          "paired": true,
+          "ground_floor_rendered": true,
+          "scoped_roster": true,
+          "keyboard_send_and_newline": true,
+          "close_in_place": true,
+          "delivery_in_history_after_reload": true,
+          "paired_bookmark_reopened": true
+        },
+        "webkit": {
+          "paired": true,
+          "ground_floor_rendered": true,
+          "scoped_roster": true,
+          "keyboard_send_and_newline": true,
+          "close_in_place": true,
+          "delivery_in_history_after_reload": true,
+          "paired_bookmark_reopened": true
+        }
+      },
+      "mobile_environment": "Desktop browser in phone viewport, real local gateway HTTP and cookies with a test Tailscale identity and deterministic Agent adapter.",
+      "windows_native": {
+        "reported_by": "Windows collaboration agent, isolated native host",
+        "tested_code": "6e1b60c complete 345-file tree; earlier PCs step results retain their code revisions",
+        "original_cp950_and_cp1252_failure_reproduced": true,
+        "native_windows_tests_passed": 3,
+        "native_windows_tests_run": 3,
+        "quoted_chinese_path_join_and_two_accepted_events": true,
+        "isolated_cursor_hooks_repeat_without_duplicates": true,
+        "parent_and_child_fixture_deliveries_read_back": true,
+        "final_legacy_grok_regression": "同源 Windows 副本原生測試通過。CP950 原文逐位元保留，重試沒有重複，並行修改會提示衝突。測試自行建立私有資料夾、關閉 SQLite。",
+        "final_downloader_regression": "Windows 1fc90b8 測試 6/6 通過，涵蓋連線重設、截斷、有限重試及雜湊。",
+        "complete_fresh_download": "28dcc4e 以原生 CP950 從核准備援來源完成實際下載。其後 9a32915 及 1fc90b8 以同一批已驗快取在 CP950 及模擬 CP1252 共建置四次，每次 126/126 檔案雜湊吻合。",
+        "chrome_rendering": "345 檔同源的 6e1b60c 隔離副本以原生 CLI 啟動，Windows Chrome 實際顯示空 OFFICE 的 3D 大堂；執行啟動回條內的停止指令後，程序退出及測試埠釋放。",
+        "staging_launcher_required_restoration": true,
+        "final_zip_contains_launcher": true,
+        "source_tree_note": "早期 Windows 副本曾缺七檔，另有三份舊文件或測試。從待發包補齊後，345 個檔案的全長 SHA-256 內容樹同 Mac 待發包一致。另三份檔案為最後更新的驗收記錄、發行說明及 CI 清單。",
+        "matched_source_files": 345,
+        "matched_tree_sha256": "eb20d1cd590ef52e969e20e57bfdb70b2c64375c28143e6c744e6e5a2adac297",
+        "same_tree_cli_start_chrome_stop": true,
+        "ci_note": "同源副本運行與 GitHub 工作流程相同的 79 項測試，74 項通過、5 項按平台略過，零失敗。另行驗證的三項 Windows 專屬測試均通過。",
+        "windows_ci": {
+          "run": 79,
+          "passed": 74,
+          "skipped": 5,
+          "failed": 0
+        }
+      },
+      "new_authenticated_provider_conversations": false,
+      "physical_phone_5g_tested": false,
+      "linux_executed_this_revision": false,
+      "distribution_bytes_checked": {
+        "source_files": 348,
+        "packaged_private_runtime_files": 0
+      }
+    }
+  },
+  "previous_release_validation_0_2_1": {
+    "release": "0.2.1-preview",
+    "verified_at_utc": "2026-11-18T10:16:43.850629+00:00",
+    "verification_scope": "This release: generic platform-runtime setup, Windows portability contracts, isolated Windows dependency install and empty-office HTTP/start/stop smoke, plus relevant Mac regressions. Account inference and visual rendering were not newly tested; historical feature records retain their own dates.",
+    "release_validation": {
+      "passed": true,
+      "details": "windows_complete_install",
+      "previous_release_details": "previous_release_validation_0_2_0",
+      "authenticated_inference_tested": false,
+      "live_browser_rendering_tested": false
+    }
   },
   "initial_release_0_1_0": {
     "release": "0.1.0-preview",

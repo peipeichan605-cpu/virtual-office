@@ -1,5 +1,5 @@
 The 3D interface derives from Bodila51/grokbot-wallpaper at commit 76232f7af1a94d3cbd3d0b1cf05e460c85637acf.
-Original assets and complete upstream source are fetched only during local setup and are not bundled.
+Original assets and complete upstream source are fetched only during local setup and are not bundled. If the primary GitHub repository is unavailable, the installer can retrieve the same pinned commit from its HerbertGao/grokbot-wallpaper fork. Both sources use identical per-file hashes.
 No root license file was found at that pinned revision. This package does not assert a redistribution license for that upstream work; confirm permission before public release of derivative source or assets.
 Python services and adapters here are local project additions. No user settings, credentials or conversations are included.
 
@@ -14,9 +14,9 @@ Sources: https://openai.com/codex/ ; https://grok.com/ ; https://cursor.com/bran
 
 The optional experimental integration vendors RongleCat/grok-bot-sdk 0.78.1 at commit 42c75eb13f24630d1b689629502d4320c4219cdb under its MIT license. See vendor/grok-bot-sdk/LICENSE and PROVENANCE.json. Local compatibility changes are documented in OFFICE-COMPATIBILITY.md; this is not an official Grok SDK.
 
-## Mobile Three.js runtime
+## Local Three.js runtime
 
-The optional mobile interface bundles selected Three.js 0.170.0 runtime modules under the MIT license. See ui-overrides/assets/vendor/three/LICENSE and PROVENANCE.json (installed at public/assets/vendor/three/). The existing upstream Office assets remain separately fetched during setup.
+The desktop and mobile interfaces use selected Three.js 0.170.0 runtime modules under the MIT license. See ui-overrides/assets/vendor/three/LICENSE and PROVENANCE.json (installed at public/assets/vendor/three/). The existing upstream Office assets remain separately fetched during setup.
 
 ## Owner pairing QR encoder
 

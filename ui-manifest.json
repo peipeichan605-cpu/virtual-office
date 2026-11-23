@@ -1,5 +1,6 @@
 {
   "repository": "Bodila51/grokbot-wallpaper",
+  "fallback_repositories": ["HerbertGao/grokbot-wallpaper"],
   "commit": "76232f7af1a94d3cbd3d0b1cf05e460c85637acf",
   "files": [
     {
@@ -1439,7 +1440,7 @@
     },
     {
       "destination": "office/app.js",
-      "sha256": "5dc0a91dea64a27b72812f1c3a8802862fc65e8904e17dbebd223920f330c755"
+      "sha256": "bccd83bb101b8180778949cbbbd18630a2996d9f2409d9c4c794106b887804b7"
     },
     {
       "destination": "office/codex-background-ui.js",
@@ -1455,11 +1456,11 @@
     },
     {
       "destination": "office/commands.js",
-      "sha256": "995101ed7f83177ee88eb331f90d7dd3ee2234b2b3ff4f458dad9fb03ab06701"
+      "sha256": "b2c59b9f87c8cab4206883b9f0b99c7a79f3c70db23e9a3584022fbca59677fd"
     },
     {
       "destination": "office/cursor-sdk-ui.js",
-      "sha256": "b1b6d50b30395fcfe60060d355d6080142ff190708dcba61b4f7fce6f0df13d6"
+      "sha256": "825c3ee457627d9159b114dfc8be7e16aae2fad49c7be51b7e24b30bef013336"
     },
     {
       "destination": "office/feed.js",
@@ -1499,7 +1500,7 @@
     },
     {
       "destination": "office/index.html",
-      "sha256": "2c5b5c79c38d79ca3b6ad3a52f4b9384dc7a80994b24445c29f988052e4e4feb"
+      "sha256": "b705e4f108c9c5b07176ff1091a1e3ea0c1e1800f84c12f2ee8a2e512e172d08"
     },
     {
       "destination": "office/invite.css",
@@ -1511,7 +1512,7 @@
     },
     {
       "destination": "office/mobile-access.js",
-      "sha256": "3b69aee9c547cad6a26b492cec3bf668c014d53809f4c7d1716d9bee67e8e69b"
+      "sha256": "9ecf3b6753c7734c255b51ce8f9e6a886156e09a121fda1ce3a1bdb9892745d6"
     },
     {
       "destination": "office/mobile-agent.html",
@@ -1519,7 +1520,7 @@
     },
     {
       "destination": "office/mobile-entry.js",
-      "sha256": "46a03a446078c18ed0bbb95f3901a61b16e80bd9ac3044d45afbf110cf91f907"
+      "sha256": "c17c9d3a5e16b2b7622f6432727ac7aff4622c8de436fbb013848721e462ee3f"
     },
     {
       "destination": "office/mobile-owner.css",
@@ -1527,15 +1528,15 @@
     },
     {
       "destination": "office/mobile-owner.js",
-      "sha256": "e22dd0b7cd2176ac9fa48c879874bb4f685e64eddce6fed84b7287c9251f0204"
+      "sha256": "4bb5e1602dfecf0d33fade81905137b1bf2ff6c80c25a69f3f4122d748c332a0"
     },
     {
       "destination": "office/mobile-pair.html",
-      "sha256": "98af4bcdcec12e560684400fdf57ef21d00dfb24e28d9d443bf26be369bd52c1"
+      "sha256": "319f9cd0dc73d5a69671254f28eced9e2b0457ae51b8cbd4ff23fce13bdf4de8"
     },
     {
       "destination": "office/mobile-pair.js",
-      "sha256": "6a09e6a5a6d996e5b415eaf7a35e3abf9c342a6e2110a7f0deedc7d7a8947f62"
+      "sha256": "4582b33fd50d64248a9aec880dce450dd56f25954bb0c41b117c8464607d22cb"
     },
     {
       "destination": "office/mobile-session-controls.js",
@@ -1543,19 +1544,23 @@
     },
     {
       "destination": "office/mobile.css",
-      "sha256": "34fdb4c878db1d7bfddc875cb46d683fe9b9af69ca8edd055790ee86c155ab86"
+      "sha256": "83b242f3fda094cda04bcc730d9daf4d858753faee7666b9042d778380f6515d"
     },
     {
       "destination": "office/mobile.html",
-      "sha256": "1c2d36c957fd7422ddf0707b5e820fc21e42bad48f4b7b27662d7b09e3b7f7d7"
+      "sha256": "8d289d7f478ef009701036e3922071f5fec59c76a05066539c08ee7f74b89d6f"
     },
     {
       "destination": "office/new-conversation-ui.js",
-      "sha256": "42ba098226f6eec1fd7c1c08fb533de29d23da0154eedbf5fac1528516ccb404"
+      "sha256": "07c0eaad18adb1009ab7118f55e06b3882977e82eb6676d12aae7ae6ca38dbd1"
     },
     {
       "destination": "office/office-api.js",
-      "sha256": "b03e03638978c1b06d2beb220cfc5d456b33bc939eb2b5dd525fcde3b32ecbbe"
+      "sha256": "33068037334b1c011bd39f2269304bea384683755caaf7bff5bd7561e74345a9"
+    },
+    {
+      "destination": "office/openrouter-ui.js",
+      "sha256": "6f8904019e98486b3cc04f65905ad3d8540df897b081f71ee6f6a1bc1e0cca6d"
     },
     {
       "destination": "office/office-controls.js",

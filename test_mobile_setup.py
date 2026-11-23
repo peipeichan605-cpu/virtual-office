@@ -77,6 +77,50 @@ class MobileSetupTests(unittest.TestCase):
         self.assertTrue(result['pairing_available'])
         self.assertFalse(result['local_listener_ready'])
 
+    def test_assistant_gate_is_atomic_idempotent_and_specific_to_target(self):
+        mobile = self.config['mobile']
+        # A helper creates the marker before the settings have ever been saved.
+        initial = dict(self.config)
+        del initial['mobile']
+        mobile_setup.mark_assistant_pending(initial, mobile)
+        mobile_setup.mark_assistant_pending(initial, mobile)
+        marker, = self.base.iterdir()
+        self.assertEqual(marker.read_bytes(), b'')
+        self.assertNotIn(mobile['identity'], marker.name)
+        self.assertNotIn('fixture', marker.name)
+        pending = mobile_setup.connection_setup(self.config, configured=True)
+        self.assertTrue(pending['configuration_ready'])
+        self.assertEqual(pending['transport']['state'], 'assistant_pending')
+        self.assertFalse(pending['pairing_available'])
+        for change in ({'identity': 'different@example.invalid'}, {'port': 4321},
+                       {'public_origin': 'https://different.fixture.ts.net'}):
+            other = dict(self.config, mobile=dict(mobile, **change))
+            self.assertTrue(mobile_setup.connection_setup(other, configured=True)['pairing_available'])
+            mobile_setup.clear_assistant_pending(other, other['mobile'])
+            self.assertTrue(mobile_setup.assistant_pending(self.config))
+        mobile_setup.clear_assistant_pending(self.config, mobile)
+        mobile_setup.clear_assistant_pending(self.config, mobile)
+        self.assertEqual(list(self.base.iterdir()), [])
+        self.assertTrue(mobile_setup.connection_setup(self.config, configured=True)['pairing_available'])
+
+    def test_corrupt_unreadable_or_non_file_assistant_marker_fails_closed(self):
+        mobile = self.config['mobile']
+        mobile_setup.mark_assistant_pending(self.config, mobile)
+        marker, = self.base.iterdir()
+        marker.write_bytes(b'invalid marker')
+        self.assertTrue(mobile_setup.assistant_pending(self.config))
+        for operation in (mobile_setup.mark_assistant_pending, mobile_setup.clear_assistant_pending):
+            with self.assertRaises(ValueError):
+                operation(self.config, mobile)
+        with mock.patch.object(mobile_setup, 'require_private', side_effect=PermissionError):
+            self.assertTrue(mobile_setup.assistant_pending(self.config))
+        marker.unlink()
+        # A directory in the marker position must never be accepted or removed.
+        marker.mkdir()
+        self.assertTrue(mobile_setup.assistant_pending(self.config))
+        with self.assertRaises(ValueError):
+            mobile_setup.clear_assistant_pending(self.config, mobile)
+
     def test_managed_ready_is_local_only_and_contains_no_private_values(self):
         self.fixture()
         before = {p: p.read_bytes() for p in self.root.rglob('*') if p.is_file()}

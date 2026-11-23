@@ -167,6 +167,81 @@ class CursorLocalTests(unittest.TestCase):
         with self.assertRaises(ConnectionError):
             self.bridge.connections.create_cursor_local(self.creation(workspace=str(folder/'missing'/'nested'),create_folder=True))
 
+    def test_automatic_workspace_first_registration_and_followup_use_separate_folders(self):
+        self.runtime()
+        service = self.bridge.connections
+        first_data = {'name':'Chat / 01', 'request_id':str(uuid.uuid4()), 'api_key':KEY}
+        first = service.create_cursor_local(first_data)
+        self.assertEqual(service.create_cursor_local(first_data), first)
+        second = service.create_cursor_local({'name':'Second chat', 'request_id':str(uuid.uuid4())})
+        sessions = load_config(self.path)['command_adapters']['cursor_local']['sessions']
+        first_session, second_session = (sessions[row['agent_id'].split(':',1)[1]] for row in (first, second))
+        first_cwd, second_cwd = (Path(s['cwd']) for s in (first_session, second_session))
+        self.assertNotEqual(first_cwd, second_cwd)
+        for folder in (first_cwd, second_cwd):
+            self.assertTrue(folder.is_absolute() and folder.is_dir())
+            self.assertEqual(folder.parent, self.root / 'cursor-chat-workspaces')
+            self.assertEqual(list(folder.iterdir()), [])
+        self.assertNotIn(first_cwd, Path(first_session['credential_file']).parents)
+        self.assertEqual(service.cursor_local_status()['workspaces'], [])
+        self.assertIsNone(service.cursor_local_status()['workspace'])
+        self.assertEqual(self.bridge.workspaces.for_agent(first['agent_id'])['id'], 'workspace-unassigned')
+        self.assertEqual(len(self.fake.created), 2)
+        self.assertEqual(self.fake.sent, [])
+        command = self.submit(first['agent_id'])
+        self.wait(command, {'completed'})
+        self.assertEqual(self.fake.sent[0]['cwd'], str(first_cwd))
+
+    def test_automatic_workspace_ignores_saved_project_and_preserves_manual_choice(self):
+        project = self.root / 'project'
+        project.mkdir()
+        explicit = self.connect_sdk(workspace=str(project))
+        service = self.bridge.connections
+        automatic = service.create_cursor_local({'name':'Another chat', 'request_id':str(uuid.uuid4())})
+        self.assertNotEqual(self.fake.created[-1]['cwd'], str(project))
+        status = service.cursor_local_status()
+        self.assertEqual(status['workspace'], str(project))
+        self.assertEqual([item['path'] for item in status['workspaces']], [str(project)])
+        self.assertNotEqual(self.bridge.workspaces.for_agent(explicit['agent_id'])['id'], 'workspace-unassigned')
+        self.assertEqual(self.bridge.workspaces.for_agent(automatic['agent_id'])['id'], 'workspace-unassigned')
+
+    def test_automatic_workspace_errors_before_reservation_are_definite(self):
+        data = self.creation()
+        del data['workspace']
+        service = self.bridge.connections
+        root = self.root / 'cursor-chat-workspaces'
+        self.fake.enabled = False
+        with self.assertRaises(ConnectionError):
+            service.create_cursor_local(data)
+        self.assertFalse(root.exists())
+        self.fake.enabled = True
+        root.mkdir(mode=0o700)
+        occupied = root / data['request_id']
+        occupied.mkdir(mode=0o700)
+        (occupied / 'existing').touch()
+        with self.assertRaises(ConnectionError) as error:
+            service.create_cursor_local(data)
+        self.assertEqual(error.exception.code, 'cursor_auto_workspace_unavailable')
+        self.assertEqual(service.cursor_local_status(data['request_id'])['creation']['state'], 'failed')
+        self.assertTrue((occupied / 'existing').is_file())
+        self.assertEqual(self.fake.created, [])
+        self.assertFalse(service.cursor_local_status()['credential_configured'])
+
+    def test_automatic_workspace_rejects_an_aliased_root(self):
+        data = self.creation()
+        del data['workspace']
+        target = self.root / 'separate'
+        target.mkdir(mode=0o700)
+        try:
+            (self.root / 'cursor-chat-workspaces').symlink_to(target, target_is_directory=True)
+        except OSError:
+            self.skipTest('This filesystem cannot create test symlinks')
+        with self.assertRaises(ConnectionError) as error:
+            self.bridge.connections.create_cursor_local(data)
+        self.assertEqual(error.exception.code, 'cursor_auto_workspace_unavailable')
+        self.assertEqual(list(target.iterdir()), [])
+        self.assertEqual(self.fake.created, [])
+
     def test_nonempty_tool_policy_or_approval_bypass_is_rejected(self):
         for extra in [{'tools':['bash']}, {'setting_sources':['user']}, {'permission_mode':'bypassPermissions'}, {'mcp_servers':{'x':{}}}]:
             with self.assertRaises(ConnectionError):
@@ -292,6 +367,17 @@ class CursorLocalTests(unittest.TestCase):
     def sdk_lifecycle(self, ident):
         sid=ident.split(':',1)[1]
         return SessionLifecycle(self.bridge.commands.adapters['cursor_local'].sessions[sid],sid)
+
+    def test_bridge_start_failure_explains_unsent_message_on_card_and_in_history(self):
+        ident = self.connect_sdk()['agent_id']
+        failure = LocalStartError('cursor_local_start_failed', native_attempted=False)
+        with patch.object(self.fake, 'send', side_effect=failure):
+            command = self.submit(ident)
+            self.wait(command, {'failed'})
+        self.assertEqual(self.sdk_lifecycle(ident).read()['phase'], 'reserved')
+        step = 'Cursor SDK 未能準備對話，訊息未送出。'
+        self.assertEqual(self.bridge.sources['SDK fixture']['step'], step)
+        self.assertEqual(self.bridge.history.list({ident}, ident)[0]['delivery_preview'], step)
 
     def test_native_create_then_presend_failure_stays_unknown_and_visible_without_fake_start(self):
         created=self.connect_sdk();ident=created['agent_id'];lifecycle=self.sdk_lifecycle(ident)
@@ -455,7 +541,7 @@ class PublicSdkContractTests(unittest.TestCase):
             @staticmethod
             def launch_bridge(**kwargs): calls.append(('bridge',kwargs)); return client
         module = Obj(Agent=Agent, AgentOptions=Options, CursorClient=Client, LocalAgentOptions=LocalOptions)
-        with patch.dict('sys.modules', {'cursor_sdk':module}):
+        with patch.dict('sys.modules', {'cursor_sdk':module}), patch('cursor_sdk_bridge.WINDOWS', False):
             runtime = SdkRuntime()
             self.assertTrue(runtime.reserve(KEY,'model-fixture','/fixture',request_id='create-id').startswith('agent-'))
             self.assertEqual(calls, [], 'registration cannot create a native queued bootstrap')

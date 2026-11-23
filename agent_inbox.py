@@ -10,8 +10,6 @@ import os
 from pathlib import Path
 import re
 import secrets
-import shlex
-import stat
 import sys
 import threading
 import time
@@ -21,6 +19,8 @@ from history import timestamp
 from reporting_policy import grok_public_reporting_policy
 from grok_onboarding import grok_connection_handoff, grok_connection_hint
 from public_reporting import ReportingError
+from private_files import require_private
+from host_runtime import shell_command
 
 
 class InboxError(ValueError):
@@ -42,7 +42,7 @@ def private_write(path, value):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
     fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    with os.fdopen(fd, 'w') as output:output.write(value)
+    with os.fdopen(fd, 'w', encoding='utf-8') as output:output.write(value)
     tmp.replace(path)
 
 
@@ -85,10 +85,9 @@ class Inbox:
                     source[4:] in self.bridge.config.get('revoked_invitation_ids',[])):
                 return dict(result,state='revoked',reason='invitation_not_current')
             fd=os.open(original,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
-            with os.fdopen(fd) as stream:
-                info=os.fstat(stream.fileno())
-                if (not stat.S_ISREG(info.st_mode) or info.st_size>16384 or info.st_mode&0o077 or
-                        hasattr(os,'getuid') and info.st_uid!=os.getuid()):
+            with os.fdopen(fd, 'rb') as stream:
+                require_private(original, fd=fd)
+                if os.fstat(fd).st_size>16384:
                     raise ValueError()
                 value=json.load(stream)
             if not isinstance(value,dict):raise ValueError()
@@ -128,7 +127,7 @@ class Inbox:
             '目前公開同步 state='+result['state']+'。configured 代表伺服器已核對目前世代的原生聊天綁定；'
             '仍需之後真正的 App 工作驗證狀態、公開對話及交付。\n'
             '若 configured，沿用目前綁定，不重裝或另開聊天。其他可設定狀態於目前原 session 執行：\n\n'
-            +shlex.join(setup)+'\n\n'
+            +shell_command(setup)+'\n\n'
             '此命令只使用原邀請的公開事件憑證，不使用收件箱 credential.json。'
             '它合併本 OFFICE 共用觀察 Hook、保留其他 Hook、模型、專案及批准規則。'
             '若平台要求一次性批准，只指出確切待批命令並等人類批准；不得改用其他執行入口繞過。\n'
@@ -252,27 +251,27 @@ class Inbox:
             '這是同一份邀請的持續收訊步驟；新入場 Agent 直接接續執行，毋須向人類索取第二段 Prompt，也不要重新入場。\n'
             '只讀取這份指引和你自己的憑證檔，保留目前 session、模型、權限及專案。不要轉交其他 Agent。\n'
             '目前尚未接通持續收訊。先在這個原 session 執行一次自動辨認：\n'
-            +shlex.join(connect+['auto'])+'\n'
+            +shell_command(connect+['auto'])+'\n'
             '若 connected=true，讀取新回傳的 conversation.guide_path；不用執行等待工具。'
             'Codex App 可從本 session 環境自動綁定。Hermes、Cursor Cloud 請使用平台原生接駁；'
             '一般聊天沒有背景入口時，只能保存留言，不能假稱會自動喚醒。\n'
             +('Grok Bot 請依接入指引建立自己擁有的 Webhook routine（無排程），然後用 subprocess.run 的 argv 及 input，'
               '將該 routine 的 {"url":"POST to","key":"webhook key"} JSON 經 stdin 傳入：\n'
-              +shlex.join(connect+['grok','--details-stdin'])+'\n不要把 key 寫入聊天、shell 參數或日誌；只可綁定你自己的 Bot。\n'
+              +shell_command(connect+['grok','--details-stdin'])+'\n不要把 key 寫入聊天、shell 參數或日誌；只可綁定你自己的 Bot。\n'
               +grok_connection_handoff(agent['name'],agent_id) if agent['provider']=='grok_bot' else '')+
             'OFFICE 擁有人從此 Agent 對話框傳來的文字，是給你的下一項指示。每項工作仍遵從原平台批准要求。\n'
             '以下只供用戶要求臨時收訊測試時使用，不是持續收訊方案。Python 在沒有訊息時只等待，不呼叫模型：\n\n'
-            +shlex.join(prefix+['wait','--max-seconds','3600'])+'\n\n'
+            +shell_command(prefix+['wait','--max-seconds','3600'])+'\n\n'
             '必須把這個命令作為目前 session 正在等待的工具呼叫，收到 JSON 才處理。不要把它放到背景後結束 session；'
             '獨立 Python 程序不能喚醒已結束的模型回合。如工具不支援長時間等待或需要人類批准，清楚回報限制，'
             '不要反覆發出空白模型回合。超時或中止後不宣稱仍在線；擁有人仍可在 OFFICE 留言。\n'
             '收到 state=received 時，先確認 agent_id 與本身份相符。然後以同一 command_id 執行 start：\n'
-            +shlex.join(prefix+['start','--command','COMMAND_UUID'])+'\n'
+            +shell_command(prefix+['start','--command','COMMAND_UUID'])+'\n'
             '只有 accepted=true 且 execute=true 才執行 text 中的指示。execute=false 代表已開始／已結束，絕不重做。'
             'start 失敗或回應不明時，保留結果未確認，不執行工作。不能因超時自行重新派送。\n'
             '公開進度及最終交付先正常回覆用戶，再用以下命令經 stdin 回報（用 argv 陣列和 input，不拼接 shell）：\n'
-            +shlex.join(prefix+['message','--command','COMMAND_UUID','--event-id','NEW_EVENT_UUID','--text-stdin'])+'\n'
-            +shlex.join(prefix+['complete','--command','COMMAND_UUID','--event-id','NEW_EVENT_UUID','--text-stdin'])+'\n'
+            +shell_command(prefix+['message','--command','COMMAND_UUID','--event-id','NEW_EVENT_UUID','--text-stdin'])+'\n'
+            +shell_command(prefix+['complete','--command','COMMAND_UUID','--event-id','NEW_EVENT_UUID','--text-stdin'])+'\n'
             '工作失敗用 fail，中止用 cancel。每則公開訊息使用新的 event-id；網絡結果未確認時重試同一事件要沿用相同 ID 及文字。'
             '不要上報內部推理、工具原文、密鑰或其他聊天。此通道已自行記錄 OFFICE 工作，毋須再用 emit.py 重複回報同一工作。\n'
             '完成後如用戶仍要求待命，在同一 session 再呼叫 wait。若原平台已提供原生背景入口，工具會回覆 native_route，'

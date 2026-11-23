@@ -27,6 +27,7 @@ MIN_GO = (1, 27, 4)
 TS_VERSION = 'v1.104.7'
 MAX_JSON = 1024 * 1024
 MAX_STATUS_AGE_SECONDS = 30
+STOP_WAIT_SECONDS = 5
 RUN_ID = re.compile(r'phone-tsnet-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}\Z')
 PHASES = {'starting', 'login_required', 'device_approval_required', 'authenticated',
           'ready', 'stopped', 'error'}
@@ -557,14 +558,17 @@ def stop_frontend(config, *, run_id=None):
         if not _is_running(record):
             raise FrontendError('frontend_process_identity_mismatch')
         os.kill(record['pid'], signal.SIGTERM)
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline and _is_running(record):
+        deadline = time.monotonic() + STOP_WAIT_SECONDS
+        child = _LOCAL_CHILDREN.get(run_id)
+        # During exit, ps may lose the command line before the PID is gone.
+        # Reap a child we own and wait for positive absence without signalling again.
+        while True:
+            if child is not None:
+                child.poll()
+            stopped = _pid_absent(record['pid'])
+            if stopped or time.monotonic() >= deadline:
+                break
             time.sleep(0.05)
-        # A failed/timed-out ps read is not proof that the worker exited.
-        # Reap our own child handle, then require positive PID absence before
-        # discarding the active receipt. Keep uncertain identities fail closed.
-        _is_running(record)
-        stopped = _pid_absent(record['pid'])
         result = {'run_id': run_id, 'pid': record['pid'], 'state': 'stopped' if stopped else 'stop_requested', 'stopped': stopped}
         run = root / 'runs' / run_id
         _write_json(run / 'result.json', result)

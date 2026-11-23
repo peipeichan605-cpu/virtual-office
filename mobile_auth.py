@@ -23,8 +23,8 @@ from private_files import ensure_private_directory, prepare_private_file, requir
 
 
 class MobileAuthError(ValueError):
-    def __init__(self, code, status=400):
-        self.code, self.status = code, status
+    def __init__(self, code, status=400, *, retry_after=None):
+        self.code, self.status, self.retry_after = code, status, retry_after
         super().__init__(code)
 
 
@@ -71,8 +71,9 @@ class MobileAuth:
     MAX_PAIRINGS = 8
     MAX_AUDIT = 2000
     MAX_RATE_BUCKETS = 512
-    # Fixed-window budgets: static assets 240/min per verified identity (1200
-    # globally), API reads 360/min per authenticated device (1800 globally),
+    # Fixed-window budgets: static assets 240/min per verified phone (or account
+    # for identity-only transports), 1200 globally; API reads 360/min per
+    # authenticated device (1800 globally),
     # and authentication 600/min per identity (2400 globally). The HTTP caller
     # supplies these subject scopes and must not charge assets to API reads.
     # This permits a ~90-file 3D startup plus normal status/dialogue polling.
@@ -143,6 +144,8 @@ class MobileAuth:
         # Existing installations keep their explicit, membership-bound grants.
         for table in ('mobile_pairings', 'mobile_devices'):
             columns = {row[1] for row in self.db.execute('PRAGMA table_info(' + table + ')')}
+            if 'node_id' not in columns:
+                self.db.execute('ALTER TABLE ' + table + ' ADD COLUMN node_id TEXT')
             for name in ('view_mode', 'send_mode'):
                 if name not in columns:
                     self.db.execute('ALTER TABLE ' + table + ' ADD COLUMN ' + name + " TEXT NOT NULL DEFAULT 'selected'")
@@ -218,12 +221,22 @@ class MobileAuth:
                     del self._rates[old_key]
             # Do not evict an unexpired limiter merely because new identities arrive.
             needed = sum(k not in self._rates for k in (key, global_key))
-            if len(self._rates) + needed > self.MAX_RATE_BUCKETS:
-                raise MobileAuthError('mobile_rate_limited', 429)
             current = self._rates.get(key, (now + window, 0))
             global_current = self._rates.get(global_key, (now + window, 0))
-            if current[1] >= limit or global_current[1] >= self.GLOBAL_LIMITS[kind]:
-                raise MobileAuthError('mobile_rate_limited', 429)
+            retry_at = now
+            if current[1] >= limit:
+                retry_at = current[0]
+            if global_current[1] >= self.GLOBAL_LIMITS[kind]:
+                retry_at = max(retry_at, global_current[0])
+            overflow = len(self._rates) + needed - self.MAX_RATE_BUCKETS
+            if overflow > 0:
+                # These two buckets are needed even if their old windows expire.
+                other_ends = sorted(end for k, (end, _) in self._rates.items()
+                                    if k not in (key, global_key))
+                retry_at = max(retry_at, other_ends[overflow - 1])
+            if retry_at > now:
+                retry_after = max(1, min(300, math.ceil(retry_at - now)))
+                raise MobileAuthError('mobile_rate_limited', 429, retry_after=retry_after)
             self._rates[key] = (current[0], current[1] + 1)
             self._rates[global_key] = (global_current[0], global_current[1] + 1)
         return True
@@ -248,8 +261,34 @@ class MobileAuth:
         return (sorted(views) if view_mode == 'selected' else [],
                 sorted(sends) if send_mode == 'selected' else [])
 
+    def pairing_nodes(self):
+        """Only the in-app peer gateway provides verified native device IDs."""
+        if 'mobile_peer_gate' not in self.config:
+            return None
+        from phone_peer_gate import validate_peer_gate
+        try:
+            return validate_peer_gate(self.config['mobile_peer_gate'])['node_ids']
+        except ValueError:
+            raise MobileAuthError('invalid_mobile_configuration', 503) from None
+
+    def pairing_node(self, requested):
+        nodes = self.pairing_nodes()
+        if nodes is None:
+            if requested is not None:
+                raise MobileAuthError('invalid_pairing')
+            return None
+        if requested is None and len(nodes) == 1:
+            return nodes[0]
+        if requested not in nodes:
+            raise MobileAuthError('select_pairing_phone', 409)
+        return requested
+
+    def _node_allowed(self, node_id):
+        nodes = self.pairing_nodes()
+        return node_id is None if nodes is None else node_id in nodes
+
     def create_pairing(self, identity, label, view_agents, send_agents,
-                       view_mode='selected', send_mode='selected'):
+                       view_mode='selected', send_mode='selected', *, node_id=None):
         """Owner-only entry point: HTTP caller must independently verify owner."""
         identity = _identity(identity)
         self.allow_request(identity, 'pair_create')
@@ -258,6 +297,7 @@ class MobileAuth:
             raise MobileAuthError('invalid_mobile_label')
         view_list, send_list = self._scopes(view_agents, send_agents, view_mode, send_mode)
         with self._transaction():
+            node_id = self.pairing_node(node_id)
             now = self.clock()
             selected = self._selected()
             if not set(view_list + send_list) <= selected.keys():
@@ -271,17 +311,17 @@ class MobileAuth:
             expires = now + self.pairing_ttl
             bound = set(view_list + send_list)
             self.db.execute('''INSERT INTO mobile_pairings
-                (id,token_hash,identity,label,view_agents,send_agents,bindings,created_at,expires_at,view_mode,send_mode)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                (id,token_hash,identity,label,view_agents,send_agents,bindings,created_at,expires_at,view_mode,send_mode,node_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
                             (ident, _digest('pair', token), identity, label.strip(), json.dumps(view_list),
                              json.dumps(send_list), json.dumps({a: selected[a] for a in bound}, sort_keys=True), now, expires,
-                             view_mode, send_mode))
+                             view_mode, send_mode, node_id))
             self._audit('pairing_created')
             return {'pairing_id': ident, 'pairing_token': token, 'expires_at': expires,
                     'identity': identity, 'label': label.strip(), 'view_agents': view_list, 'send_agents': send_list,
                     'view_mode': view_mode, 'send_mode': send_mode}
 
-    def pair(self, token, identity, subject=None, *, remember_device=False):
+    def pair(self, token, identity, subject=None, *, remember_device=False, node_id=None):
         # Apply global throttling even for malformed identities or random tokens.
         self.allow_request(subject if isinstance(subject, str) and subject else 'pairing', 'pair')
         identity = _identity(identity)
@@ -292,7 +332,8 @@ class MobileAuth:
         with self._transaction():
             now = self.clock()
             row = self.db.execute('SELECT * FROM mobile_pairings WHERE token_hash=?', (_digest('pair', token),)).fetchone()
-            if not row or row['expires_at'] <= now or not hmac.compare_digest(row['identity'].encode(), identity.encode()):
+            if (not row or row['expires_at'] <= now or row['node_id'] != node_id or not self._node_allowed(node_id)
+                    or not hmac.compare_digest(row['identity'].encode(), identity.encode())):
                 raise MobileAuthError('invalid_mobile_pairing', 401)
             selected = self._selected()
             bindings = json.loads(row['bindings'])
@@ -311,11 +352,12 @@ class MobileAuth:
             device_id = 'phone-' + uuid.uuid4().hex
             self.db.execute('''INSERT INTO mobile_devices
                 (id,session_hash,csrf_hash,identity,label,view_agents,send_agents,bindings,revision,
-                 created_at,expires_at,last_seen,idle_ttl,revoked_at,view_mode,send_mode)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                 created_at,expires_at,last_seen,idle_ttl,revoked_at,view_mode,send_mode,node_id)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                             (device_id, _digest('session', session), _digest('csrf', csrf), identity,
                              row['label'], row['view_agents'], row['send_agents'], row['bindings'],
-                             1, now, now + self.session_ttl, now, self.idle_ttl, None, row['view_mode'], row['send_mode']))
+                             1, now, now + self.session_ttl, now, self.idle_ttl, None,
+                             row['view_mode'], row['send_mode'], node_id))
             if renewal:
                 self.db.execute('''UPDATE mobile_devices SET renewal_hash=?,renewal_nonce=?,
                     renewal_expires_at=?,renewal_last_seen=? WHERE id=?''',
@@ -336,24 +378,25 @@ class MobileAuth:
             ('office-mobile/access/v1/' + nonce).encode(), hashlib.sha256).digest()).decode().rstrip('=')
 
     def _renewable(self, row, now):
-        return bool(row and row['revoked_at'] is None and row['renewal_hash']
+        return bool(row and row['revoked_at'] is None and row['renewal_hash'] and self._node_allowed(row['node_id'])
                     and row['renewal_expires_at'] > now
                     and row['renewal_last_seen'] + self.RENEWAL_IDLE_TTL > now)
 
-    def _renewal_row(self, token, identity, now):
+    def _renewal_row(self, token, identity, now, node_id):
         identity = _identity(identity)
         row = self.db.execute('SELECT * FROM mobile_devices WHERE renewal_hash=?',
             (_digest('renewal', token),)).fetchone() if _token(token) else None
-        if not self._renewable(row, now) or not hmac.compare_digest(row['identity'].encode(), identity.encode()):
+        if (not self._renewable(row, now) or row['node_id'] != node_id
+                or not hmac.compare_digest(row['identity'].encode(), identity.encode())):
             raise MobileAuthError('mobile_auth_required', 401)
         return row
 
-    def renewal_device(self, token, identity):
+    def renewal_device(self, token, identity, *, node_id=None):
         """Validate a remembered grant, without extending it or issuing access."""
         with self.lock:
-            return self._public(self._renewal_row(token, identity, self.clock()))
+            return self._public(self._renewal_row(token, identity, self.clock(), node_id))
 
-    def renew(self, token, identity):
+    def renew(self, token, identity, *, node_id=None):
         """Same-origin HTTP boundary required. Preserve device/scopes; rotate access.
 
         The HTTP renewal cookie is immutable and expires after 30 days, or
@@ -363,7 +406,7 @@ class MobileAuth:
         self.allow_request(identity if isinstance(identity, str) else 'invalid-identity', 'auth')
         with self._transaction():
             now = self.clock()
-            row = self._renewal_row(token, identity, now)
+            row = self._renewal_row(token, identity, now, node_id)
             if not self._live(row, now):
                 nonce = secrets.token_urlsafe(18)
                 session = self._access_token(token, nonce)
@@ -378,11 +421,11 @@ class MobileAuth:
             row = self.db.execute('SELECT * FROM mobile_devices WHERE id=?', (row['id'],)).fetchone()
             return {'session_token': session, 'csrf_token': _csrf(session), 'device': self._public(row, now)}
 
-    def remember(self, token, identity, csrf, enabled):
+    def remember(self, token, identity, csrf, enabled, *, node_id=None):
         """Explicit CSRF-verified browser choice; never called by automatic renewal."""
         if type(enabled) is not bool:
             raise MobileAuthError('invalid_mobile_remember_choice')
-        principal = self.authenticate(token, identity, csrf=csrf, write=True)
+        principal = self.authenticate(token, identity, csrf=csrf, write=True, node_id=node_id)
         with self._transaction():
             now = self.clock()
             row = self._principal_row(principal, now, write=True)
@@ -403,7 +446,7 @@ class MobileAuth:
                     **({'renewal_token': renewal} if renewal else {})}
 
     def _live(self, row, now):
-        return bool(row and row['revoked_at'] is None and row['expires_at'] > now
+        return bool(row and row['revoked_at'] is None and self._node_allowed(row['node_id']) and row['expires_at'] > now
                     and row['last_seen'] + row['idle_ttl'] > now)
 
     def _public(self, row, now=None):
@@ -426,7 +469,7 @@ class MobileAuth:
                 'state': 'revoked' if row['revoked_at'] is not None else 'ready' if self._live(row, now)
                     else 'renewal_required' if self._renewable(row, now) else 'expired'}
 
-    def authenticate(self, token, identity, csrf=None, write=False):
+    def authenticate(self, token, identity, csrf=None, write=False, *, node_id=None):
         self.allow_request(identity if isinstance(identity, str) and 1 <= len(identity) <= 1024 else 'invalid-identity', 'auth')
         identity = _identity(identity)
         if not _token(token):
@@ -435,7 +478,8 @@ class MobileAuth:
         with self._transaction():
             now = self.clock()
             row = self.db.execute('SELECT * FROM mobile_devices WHERE session_hash=?', (key,)).fetchone()
-            if not self._live(row, now) or not hmac.compare_digest(row['identity'].encode(), identity.encode()):
+            if (not self._live(row, now) or row['node_id'] != node_id
+                    or not hmac.compare_digest(row['identity'].encode(), identity.encode())):
                 raise MobileAuthError('mobile_auth_required', 401)
             if write and (not isinstance(csrf, str) or len(csrf) != 64
                           or not hmac.compare_digest(row['csrf_hash'], _digest('csrf', csrf))):
@@ -483,12 +527,12 @@ class MobileAuth:
             result._identity, result._write_verified = principal._identity, principal._write_verified
             return result
 
-    def csrf_for(self, token, identity):
-        self.authenticate(token, identity)
+    def csrf_for(self, token, identity, *, node_id=None):
+        self.authenticate(token, identity, node_id=node_id)
         return _csrf(token)
 
-    def session_status(self, token, identity):
-        principal = self.authenticate(token, identity)
+    def session_status(self, token, identity, *, node_id=None):
+        principal = self.authenticate(token, identity, node_id=node_id)
         return {'device': dict(principal), 'csrf_token': _csrf(token)}
 
     def command_origin(self, principal, agent_id):

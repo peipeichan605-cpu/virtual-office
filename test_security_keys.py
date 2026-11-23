@@ -167,7 +167,7 @@ class SecurityKeyTests(unittest.TestCase):
     def test_offline_check_fails_closed_when_socket_state_is_uncertain(self):
         import errno
         from office import require_offline
-        with patch('office.socket.socket') as factory:
+        with patch('office.sys.platform', 'linux'), patch('office.socket.socket') as factory:
             connection = factory.return_value.__enter__.return_value
             connection.connect_ex.return_value = errno.EACCES
             with self.assertRaisesRegex(ValueError, 'Stop Office'):

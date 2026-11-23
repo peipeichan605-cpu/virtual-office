@@ -14,9 +14,10 @@ import sys
 import threading
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 
 from command_adapters import DeliveryError
+from cursor_sdk_bridge import launch_client
 from platform_adapters import MARKER, secret_file, validate_key
 
 LOCAL_AGENT = re.compile(r'agent-[A-Za-z0-9_.-]{1,140}\Z')
@@ -93,8 +94,8 @@ def durable_state(path, value):
     temporary = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
     fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     try:
-        with os.fdopen(fd, 'w') as stream:
-            json.dump(value, stream, ensure_ascii=False, indent=2)
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            json.dump(value, stream, indent=2)
             stream.flush(); os.fsync(stream.fileno())
         os.replace(temporary, path)
         if os.name == 'posix':
@@ -217,9 +218,10 @@ class SdkRuntime:
     def send(self, api_key, model, cwd, agent_id, text, restrictions=None, command_id=None,
              initialize=False, on_created=None, name=None):
         from cursor_sdk import Agent, AgentOptions, CursorClient, LocalAgentOptions
-        client, native_attempted, stage = None, False, 'launch'
+        resources, native_attempted, stage = ExitStack(), False, 'launch'
         try:
-            client = CursorClient.launch_bridge(workspace=cwd, host='127.0.0.1', max_retries=0)
+            client, release = launch_client(cwd, CursorClient)
+            resources.callback(release)
             policy = tool_restrictions(restrictions or {})
             options = AgentOptions(api_key=api_key, model=model, tools=policy['tools'],
                 disallowed_tools=policy['disallowed_tools'], local=LocalAgentOptions(cwd=cwd, setting_sources=policy['setting_sources']),
@@ -242,10 +244,9 @@ class SdkRuntime:
                     raise LocalStartError('cursor_native_identity_mismatch', False, False)
             stage, native_attempted = 'send', True
             run = agent.send(text)
-            return run, client
+            return run, resources
         except Exception as error:
-            if client is not None:
-                close_client(client)
+            close_client(resources)
             translated = error if isinstance(error,LocalStartError) else self.translate(error, native_attempted)
             translated.native_attempted = native_attempted
             translated.uncertain = native_attempted

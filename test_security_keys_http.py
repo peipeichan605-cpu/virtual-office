@@ -2,7 +2,9 @@
 import copy
 import http.client
 import json
+import sqlite3
 import unittest
+from unittest.mock import patch
 
 from security_keys import owner_key, integrity_key, security_secrets, upgrade_security
 import test_invitations as fixtures
@@ -12,10 +14,7 @@ class SeparatedOwnerHttpTests(unittest.TestCase):
     setUp = fixtures.InvitationTests.setUp
     request = fixtures.InvitationTests.request
 
-    def tearDown(self):
-        self.bridge.stop.set()
-        self.bridge.commands.close()
-        fixtures.InvitationTests.tearDown(self)
+    tearDown = fixtures.InvitationTests.tearDown
 
     def test_feed_and_integrity_keys_cannot_authorize_owner_read_or_write(self):
         self.assertEqual(self.request('/api/office/work')[0], 200)
@@ -44,6 +43,27 @@ class SeparatedOwnerHttpTests(unittest.TestCase):
         rendered = json.dumps(data)
         for private in security_secrets(self.bridge.config):
             self.assertNotIn(private, rendered)
+
+    def test_assistant_checks_desktop_listener_before_opening_new_bookmark(self):
+        from phone_setup_assistant import owner_listener_proof
+        config = self.bridge.config
+        nonce = 'ab' * 32
+        def check(extra=None):
+            connection = http.client.HTTPConnection('127.0.0.1', config['port'], timeout=2)
+            try:
+                headers = {'X-Office-Setup-Nonce': nonce, **(extra or {})}
+                connection.request('GET', '/_office/local/owner-proof', headers=headers)
+                response = connection.getresponse()
+                return response.status, json.load(response)
+            finally:
+                connection.close()
+        self.assertEqual(check(), (200, {'proof': owner_listener_proof(config, nonce)}))
+        for extra in ({'Origin': self.base}, {'Cookie': 'test'}, {'Tailscale-User-Login': 'fixture'}):
+            self.assertEqual(check(extra)[0], 403)
+        with patch.dict(config):
+            config.pop('owner_key')
+            config.pop('internal_hmac_key')
+            self.assertEqual(check()[0], 403)
 
     def test_non_ascii_owner_headers_fail_closed_on_read_write_and_mobile_management(self):
         for path, body in (('/api/office/work', None), ('/api/office/mobile', None),
@@ -74,6 +94,13 @@ class SeparatedOwnerHttpTests(unittest.TestCase):
         principal = auth.authenticate(phone['session_token'], 'fixture@example.test', csrf=phone['csrf_token'], write=True)
         self.assertEqual(principal['send_mode'], 'selected')
         self.assertEqual(principal['revision'], 2)
+
+    def test_mobile_status_failure_returns_an_actionable_code_without_local_details(self):
+        with patch.object(self.bridge.mobile.auth, 'list_devices',
+                          side_effect=sqlite3.OperationalError('fixture private database path')):
+            self.assertEqual(self.request('/api/office/mobile'), (503, {'error': 'mobile_unavailable'}))
+        self.bridge.config['mobile'] = None
+        self.assertEqual(self.request('/api/office/mobile'), (503, {'error': 'invalid_mobile_configuration'}))
 
     def test_duplicate_owner_headers_are_rejected_even_with_one_valid_key(self):
         connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=3)

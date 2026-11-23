@@ -57,6 +57,51 @@ class MobileAuthTests(unittest.TestCase):
         self.assertEqual(device['device']['send_agents'], [AGENT])
         self.error('mobile_auth_required', self.auth.authenticate, device['session_token'], IDENTITY.upper())
 
+    def test_managed_qr_short_session_and_remembered_login_follow_selected_phone(self):
+        phone, tablet = 'native-phone-A', 'native-tablet-B'
+        self.config['mobile_peer_gate'] = {'version': 1, 'host_id': 'host', 'node_ids': [phone, tablet]}
+        self.error('select_pairing_phone', self.auth.create_pairing, IDENTITY, 'Phone', [AGENT], [])
+        self.error('select_pairing_phone', self.auth.create_pairing, IDENTITY, 'Phone', [AGENT], [], node_id='other')
+        token = self.auth.create_pairing(IDENTITY, 'My phone', [AGENT], [AGENT], node_id=phone)['pairing_token']
+        for other in (tablet, None):
+            self.error('invalid_mobile_pairing', self.auth.pair, token, IDENTITY, node_id=other)
+        paired = self.auth.pair(token, IDENTITY, node_id=phone, remember_device=True)
+        access, renewal, csrf = paired['session_token'], paired['renewal_token'], paired['csrf_token']
+        for other in (tablet, None):
+            self.error('mobile_auth_required', self.auth.session_status, access, IDENTITY, node_id=other)
+            self.error('mobile_auth_required', self.auth.remember, access, IDENTITY, csrf, False, node_id=other)
+            self.error('mobile_auth_required', self.auth.renewal_device, renewal, IDENTITY, node_id=other)
+        self.assertEqual(self.auth.csrf_for(access, IDENTITY, node_id=phone), csrf)
+        self.auth.close()
+        self.auth = MobileAuth(self.config, selected_agents=lambda: self.selected, clock=self.clock)
+        self.clock.advance(self.auth.IDLE_TTL + 1)
+        self.error('mobile_auth_required', self.auth.renew, renewal, IDENTITY, node_id=tablet)
+        renewed = self.auth.renew(renewal, IDENTITY, node_id=phone)
+        self.assertNotEqual(renewed['session_token'], access)
+        self.error('mobile_auth_required', self.auth.authenticate, renewed['session_token'], IDENTITY, node_id=tablet)
+        self.auth.revoke(renewed['device']['device_id'])
+        self.error('mobile_auth_required', self.auth.renew, renewal, IDENTITY, node_id=phone)
+
+    def test_single_managed_phone_and_legacy_grants_stay_in_their_own_modes(self):
+        old = self.pair(remember_device=True)
+        old_invite = self.auth.create_pairing(IDENTITY, 'Legacy', [AGENT], [])
+        self.config['mobile_peer_gate'] = {'version': 1, 'host_id': 'host', 'node_ids': ['one']}
+        self.error('invalid_mobile_pairing', self.auth.pair, old_invite['pairing_token'], IDENTITY, node_id='one')
+        self.error('mobile_auth_required', self.auth.authenticate, old['session_token'], IDENTITY)
+        self.error('mobile_auth_required', self.auth.renew, old['renewal_token'], IDENTITY, node_id='one')
+        invitation = self.auth.create_pairing(IDENTITY, 'Single phone', [AGENT], [AGENT])
+        paired = self.auth.pair(invitation['pairing_token'], IDENTITY, node_id='one', remember_device=True)
+        writer = self.auth.authenticate(paired['session_token'], IDENTITY, csrf=paired['csrf_token'], write=True, node_id='one')
+        origin = self.auth.command_origin(writer, AGENT)
+        self.assertTrue(self.auth.validate_command_origin(origin, AGENT))
+        self.config['mobile_peer_gate']['node_ids'] = ['two']
+        self.assertFalse(self.auth.validate_command_origin(origin, AGENT))
+        self.error('mobile_auth_required', self.auth.refresh, writer)
+        self.error('mobile_auth_required', self.auth.renew, paired['renewal_token'], IDENTITY, node_id='one')
+        del self.config['mobile_peer_gate']
+        self.error('mobile_auth_required', self.auth.authenticate, paired['session_token'], IDENTITY)
+        self.assertEqual(self.auth.authenticate(old['session_token'], IDENTITY)['device_id'], old['device']['device_id'])
+
     def test_database_and_public_objects_do_not_persist_auth_secrets(self):
         invitation = self.auth.create_pairing(IDENTITY, 'Phone', [AGENT], [AGENT])
         token = invitation['pairing_token']
@@ -333,6 +378,38 @@ class MobileAuthTests(unittest.TestCase):
         self.clock.advance(60)
         self.auth.allow_request(IDENTITY, 'asset')
         self.auth.allow_request('device-a', 'read')
+
+    def test_retry_after_follows_exhausted_windows_without_extending_them(self):
+        self.auth.RATE_LIMITS = {**self.auth.RATE_LIMITS, 'asset': (1, 60)}
+        self.auth.GLOBAL_LIMITS = {**self.auth.GLOBAL_LIMITS, 'asset': 2}
+        self.auth.allow_request('phone-A', 'asset')
+        self.clock.advance(14.2)
+        self.auth.allow_request('phone-B', 'asset')
+        self.clock.advance(1.2)
+        for phone, remaining in [('phone-C', 45), ('phone-B', 59)]:
+            with self.assertRaises(MobileAuthError) as denied:
+                self.auth.allow_request(phone, 'asset')
+            self.assertEqual((denied.exception.status, denied.exception.retry_after), (429, remaining))
+        self.clock.advance(45)
+        self.auth.allow_request('phone-C', 'asset')
+        with self.assertRaises(MobileAuthError) as denied:
+            self.auth.allow_request('phone-B', 'asset')
+        self.assertEqual(denied.exception.retry_after, 14)
+        self.clock.advance(14)
+        self.auth.allow_request('phone-B', 'asset')
+
+    def test_full_rate_table_reports_enough_time_for_the_needed_slots(self):
+        self.auth.MAX_RATE_BUCKETS = 4
+        self.auth.allow_request('phone-A', 'pair')
+        self.clock.advance(1)
+        self.auth.allow_request('phone-B', 'pair')
+        self.clock.advance(1)
+        self.auth.allow_request('phone-C', 'pair')
+        with self.assertRaises(MobileAuthError) as denied:
+            self.auth.allow_request('phone-D', 'asset')
+        self.assertEqual(denied.exception.retry_after, 298)
+        self.clock.advance(298)
+        self.auth.allow_request('phone-D', 'asset')
 
     def test_larger_read_asset_and_auth_limits_still_have_global_caps(self):
         workloads = [('asset', 240, 5), ('read', 360, 5), ('auth', 600, 4)]

@@ -16,7 +16,9 @@ function installOwnerDOM(){
     get textContent(){return this.ownText+this.children.map(child=>child.textContent).join('');}
     append(...children){for(const child of children){child.parent=this;this.children.push(child);}}
     replaceChildren(...children){this.ownText='';this.children=[];this.append(...children);}
-    setAttribute(){}
+    setAttribute(name,value){(this.attributes??=new Map()).set(name,String(value));}
+    showModal(){this.open=true;}
+    close(){this.open=false;return this.fire('close');}
     addEventListener(type,listener){const listeners=this.listeners.get(type)||[];listeners.push(listener);this.listeners.set(type,listeners);}
     async fire(type,event={}){for(const listener of this.listeners.get(type)||[])await listener(event);}
     querySelector(selector){return descendants(this).find(child=>selector.startsWith('.')&&child.className.split(' ').includes(selector.slice(1)))||null;}
@@ -246,25 +248,6 @@ test('setup metadata cannot label an untested phone connected or allow a known u
   let writes=0;const c=new MobileOwnerController({read:async()=>({...ready,setup:{pairing_available:false}}),create:()=>{writes++;}});
   await c.open();assert.equal(await c.pair({identity:'owner@example.com',label:'Phone',view_agents:['agent:a'],send_agents:[]}),false);assert.equal(writes,0);c.close();
 });
-test('new-phone assistant includes install and VPN guidance, changes steps without creating grants',async()=>{
-  const {body,slot,restore}=installOwnerDOM(),calls=[];
-  const c=new MobileOwnerController({read:async()=>({...ready,devices:[],setup:{configuration_ready:true,pairing_available:true,setup_prompt:'A generic local setup prompt'}}),create:()=>calls.push('pair')});
-  let ui;try{
-    ui=initMobileOwner({slot,controller:c});await c.open();
-    const wizard=body.querySelector('.mobile-owner-wizard'),daily=body.querySelector('.mobile-owner-daily');
-    assert.equal(wizard.hidden,false);assert.equal(daily.hidden,true);
-    const panels=descendants(wizard).filter(el=>el.className==='mobile-owner-step');assert.deepEqual(panels.map(el=>el.hidden),[false,true,true,true]);
-    assert.match(panels[0].textContent,/下載官方 Tailscale/);assert.match(panels[0].textContent,/允許加入 VPN/);assert.match(panels[0].textContent,/Connected/);assert.match(panels[0].textContent,/勿直接關掉/);
-    const links=descendants(panels[0]).filter(el=>el.tagName==='a');assert.ok(links.some(el=>el.href==='https://play.google.com/store/apps/details?id=com.tailscale.ipn'));assert.ok(links.some(el=>el.href==='https://apps.apple.com/app/tailscale/id1470499037'));assert.ok(links.every(el=>el.rel==='noopener noreferrer'));
-    await descendants(wizard).find(el=>el.tagName==='button'&&el.textContent==='手機已顯示 Connected，下一步').fire('click');
-    assert.deepEqual(panels.map(el=>el.hidden),[true,false,true,true]);assert.deepEqual(calls,[]);
-    await descendants(wizard).find(el=>el.tagName==='button'&&el.textContent==='下一步：選擇手機權限').fire('click');
-    assert.deepEqual(panels.map(el=>el.hidden),[true,true,false,true]);assert.deepEqual(calls,[]);
-    assert.match(panels[3].textContent,/Agent 的回覆仍要另行實測/);
-    assert.match(daily.textContent,/手機登入/);assert.match(daily.textContent,/不需重掃 QR 碼/);
-    assert.match(daily.textContent,/7 天/);assert.match(daily.textContent,/不等於已完成/);
-  }finally{ui?.dispose();restore();}
-});
 test('paired and renewable phones default to everyday guidance without silently enrolling more phones',async()=>{
   for(const state of ['ready','renewal_required']){
     const {body,slot,restore}=installOwnerDOM(),calls=[];
@@ -284,4 +267,377 @@ test('owner may restrict a remembered phone while its short session awaits renew
   const c=new MobileOwnerController({read:async()=>({...ready,devices:[device]}),updateScopes:async data=>{calls.push(data);return {changed:true,device:updated};}});
   await c.open();assert.equal(await c.updateDeviceScopes('phone-a',{view_mode:'enrolled',send_mode:'selected',view_agents:[],send_agents:[]}),true);
   assert.equal(calls.length,1);assert.deepEqual(c.snapshot.devices[0].send_agents,[]);c.close();
+});
+
+const unconfigured={enabled:false,configured:false,setup:{configuration_ready:false,pairing_available:false},agents:[],devices:[]};
+test('an owner status error removes an existing pairing and blocks stale owner actions until a valid read',async()=>{
+  let read=async()=>ready;
+  const c=new MobileOwnerController({read:()=>read(),create:async()=>({pairing_token:TOKEN,expires_at:2000000000}),probeHost:()=>assert.fail()});
+  await c.open();
+  const draft={identity:'owner@example.com',label:'Phone',view_agents:['agent:a'],send_agents:[]};
+  await c.pair(draft);assert.ok(c.pairing);
+  read=async()=>{throw Object.assign(Error(),{name:'TimeoutError'});};await c.refresh();
+  assert.equal(c.pairing,null);assert.equal(c.snapshot,null);assert.match(c.notice,/逾時/);assert.doesNotMatch(mobileEntrySummary(c.snapshot),/尚未設定/);
+  assert.equal(await c.pair(draft),false);assert.equal(await c.revokeDevice('phone-a'),false);
+  read=async()=>ready;await c.refresh();assert.deepEqual(c.snapshot,ready);c.close();
+});
+
+
+const phone={id:'node-one',name:'My phone',selection_token:'a'.repeat(64)};
+const otherPhone={id:'node-two',name:'Second phone',selection_token:'b'.repeat(64)};
+const detected={state:'select_phone',platform:'windows',host:'office.example.ts.net',phones:[phone,otherPhone]};
+const visible=element=>element&&!element.hidden&&(!element.parent||visible(element.parent));
+const visibleIn=(root,tag)=>descendants(root).filter(el=>el.tagName===tag&&visible(el));
+const settle=()=>new Promise(resolve=>setImmediate(resolve));
+
+async function wizard(options,exercise,search=''){
+  const dom=installOwnerDOM();
+  globalThis.location.search=search;
+  const c=new MobileOwnerController(options);
+  let ui;
+  try{
+    ui=initMobileOwner({slot:dom.slot,controller:c});
+    if(!search)await ui.launch.fire('click');
+    await settle();
+    const panels=descendants(dom.body).filter(el=>el.className==='mobile-owner-step');
+    await exercise({c,ui,body:dom.body,panels,host:panels[1]});
+  }finally{ui?.dispose();dom.restore();}
+}
+
+test('first setup shows the current native step in OFFICE and only links to fixed destinations',async()=>{
+  for(const [state,platform,url] of [
+    ['install','windows','https://tailscale.com/download/windows'],
+    ['device_approval','linux','https://login.tailscale.com/admin/machines'],
+    ['https_required','macos','https://login.tailscale.com/admin/dns'],
+    ['no_phone','windows',null],['unknown','other',null],
+  ]){
+    const calls=[];
+    await wizard({
+      read:async()=>unconfigured,probeHost:async()=>{calls.push('check');return {state,platform,auth_url:'https://elsewhere.example',host:'office.example.ts.net'};},
+      activateHost:()=>assert.fail('Unexpected activation'),requestLocalConsent:()=>assert.fail('Unexpected upgrade'),create:()=>assert.fail('Unexpected pairing'),
+    },async({host,panels})=>{
+      assert.deepEqual(calls,['check'],state);
+      assert.deepEqual(panels.map(el=>el.hidden),[true,false,true,true],state);
+      assert.doesNotMatch(host.textContent,/Connect Phone|--config|\.cmd|phone_setup_assistant|PowerShell|複製.*Prompt/i);
+      assert.match(host.textContent,/./);
+      const urls=visibleIn(host,'a').map(el=>el.href);
+      assert.ok(!urls.includes('https://elsewhere.example'));
+      if(url)assert.ok(urls.includes(url),[state,urls]);
+    });
+  }
+});
+
+test('opening the installed Tailscale app requires an explicit click and does not activate access',async()=>{
+  for(const state of ['login','connect']){
+    const calls=[];
+    await wizard({read:async()=>unconfigured,probeHost:async()=>({state,platform:'windows'}),
+      openTailscale:async()=>{calls.push('open');return {state:'opened'};},
+      activateHost:()=>assert.fail('Launching the app cannot authorize a phone'),
+      create:()=>assert.fail('Launching the app cannot issue a pairing')},
+    async({host,panels,c})=>{
+      assert.deepEqual(calls,[]);
+      const launch=visibleIn(host,'button').find(el=>el.textContent==='開啟 Tailscale');
+      assert.ok(launch);assert.equal(launch.disabled,false);
+      await launch.fire('click');await settle();
+      assert.deepEqual(calls,['open']);
+      assert.equal(panels[2].hidden,true);
+      assert.equal(c.pairing,null);
+    });
+  }
+});
+
+test('choosing a named phone in the OFFICE panel sends the exact confirmed choice before showing Agent scopes',async()=>{
+  let snapshot=unconfigured;const calls=[];
+  await wizard({
+    read:async()=>snapshot,probeHost:async()=>detected,
+    activateHost:async args=>{calls.push(args);snapshot={...ready,devices:[]};return {state:'ready'};},
+    create:()=>assert.fail('Activation must not issue a QR'),requestLocalConsent:()=>assert.fail(),
+  },async({host,panels,body,c})=>{
+    assert.equal(host.hidden,false);
+    const chooser=visibleIn(host,'select')[0];
+    assert.ok(chooser,'OFFICE should present the detected phones');
+    assert.deepEqual(chooser.children.filter(option=>option.value).map(option=>option.textContent),[phone.name,otherPhone.name]);
+    assert.ok(!host.textContent.includes(otherPhone.selection_token));
+    assert.deepEqual(calls,[]);
+    chooser.value=otherPhone.id;await chooser.fire('change');
+    const connect=visibleIn(host,'button').find(el=>el.textContent==='連接這部手機');
+    assert.ok(connect);assert.equal(connect.disabled,false);
+    await connect.fire('click');await settle();
+    assert.deepEqual(calls,[{phone_id:otherPhone.id,selection_token:otherPhone.selection_token}]);
+    assert.equal(panels[2].hidden,false);
+    assert.equal(c.pairing,null);
+    assert.equal(visibleIn(body,'form').length,1);
+  });
+});
+
+test('an owner can open the phone installation guide from a missing phone and return to discovery',async()=>{
+  const obs=async()=>({state:'no_phone',platform:'windows'});
+  await wizard({read:async()=>unconfigured,probeHost:obs,create:()=>assert.fail()},async({body,panels})=>{
+    const guide=visibleIn(body,'button').find(el=>el.textContent==='在手機設定 Tailscale');
+    assert.ok(guide);await guide.fire('click');assert.equal(panels[0].hidden,false);
+    assert.match(panels[0].textContent,/VPN/);assert.match(panels[0].textContent,/Connected/);
+    const links=visibleIn(panels[0],'a');
+    assert.ok(links.some(el=>el.href==='https://play.google.com/store/apps/details?id=com.tailscale.ipn'));
+    assert.ok(links.some(el=>el.href==='https://apps.apple.com/app/tailscale/id1470499037'));
+    assert.ok(links.every(el=>el.rel==='noopener noreferrer'));
+    const back=visibleIn(body,'button').find(el=>el.textContent==='手機已顯示 Connected，下一步');
+    assert.ok(back);await back.fire('click');
+    assert.equal(panels[1].hidden,false);
+  });
+});
+
+test('already configured external and managed offices open straight to scopes without a native probe',async()=>{
+  for(const transport of [{kind:'unverified'},{kind:'tsnet',running:true,listening:true,configuration_matches:true}]){
+    await wizard({
+      read:async()=>({...ready,devices:[],setup:{configuration_ready:true,pairing_available:true,transport}}),
+      probeHost:()=>assert.fail('Existing setup should skip native onboarding'),create:()=>assert.fail(),
+    },async({panels,c})=>{
+      assert.equal(panels[2].hidden,false);
+      assert.equal(c.pairing,null);
+    });
+  }
+});
+
+test('legacy setup asks for local consent only when the owner clicks, and cancellation permits another attempt',async()=>{
+  let state='idle',requests=0;
+  const legacy=()=>({...unconfigured,credentials_separated:false,local_consent:{state}});
+  await wizard({
+    read:async()=>legacy(),probeHost:()=>assert.fail(),activateHost:()=>assert.fail(),
+    requestLocalConsent:async()=>{requests++;state='pending';return {state};},
+  },async({host,c})=>{
+    const approve=()=>visibleIn(host,'button').find(el=>el.textContent==='在這部電腦確認升級'&&!el.disabled);
+    assert.ok(approve());
+    assert.doesNotMatch(host.textContent,/Connect Phone|\.cmd|--config|PowerShell/i);
+    assert.equal(requests,0);
+    await approve().fire('click');assert.equal(requests,1);
+    await c.requestConsent();assert.equal(requests,1);
+    state='cancelled';await c.refresh();await settle();
+    assert.ok(approve(),'cancelled confirmation must be retryable in the same dialog');
+    await approve().fire('click');assert.equal(requests,2);
+    assert.equal(c.pairing,null);
+  });
+});
+
+test('a stale host result is not actionable after closing and a pending activation cannot be duplicated',async()=>{
+  const checking=deferred(),applying=deferred();let reads=0,writes=0;
+  const c=new MobileOwnerController({read:async()=>unconfigured,
+    probeHost:()=>++reads===1?checking.promise:Promise.resolve(detected),
+    activateHost:()=>{writes++;return applying.promise;}});
+  await c.open();c.hostStep=true;
+  const first=c.checkHost();c.close();checking.resolve(detected);await first;
+  assert.equal(c.host,null);
+  await c.open();c.hostStep=true;await c.checkHost();
+  await c.activatePhone('not-observed');assert.equal(writes,0);
+  const active=c.activatePhone(phone.id);await c.activatePhone(phone.id);assert.equal(writes,1);
+  c.close();applying.resolve({state:'ready'});await active;
+  assert.equal(c.phase,'closed');assert.equal(c.pairing,null);assert.equal(writes,1);
+});
+
+test('a view without owner access shows recovery and never starts phone setup',async()=>{
+  for(const response of [{status:401},{status:403},{code:'private_office_required'}]){
+    const calls=[];
+    const privateMarker='private-fixture-should-not-be-displayed';
+    await wizard({
+      read:async()=>{
+        calls.push('read');
+        globalThis.location.hash='#'+privateMarker;
+        throw Object.assign(Error(privateMarker),response);
+      },
+      probeHost:async()=>{calls.push('host');return detected;},
+      requestLocalConsent:async()=>{calls.push('consent');return {state:'pending'};},
+    },async({body,panels,c})=>{
+      assert.ok(panels.every(el=>!visible(el)),'The setup steps imply a verified owner session');
+      assert.equal(visibleIn(body,'form').length,0);
+      assert.ok(visibleIn(body,'button').every(el=>!/(重新檢查|確認升級|連接這部手機)/.test(el.textContent)));
+      const visibleContent=descendants(body).filter(visible).map(el=>[el.ownText,el.href,el.value].join(' ')).join(' ');
+      assert.match(visibleContent,/管理/,'Explain how to return to an owner view');
+      assert.ok(!visibleContent.includes(privateMarker),'Do not surface the page fragment or raw error');
+      assert.equal(await c.requestConsent(),false);
+      assert.equal(await c.checkHost(),false);
+      assert.deepEqual(calls,['read']);
+    });
+  }
+});
+
+test('losing owner access on a device action clears the displayed QR and stops further writes',async()=>{
+  let revocations=0;
+  await wizard({
+    read:async()=>ready,
+    create:async()=>({pairing_token:TOKEN,expires_at:2000000000}),
+    revoke:async()=>{revocations++;throw Object.assign(Error(),{status:403,code:'private_office_required'});},
+  },async({c,body,panels})=>{
+    assert.equal(await c.pair({identity:ready.identity,label:'Test phone',view_agents:['agent:a'],send_agents:[]}),true);
+    assert.ok(c.pairing);
+    assert.equal(await c.revokeDevice('phone-a'),false);
+    assert.equal(c.pairing,null);
+    assert.equal(c.snapshot,null);
+    assert.ok(panels.every(el=>!visible(el)));
+    assert.ok(!descendants(body).some(el=>el.value?.includes(TOKEN)));
+    assert.equal(await c.revokeDevice('phone-a'),false);
+    assert.equal(revocations,1);
+  });
+});
+
+test('an unavailable owner status can be retried in the same dialog',async()=>{
+  let reads=0;
+  await wizard({
+    read:async()=>{
+      if(++reads===1)throw Object.assign(Error('unavailable'),{status:503});
+      return {...unconfigured,credentials_separated:false,local_consent:{state:'idle'}};
+    },
+    probeHost:()=>assert.fail('The recovered legacy session uses local consent'),
+    requestLocalConsent:()=>assert.fail('Retrying a read must not request an upgrade'),
+  },async({body,host})=>{
+    const retry=visibleIn(body,'button').find(el=>/重新檢查|重試/.test(el.textContent)&&!el.disabled);
+    assert.ok(retry,'An unavailable service should offer a normal retry');
+    await retry.fire('click');
+    assert.equal(reads,2);
+    assert.ok(visibleIn(host,'button').some(el=>el.textContent==='在這部電腦確認升級'&&!el.disabled));
+  });
+});
+
+test('ordinary read denial clears owner state but upgrade-required keeps a visible consent action',async()=>{
+  for(const code of ['private_office_required','mobile_owner_upgrade_required']){
+    await wizard({read:async()=>unconfigured,probeHost:async()=>{throw Object.assign(Error(),{code,status:403});}},
+      async({host,c})=>{
+        if(code==='private_office_required'){
+          assert.equal(c.snapshot,null);
+          assert.equal(visible(host),false);
+        }else{
+          assert.equal(c.snapshot.credentials_separated,false);
+          assert.ok(visibleIn(host,'button').some(el=>el.textContent==='在這部電腦確認升級'));
+        }
+      });
+  }
+});
+
+test('a managed pairing names the phone chosen in OFFICE and stops showing a QR after switching phones or removing entry access',async()=>{
+  const args={identity:'owner@example.com',label:'Phone',view_agents:['agent:a'],send_agents:[]};
+  let nodes=[phone.id,otherPhone.id];
+  const calls=[];
+  const c=new MobileOwnerController({
+    read:async()=>({...ready,managed_phone_entry:true,pairing_node_ids:nodes}),
+    probeHost:async()=>({...detected,state:'ready',phones:detected.phones.map(p=>({...p,authorized:nodes.includes(p.id)}))}),
+    activateHost:()=>assert.fail('Selecting an existing grant must not reinstall the private entry'),
+    create:async payload=>{calls.push(payload);return {pairing_token:TOKEN,expires_at:2000000000};},
+  });
+  try{
+    await c.open();c.hostStep=true;await c.checkHost();
+    assert.equal(await c.activatePhone('unknown'),false);
+    assert.equal(await c.pair(args),false);assert.deepEqual(calls,[]);
+    await c.activatePhone(phone.id);
+    assert.equal(await c.pair(args),true);assert.deepEqual(calls[0],{...args,node_id:phone.id});
+    await c.activatePhone(otherPhone.id);
+    assert.equal(c.pairing,null,'changing phone should clear the previous QR');
+    assert.equal(await c.pair(args),true);assert.deepEqual(calls[1],{...args,node_id:otherPhone.id});
+    nodes=[phone.id];await c.refresh();
+    assert.equal(c.pairing,null,'losing private entry access should clear the previous QR');
+    assert.equal(await c.pair(args),false);assert.equal(calls.length,2);
+  }finally{c.close();}
+});
+
+test('switching phones clears the previous pairing and starts the new permission form with no grants',async()=>{
+  const calls=[];
+  await wizard({
+    read:async()=>({...ready,devices:[],managed_phone_entry:true,pairing_node_ids:[phone.id,otherPhone.id]}),
+    probeHost:async()=>({...detected,state:'ready',phones:detected.phones.map(p=>({...p,authorized:true}))}),
+    activateHost:()=>assert.fail('Already authorized phone'),
+    create:async payload=>{calls.push(payload);return {pairing_token:TOKEN,expires_at:2000000000};},
+  },async({host,panels,c})=>{
+    const choose=async id=>{
+      const select=visibleIn(host,'select')[0];assert.ok(select);
+      select.value=id;await select.fire('change');
+      const use=visibleIn(host,'button').find(el=>el.textContent==='使用這部手機');
+      assert.ok(use);await use.fire('click');await settle();
+    };
+    await choose(phone.id);
+    const form=visibleIn(panels[2],'form')[0];assert.ok(form);
+    const input=visibleIn(form,'input').find(el=>el.type==='checkbox');assert.ok(input);
+    input.checked=true;await input.fire('change');
+    await form.fire('submit',{preventDefault(){}});await settle();
+    assert.equal(calls.length,1);assert.equal(calls[0].node_id,phone.id);
+    assert.ok(c.pairing);
+    const another=visibleIn(panels[2],'button').find(el=>el.textContent==='連接另一部手機');
+    assert.ok(another);await another.fire('click');await settle();
+    assert.equal(c.pairing,null);
+    await choose(otherPhone.id);
+    assert.ok(visibleIn(form,'input').filter(el=>el.type==='checkbox').every(el=>!el.checked));
+    assert.equal(calls.length,1);
+  });
+});
+
+test('an expired selection or uncertain activation never resubmits a stale choice on refresh',async()=>{
+  for(const state of ['confirm_again','activation_unconfirmed']){
+    const calls=[];
+    let token=phone.selection_token;
+    const c=new MobileOwnerController({read:async()=>unconfigured,
+      probeHost:async()=>({...detected,phones:[{...phone,selection_token:token}]}),
+      activateHost:async args=>{calls.push(args);return {state};},create:()=>assert.fail()});
+    await c.open();c.hostStep=true;await c.checkHost();
+    assert.equal(await c.activatePhone(phone.id),false);
+    assert.equal(await c.activatePhone(phone.id),false);
+    assert.equal(c.pairing,null);
+    token='c'.repeat(64);await c.refresh();
+    assert.deepEqual(calls,[{phone_id:phone.id,selection_token:phone.selection_token}]);
+    await c.activatePhone(phone.id);
+    assert.deepEqual(calls[1],{phone_id:phone.id,selection_token:token});
+    c.close();
+  }
+});
+
+test('a 409 at QR creation rechecks the native entry even while owner settings still look ready',async()=>{
+  for(const again of [phone,otherPhone]){
+    const authorized=detected.phones.map(p=>({...p,authorized:true}));
+    let state='ready',checks=0;
+    const writes=[],pairings=[];
+    await wizard({
+      read:async()=>({...ready,managed_phone_entry:true,pairing_node_ids:authorized.map(p=>p.id),devices:[]}),
+      probeHost:async()=>{checks++;return {...detected,state,phones:state==='no_phone'?[]:authorized};},
+      activateHost:async input=>{writes.push(input);state='ready';return {...detected,state,phones:authorized};},
+      create:async input=>{pairings.push(input);state='no_phone';throw Object.assign(Error(),{status:409,code:'mobile_setup_pending'});},
+    },async({host,panels,c})=>{
+      const select=async id=>{
+        const picker=visibleIn(host,'select')[0];assert.ok(picker);
+        picker.value=id;await picker.fire('change');
+        const button=visibleIn(host,'button').find(el=>el.textContent==='使用這部手機'||el.textContent==='連接這部手機');
+        assert.ok(button);await button.fire('click');await settle();
+      };
+      await select(phone.id);
+      const form=visibleIn(panels[2],'form')[0];assert.ok(form);
+      const toggle=visibleIn(form,'input').find(el=>el.type==='checkbox');toggle.checked=true;await toggle.fire('change');
+      const previous=checks;
+      await form.fire('submit',{preventDefault(){}});await settle();
+      assert.ok(checks>previous,'409 must trigger a fresh host check without another click');
+      assert.equal(c.host?.state,'no_phone');assert.equal(c.pairing,null);
+      assert.equal(panels[1].hidden,false);assert.equal(panels[2].hidden,true);
+      await c.refresh();assert.equal(panels[1].hidden,false);
+      assert.equal(c.host?.state,'no_phone');assert.equal(pairings.length,1);
+      state='select_phone';await c.refresh();await settle();
+      assert.deepEqual(writes,[],'reappearance alone cannot reconfigure the entry');
+      await select(again.id);
+      assert.deepEqual(writes,[{phone_id:again.id,selection_token:again.selection_token}]);
+      assert.equal(panels[2].hidden,false);assert.equal(c.pairing,null);
+      assert.equal(visibleIn(form,'input').find(el=>el.type==='checkbox').checked,again.id===phone.id);
+      assert.equal(pairings.length,1,'returning to permissions cannot silently issue another QR');
+    });
+  }
+});
+
+test('a verified return to ?mobile-setup=1 reopens the phone wizard in the new owner tab',async()=>{
+  await wizard({read:async()=>({...ready,devices:[{device_id:'paired',state:'ready'}]}),probeHost:()=>assert.fail()},
+    async({ui,panels})=>{
+      assert.equal(ui.dialog.open,true);
+      assert.equal(visible(panels[2]),true);
+    },'?mobile-setup=1');
+});
+
+test('desktop transport allows only named in-OFFICE setup actions and scoped owner writes',async()=>{
+  const {officePost}=await import('./public/office/office-api.js'),old=globalThis.fetch,calls=[];
+  globalThis.fetch=async(path,options)=>{calls.push([path,options.method,options.headers['X-Office-Key']]);return {ok:true,json:async()=>({})};};
+  try{
+    const routes=['setup-status','setup-activate','open-tailscale','local-consent','scopes'];
+    for(const suffix of routes)await officePost('/api/office/mobile/'+suffix,'owner-fixture',{});
+    await assert.rejects(officePost('/api/office/mobile/shell','owner-fixture',{}),/Invalid command endpoint/);
+    assert.deepEqual(calls,routes.map(suffix=>['/api/office/mobile/'+suffix,'POST','owner-fixture']));
+  }finally{globalThis.fetch=old;}
 });

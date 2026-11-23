@@ -2,11 +2,11 @@
 import hashlib
 import hmac
 import json
+import locale
 import os
 from pathlib import Path
 import re
 import secrets
-import shlex
 import stat
 import sys
 import time
@@ -17,6 +17,8 @@ from workspaces import Workspaces, workspace_path
 from reporting_policy import grok_public_reporting_policy
 from grok_onboarding import grok_connection_handoff, grok_connection_hint
 from public_reporting import ReportingError
+from private_files import PrivateFileError, require_private
+from host_runtime import shell_command
 
 class InvitationError(ValueError):
     def __init__(self,code,status=400):self.code=code;self.status=status;super().__init__(code)
@@ -24,7 +26,7 @@ class InvitationError(ValueError):
 def private_file(path,value):
     path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-    with os.fdopen(fd,'w') as output:output.write(value)
+    with os.fdopen(fd,'w',encoding='utf-8') as output:output.write(value)
 
 
 ONBOARDING_FLOW=(
@@ -146,27 +148,37 @@ class Invitations:
         fd=None
         try:
             info=guide.lstat()
-            if (not stat.S_ISREG(info.st_mode) or info.st_mode&0o077 or info.st_size>256*1024 or
-                    hasattr(os,'getuid') and info.st_uid!=os.getuid()):
+            if not stat.S_ISREG(info.st_mode) or info.st_size>256*1024:
                 raise InvitationError('invitation_guide_unavailable',409)
-            fd=os.open(guide,os.O_RDWR|os.O_APPEND|getattr(os,'O_NOFOLLOW',0))
+            fd=os.open(guide,os.O_RDWR|os.O_APPEND|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0))
+            require_private(guide, fd=fd)
             opened=os.fstat(fd)
             revision=lambda item:(item.st_dev,item.st_ino,item.st_size,item.st_mtime_ns,item.st_ctime_ns)
-            if revision(opened)!=revision(info):raise InvitationError('invitation_guide_changed',409)
+            # The Windows path and open-handle APIs may report different timestamps for
+            # the same unchanged file. Use identity across APIs; track edits within each.
+            if not os.path.samestat(opened,info) or opened.st_size!=info.st_size:
+                raise InvitationError('invitation_guide_changed',409)
             original=os.read(fd,256*1024+1)
             if len(original)>256*1024 or len(original)!=opened.st_size:
                 raise InvitationError('invitation_guide_unavailable',409)
-            text=original.decode('utf-8')
+            encoding='utf-8'
+            try:
+                text=original.decode(encoding)
+            except UnicodeDecodeError:
+                if sys.platform!='win32':raise
+                # Older Windows installations wrote text using the system ANSI code page.
+                encoding=locale.getencoding() if hasattr(locale,'getencoding') else 'mbcs'
+                text=original.decode(encoding)
             if end_marker in text:return
-            if revision(os.fstat(fd))!=revision(opened) or revision(guide.lstat())!=revision(opened):
+            if revision(os.fstat(fd))!=revision(opened) or revision(guide.lstat())!=revision(info):
                 raise InvitationError('invitation_guide_changed',409)
-            encoded=block.encode('utf-8')
+            encoded=block.encode(encoding)
             if os.write(fd,encoded)!=len(encoded):raise InvitationError('invitation_guide_upgrade_incomplete',409)
             os.fsync(fd)
             current=guide.lstat()
             if (current.st_dev,current.st_ino)!=(opened.st_dev,opened.st_ino):
                 raise InvitationError('invitation_guide_changed',409)
-        except (OSError,UnicodeError):
+        except (OSError,UnicodeError,PrivateFileError):
             raise InvitationError('invitation_guide_unavailable',409)
         finally:
             if fd is not None:os.close(fd)
@@ -179,7 +191,7 @@ class Invitations:
         try:name=agent_name(data['name'])
         except (ValueError,UnicodeError):raise InvitationError('invalid_name')
         provider=data['provider'];request_id=data['request_id']
-        if provider not in PROVIDERS or not isinstance(request_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,80}',request_id):
+        if provider not in PROVIDERS - {'openrouter'} or not isinstance(request_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,80}',request_id):
             raise InvitationError('invalid_invitation')
         with self.lifecycle_lock,self.history.lock,self.history.db:
             workspace_id=data.get('workspace_id')
@@ -200,7 +212,7 @@ class Invitations:
                 'source_id':source,'token':agent_token},indent=2))
             private_file(invite,json.dumps({'endpoint':base+'/api/agents/join','invitation_id':ident,'token':token,
                 'agent_id':provider+':'+source,'credential_path':str(credential),'guide_path':str(guide)},indent=2))
-            command=shlex.join([sys.executable,str(ROOT/'adapters/join.py'),'--invite',str(invite)])
+            command=shell_command([sys.executable,str(ROOT/'adapters/join.py'),'--invite',str(invite)])
             reporter=str(ROOT/'adapters/emit.py')
             guide_text=(f'Virtual Office 接入：{name}\n\n'
                 '只使用 OFFICE 所在電腦的本機執行能力。保留目前專案工作目錄，不要切換到 OFFICE 安裝目錄。'
@@ -261,7 +273,7 @@ class Invitations:
                     '服務核對同一 Bot 的測試開始、相配回覆及正常完成後，才顯示「已連接」。\n')
                 guide_text+=grok_connection_handoff(name,provider+':'+source)
             if provider=='cursor':
-                child_setup=shlex.join([sys.executable,str(ROOT/'adapters/connect.py'),'--credential',str(credential),
+                child_setup=shell_command([sys.executable,str(ROOT/'adapters/connect.py'),'--credential',str(credential),
                     'cursor-children','--hooks-file',str(Path.home()/'.cursor/hooks.json')])
                 guide_text+=('\nCursor 本機父子 Agent 原生 Hooks：\n'
                     '完成上面首次接入後，必須於同一份入場流程完成公開同步。優先讀取 conversation.observation.guide_path；'

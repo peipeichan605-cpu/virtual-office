@@ -11,6 +11,7 @@ from configuration import agent_name, codex_targets, load_config, save_config
 from hermes_acp import private_json
 from platform_adapters import HTTPS, RemoteError, cursor_agent_id, cursor_headers, secret_file, validate_key, webhook_url
 from history import open_native_rollout, timestamp
+from private_files import ensure_private_directory, require_private
 from workspaces import workspace_path
 from security_keys import integrity_fingerprint, matches_integrity
 from cursor_local import DEFAULT_MODEL, MODEL, LocalStartError, SdkRuntime, durable_state, lifecycle_path, local_agent_id, tool_restrictions
@@ -226,6 +227,19 @@ class Connections:
         return bool(definition and definition.get('driver')=='cursor' and
             self.bridge.commands.bindings.get(ident)=={'adapter':'cursor_local','session_id':definition['source_id']})
 
+    def _new_cursor_workspace(self, request_id):
+        # Use a fresh leaf as the SDK cwd. Credentials, history and other chats
+        # live outside it. Never adopt an existing folder for a new chat.
+        root = self.root.parent / 'cursor-chat-workspaces'
+        folder = root / request_id
+        try:
+            ensure_private_directory(root)
+            folder.mkdir(mode=0o700)
+            require_private(folder, directory=True)
+        except (OSError, ValueError) as error:
+            raise LocalStartError('cursor_auto_workspace_unavailable', native_attempted=False) from error
+        return folder
+
     def create_cursor_local(self, data):
         """Create one owner-selected SDK chat; never import other native agents."""
         allowed = {'name', 'workspace', 'api_key', 'model', 'request_id', 'tools', 'disallowed_tools', 'setting_sources', 'create_folder'}
@@ -236,14 +250,18 @@ class Connections:
         if 'create_folder' in data and not isinstance(data['create_folder'], bool):
             raise ConnectionError('invalid_workspace')
         creating_folder = data.get('create_folder') is True
-        try:
-            from workspaces import workspace_path
-            cwd = workspace_path(data.get('workspace', saved.get('workspace')))
-            folder = Path(cwd)
-            if not folder.is_dir() and not (creating_folder and not folder.exists() and folder.parent.is_dir()):
-                raise ValueError()
-        except (ValueError, TypeError):
+        automatic = 'workspace' not in data
+        cwd = None
+        if automatic and creating_folder:
             raise ConnectionError('invalid_workspace')
+        if not automatic:
+            try:
+                cwd = workspace_path(data['workspace'])
+                folder = Path(cwd)
+                if not folder.is_dir() and not (creating_folder and not folder.exists() and folder.parent.is_dir()):
+                    raise ValueError()
+            except (OSError, ValueError, TypeError):
+                raise ConnectionError('invalid_workspace')
         try:
             key = validate_key(data.get('api_key') or saved.get('api_key'))
         except (ValueError, OSError, KeyError, TypeError):
@@ -289,8 +307,12 @@ class Connections:
             with self._creation_lock:
                 self._creating.add(request_id)
         native_id = None
+        managed_folder = None
         try:
-            if creating_folder:
+            if automatic:
+                managed_folder = self._new_cursor_workspace(request_id)
+                cwd = str(managed_folder)
+            elif creating_folder:
                 folder.mkdir(exist_ok=True)
             # Reserve a stable intended ID locally. SDK1.3.1 native creation
             # must wait for the first explicit prompt on the SAME handle.
@@ -312,8 +334,13 @@ class Connections:
                     'phase':'reserved','native_target_verified':False,'name':name})
                 config.setdefault('command_adapters', {}).setdefault('cursor_local', {}).setdefault('sessions', {})[native_id] = settings
                 self.save(config)
-                private_json(self.root / 'cursor-sdk.json', {'api_key': key, 'workspace': cwd})
-                if hasattr(self.bridge, 'workspaces'):
+                # Only a user-selected project is reusable in the folder picker.
+                defaults = {'api_key': key}
+                manual_workspace = self._saved_cursor_sdk().get('workspace') if automatic else cwd
+                if manual_workspace:
+                    defaults['workspace'] = manual_workspace
+                private_json(self.root / 'cursor-sdk.json', defaults)
+                if not automatic and hasattr(self.bridge, 'workspaces'):
                     workspace = self.bridge.workspaces.create(cwd)
                     self.bridge.workspaces.observe(ident, cwd, 'cursor_local')
                     self.bridge.workspaces.assign(ident, workspace['id'], 'manual')
@@ -328,6 +355,11 @@ class Connections:
         except Exception as error:
             confirmed = isinstance(error, LocalStartError) and not error.uncertain and native_id is None
             reason = error.code if isinstance(error, LocalStartError) else 'cursor_creation_unknown'
+            if confirmed and managed_folder is not None:
+                try:
+                    managed_folder.rmdir()
+                except OSError:
+                    pass  # Never remove workspace contents or mask the original failure.
             with self.bridge.history.lock, self.bridge.history.db:
                 self.bridge.history.db.execute('UPDATE cursor_sdk_creations SET state=?,reason=? WHERE request_id=?',
                     ('failed' if confirmed else 'unknown', reason, request_id))

@@ -1,5 +1,6 @@
 from security_keys import owner_key
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -10,20 +11,30 @@ import unittest
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from unittest.mock import patch
 from configuration import initialize,load_config,save_config
 from dashboard import Bridge,proxy_handler
 from invitations import InvitationError
 
 class InvitationTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name).resolve();self.path=self.root/'config.json'
+        self.temp=tempfile.TemporaryDirectory()
+        self.root=Path(self.temp.name).resolve()/'.office'
+        self.path=self.root/'config.json'
         initialize(self.path);config=load_config(self.path);config.update(run_id='fixture',run_dir=str(self.root/'run'))
         save_config(self.path,config);self.bridge=Bridge(config,dry_run=True)
         self.server=ThreadingHTTPServer(('127.0.0.1',0),proxy_handler(self.bridge));self.port=self.server.server_address[1]
         config['port']=self.port;save_config(self.path,config);self.base='http://127.0.0.1:'+str(self.port)
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
     def tearDown(self):
-        self.server.shutdown();self.server.server_close();self.thread.join();self.bridge.history.close();self.temp.cleanup()
+        self.bridge.stop.set()
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join()
+        self.bridge.commands.close()
+        self.bridge.mobile.close()
+        self.bridge.history.close()
+        self.temp.cleanup()
     def request(self,path,body=None,key=True,headers=None):
         h={'Content-Type':'application/json'}
         if key:h['X-Office-Key']=owner_key(self.bridge.config)
@@ -96,6 +107,37 @@ class InvitationTests(unittest.TestCase):
                     self.assertNotIn(str(other_guide),saved_guide)
         self.assertEqual(load_config(self.path)['agents'],[])
         self.assertEqual(len(self.bridge.agents),0)
+    def test_upgrade_appends_to_a_legacy_windows_guide_in_its_original_encoding(self):
+        invitation=self.invite(name='既有對話')
+        guide=self.bridge.invitations.paths(invitation['id'])[1]
+        original=guide.read_text(encoding='utf-8').encode('cp950')
+        guide.write_bytes(original)
+        reporting={'state':'setup_required','policy_version':'fixture','guide_path':'C:/辦公室/指引.txt'}
+        with patch('sys.platform','win32'), patch('locale.getencoding',return_value='cp950',create=True):
+            self.bridge.invitations._upgrade_reporting_guide(guide,reporting)
+            once=guide.read_bytes()
+            self.bridge.invitations._upgrade_reporting_guide(guide,reporting)
+        self.assertEqual(guide.read_bytes(),once)
+        self.assertTrue(once.startswith(original))
+        self.assertIn(reporting['guide_path'],once[len(original):].decode('cp950'))
+
+    def test_guide_checks_each_clock_against_the_same_source(self):
+        from types import SimpleNamespace
+        invitation=self.invite()
+        guide=self.bridge.invitations.paths(invitation['id'])[1]
+        reporting={'state':'setup_required','policy_version':'fixture','guide_path':'guide.txt'}
+        native_fstat=os.fstat
+
+        def handle_stat(fd):
+            info=native_fstat(fd)
+            fields={key:getattr(info,key) for key in dir(info) if key.startswith('st_')}
+            fields['st_ctime_ns']+=100
+            return SimpleNamespace(**fields)
+
+        with patch('invitations.os.fstat',side_effect=handle_stat):
+            self.bridge.invitations._upgrade_reporting_guide(guide,reporting)
+        self.assertIn('END_OFFICE_PUBLIC_REPORTING_UPGRADE:',guide.read_text(encoding='utf-8'))
+
     def test_grok_connection_card_is_scoped_and_shared_with_receiver_guide(self):
         first=self.invite(name='Selected Bot Alpha',request_id='grok-card-alpha')
         second=self.invite(name='Selected Bot Beta',request_id='grok-card-beta')
@@ -122,7 +164,10 @@ class InvitationTests(unittest.TestCase):
     def test_actual_join_command_registers_without_restart_and_replays_safely(self):
         invite=self.invite(provider='cursor');path=self.bridge.invitations.paths(invite['id'])[0]
         command=[sys.executable,str(Path(__file__).parent/'adapters/join.py'),'--invite',str(path)]
-        first=subprocess.run(command,capture_output=True,text=True,timeout=15);self.assertEqual(first.returncode,0,first.stderr)
+        # On Windows an Agent often captures stdout through a legacy code page.
+        first=subprocess.run(command,capture_output=True,text=True,timeout=15,
+                             env={**os.environ, 'PYTHONIOENCODING':'cp1252:strict'})
+        self.assertEqual(first.returncode,0,first.stderr)
         receipt=json.loads(first.stdout);self.assertTrue(receipt['joined']);self.assertTrue(all(e['accepted'] for e in receipt['events']))
         self.assertFalse(receipt['conversation']['capability']['persistent'])
         self.assertEqual(receipt['native_connection']['reason'],'cursor_local_background_unavailable')

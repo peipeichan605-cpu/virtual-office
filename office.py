@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Portable, explicit enrollment and lifecycle CLI. Python standard library only."""
 import argparse
+from contextlib import ExitStack
 import errno
 import hashlib
 import json
@@ -15,6 +16,7 @@ import sys
 import time
 import urllib.request
 import uuid
+from host_runtime import shell_command
 from configuration import DEFAULT_CONFIG, ROOT, PROVIDERS, initialize, load_config, save_config
 from security_keys import owner_key, upgrade_security, upgraded_security
 
@@ -31,7 +33,7 @@ def stop_metadata(config_path):
     if sys.platform == 'win32':
         # PowerShell single-quoted literals preserve spaces, apostrophes, $ and
         # backticks in installation paths. The call operator invokes the Python.
-        command = '& ' + ' '.join("'" + value.replace("'", "''") + "'" for value in argv)
+        command = shell_command(argv)
         shell = 'powershell'
     else:
         # Keep the existing POSIX display command for compatibility; automation
@@ -51,9 +53,23 @@ def require_offline(config):
     mobile = config.get('mobile', {})
     if isinstance(mobile, dict) and mobile.get('port') is not None:
         ports.add(mobile['port'])
+    if any(type(port) is not int or not 1024 <= port <= 65535 for port in ports):
+        raise ValueError('Invalid Office listener port')
+    if sys.platform == 'win32':
+        # A closed Windows loopback port can take several seconds to refuse
+        # a connect. Reserve both exact endpoints together without listening
+        # or waiting for a connection, then release them before returning.
+        try:
+            with ExitStack() as sockets:
+                for port in sorted(ports):
+                    probe = sockets.enter_context(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+                    probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+                    probe.bind(('127.0.0.1', port))
+        except (AttributeError, OSError):
+            raise ValueError('Stop Office and check that its loopback ports are available '
+                             'before changing settings; no configuration changed') from None
+        return
     for port in ports:
-        if type(port) is not int or not 1024 <= port <= 65535:
-            raise ValueError('Invalid Office listener port')
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
                 connection.settimeout(.5)
@@ -69,7 +85,10 @@ def main():
     parser.add_argument('--config',default=str(DEFAULT_CONFIG))
     sub=parser.add_subparsers(dest='command',required=True)
     init=sub.add_parser('init');init.add_argument('--port',type=int,default=4318)
-    for action in ('start','stop','status','url','serve'):sub.add_parser(action)
+    start = sub.add_parser('start')
+    start.add_argument('--open-migrated', action='store_true',
+                       help='Open the verified private owner page for an explicitly migrated installation')
+    for action in ('stop','status','url','serve'):sub.add_parser(action)
     add=sub.add_parser('enroll');add.add_argument('--provider',choices=sorted(PROVIDERS),required=True)
     add.add_argument('--source',required=True);add.add_argument('--name',required=True);add.add_argument('--credential-out')
     settings=sub.add_parser('configure');settings.add_argument('--codex-db');settings.add_argument('--cursor-public-db');settings.add_argument('--crouton-root');settings.add_argument('--crouton-workspace-root');settings.add_argument('--brand')
@@ -128,7 +147,7 @@ def main():
         if args.session and any(a['id']=='hermes:'+args.session for a in config['agents']):raise ValueError('Hermes session already selected')
         binary=args.binary or shutil.which('hermes')
         if args.launch_file:
-            launch=json.loads(Path(args.launch_file).expanduser().read_text())
+            launch=json.loads(Path(args.launch_file).expanduser().read_bytes())
         else:
             if not binary:raise ValueError('Select the installed Hermes binary with --binary')
             launch=[str(Path(binary).expanduser().absolute()),'acp']
@@ -212,10 +231,10 @@ def main():
         save_config(path,config)
         print(json.dumps({'enrolled':ident,'selected_count':len(config['agents']),'restart_required':True,'credential_file':str(destination) if credential else None}));return
     if args.command=='cursor-hooks':
-        credential=Path(args.credential).expanduser().resolve();data=json.loads(credential.read_text())
+        credential=Path(args.credential).expanduser().resolve();data=json.loads(credential.read_bytes())
         if not data['agent_id'].startswith('cursor:'):raise ValueError('A selected Cursor credential is required')
-        target=Path(args.output).expanduser().resolve();hooks=json.loads(target.read_text()) if target.exists() else {'version':1,'hooks':{}}
-        command=shlex.join([sys.executable,str(ROOT/'adapters/cursor_hook.py'),'--credential',str(credential)])
+        target=Path(args.output).expanduser().resolve();hooks=json.loads(target.read_bytes()) if target.exists() else {'version':1,'hooks':{}}
+        command=shell_command([sys.executable,str(ROOT/'adapters/cursor_hook.py'),'--credential',str(credential)])
         for name in ('beforeSubmitPrompt','afterAgentResponse','stop'):
             values=hooks.setdefault('hooks',{}).setdefault(name,[])
             if not any(v.get('command')==command for v in values):values.append({'command':command,'timeout':5})
@@ -234,11 +253,30 @@ def main():
     if args.command=='serve':
         from cursor_sdk_setup import service_python
         binary=service_python(config)
-        os.execv(binary,[binary,str(ROOT/'dashboard.py'),'--config',str(path)])
+        argv=[binary,str(ROOT/'dashboard.py'),'--config',str(path),'--run-id','office-'+uuid.uuid4().hex]
+        if sys.platform=='win32':
+            raise SystemExit(subprocess.call(argv))
+        os.execv(binary,argv)
     if args.command=='start':
-        try:
-            request(config,'/api/office/work');print('Office already running.');return
-        except Exception:pass
+        recover = args.open_migrated and upgraded_security(config) and bool(config.get('legacy_integrity_keys'))
+        if recover:
+            from phone_setup_assistant import SetupNeeded, _open_owner_page
+            try:
+                _open_owner_page(path)
+            except SetupNeeded as error:
+                if error.state != 'owner_listener_unverified':
+                    raise ValueError('OFFICE 已啟動。請在這部電腦確認預設瀏覽器可用，再打開 OFFICE。') from None
+                # A different program occupying the port must never receive the owner's bookmark.
+                require_offline(config)
+            else:
+                print('Office already running. Opened the private dashboard.')
+                return
+        else:
+            try:
+                request(config,'/api/office/work');print('Office already running.');return
+            except Exception:pass
+        from office_launch import background_launch_options
+        launch_options=background_launch_options()
         run_id='office-'+time.strftime('%Y%m%dT%H%M%S',time.gmtime())+'-'+uuid.uuid4().hex[:6]
         run=Path(config['data_dir'])/'runs'/run_id;run.mkdir(parents=True,mode=0o700)
         config['run_id']=run_id;config['run_dir']=str(run);save_config(path,config)
@@ -246,14 +284,28 @@ def main():
         from cursor_sdk_setup import service_python
         binary=service_python(config)
         with (run/'stdout.log').open('ab',buffering=0) as log:
-            child=subprocess.Popen([binary,str(ROOT/'dashboard.py'),'--config',str(path)],cwd=ROOT,
-                                   stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
-        print(json.dumps({'run_id':run_id,'pid':child.pid,'log':str(run/'stdout.log'),**stop_metadata(path)}),flush=True)
-        for _ in range(40):
-            if child.poll() is not None:raise RuntimeError('Office exited; inspect the recorded stdout log')
-            try:request(config,'/api/office/work');print('Office ready.');return
-            except Exception:time.sleep(.1)
-        raise RuntimeError('Office did not become ready within the startup check')
+            child=subprocess.Popen([binary,str(ROOT/'dashboard.py'),'--config',str(path),'--run-id',run_id],cwd=ROOT,
+                                   stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,**launch_options)
+        receipt={'run_id':run_id,'launcher_pid':child.pid,'log':str(run/'stdout.log'),**stop_metadata(path)}
+        deadline=time.monotonic()+30
+        while time.monotonic()<deadline:
+            if child.poll() is not None:
+                raise RuntimeError(f"Office exited during startup (run {run_id}, log {run/'stdout.log'})")
+            try:
+                health=request(config,'/health')
+                if health.get('run_id')==run_id and health.get('ok') and type(health.get('pid')) is int:
+                    print(json.dumps({**receipt,'pid':health['pid']}),flush=True)
+                    print('Office ready.')
+                    if recover:
+                        try:
+                            _open_owner_page(path)
+                        except SetupNeeded:
+                            print('The private dashboard could not open in this desktop session.')
+                    return
+            except (OSError,ValueError):
+                pass
+            time.sleep(.1)
+        raise RuntimeError(f"Office startup not confirmed (run {run_id}, log {run/'stdout.log'}); check status before starting again")
 
 if __name__=='__main__':
     try:main()
