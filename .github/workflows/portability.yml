@@ -27,6 +27,7 @@ jobs:
           test_office_launch test_office_shutdown test_package_portability test_private_files
           test_core_portability test_setup_platforms test_codex_probe_budget test_openrouter_free
           test_codex_runtime_selection.WindowsRuntimeSelectionTests
+          test_invitations.InvitationTests.test_pending_invitation_has_no_avatar_and_prompt_has_no_secrets
           test_invitations.InvitationTests.test_upgrade_appends_to_a_legacy_windows_guide_in_its_original_encoding
           test_invitations.InvitationTests.test_guide_checks_each_clock_against_the_same_source
           test_reporting_onboarding.ReportingOnboardingTests.test_concurrent_legacy_guide_edit_is_preserved_and_upgrade_reports_conflict
