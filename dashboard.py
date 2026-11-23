@@ -11,6 +11,7 @@ import datetime as dt
 import hashlib
 import hmac
 import http.server
+from office_http import LoopbackHTTPServer
 import json
 import mimetypes
 import os
@@ -1730,7 +1731,7 @@ def main():
     Path(config['run_dir']).mkdir(parents=True, exist_ok=True, mode=0o700)
     os.umask(0o077)
     bridge = Bridge(config, args.dry_run)
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', config['port']), proxy_handler(bridge))
+    server = LoopbackHTTPServer(('127.0.0.1', config['port']), proxy_handler(bridge))
     server.daemon_threads = True
     bridge.mobile_lifecycle.start_configured()
     for sig in (signal.SIGTERM, signal.SIGINT):

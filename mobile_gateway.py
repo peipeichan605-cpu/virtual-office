@@ -7,6 +7,7 @@ from http.cookies import SimpleCookie
 import hmac
 import http.client
 import http.server
+from office_http import LoopbackHTTPServer
 import json
 import mimetypes
 from pathlib import Path
@@ -50,7 +51,7 @@ def settings(config):
     return dict(enabled=data.get('enabled', False), port=port, public_origin=origin, identity=identity)
 
 
-class BoundedHTTPServer(http.server.ThreadingHTTPServer):
+class BoundedHTTPServer(LoopbackHTTPServer):
     daemon_threads = True
     allow_reuse_address = sys.platform != 'win32'
     request_queue_size = 16

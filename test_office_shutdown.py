@@ -93,7 +93,12 @@ class ShutdownTests(unittest.TestCase):
         self.assert_result('owner_api')
 
     def test_duration_elapsed(self):
-        self.launch('--duration', '1')
+        # Startup and shutdown must also work when the host resolver is unavailable.
+        self.launch('--duration', '1', program=(
+            "from unittest.mock import patch\n"
+            "import dashboard\n"
+            "with patch('socket.getfqdn', side_effect=AssertionError('loopback DNS')):\n"
+            "    raise SystemExit(dashboard.main())"))
         self.assert_result('duration_elapsed')
 
     @unittest.skipIf(os.name == 'nt', 'Windows process termination does not deliver POSIX signals')
