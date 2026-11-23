@@ -1,7 +1,7 @@
 {
   "release": "0.2.2-preview",
   "verified_at_utc": "2026-11-23T09:11:08+00:00",
-  "verification_scope": "Published preview with repository-native onboarding. OpenRouter and Office runtime sources match the tested preview. The installer also restores the macOS launcher permission after ZIP extraction. Historical reports retain their original scope.",
+  "verification_scope": "The Windows desktop upgrade and 19 focused Windows tests covered the OpenRouter preview. The published package adds repository installation instructions, restores the macOS launcher after ZIP extraction and uses native private permissions for new invitation files. Historical checks retain their original scope.",
   "release_validation": {
     "macos_python_discovered": 1222,
     "macos_python_skipped": 3,
@@ -25,7 +25,8 @@
       "webgl2_lobby": true,
       "openrouter_choice_visible": true,
       "runtime_stopped_and_port_released": true
-    }
+    },
+    "windows_private_invitations_ci": "Native GitHub Windows runner verified the corrected invitation writer and OpenRouter test fixture."
   },
   "previous_release_validation_0_2_2_rc_1": {
     "release": "0.2.2-rc.1",
