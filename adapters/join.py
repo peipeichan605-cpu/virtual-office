@@ -172,7 +172,7 @@ def main():
         reporting['full_onboarding_complete']=False
     print(json.dumps({'joined':True,'agent_id':credential['agent_id'],'run_id':run_id,'events':events,'guide_path':joined['guide_path'],
         'native_connection':native,'conversation':conversation,'receiver_status':native['receiver_status'],
-        **reporting,**observed,'next_step':receiver_next_step(native['receiver_status'],conversation.get('reporting'),credential['agent_id'],observation)},ensure_ascii=False))
+        **reporting,**observed,'next_step':receiver_next_step(native['receiver_status'],conversation.get('reporting'),credential['agent_id'],observation)}))
 
 if __name__=='__main__':
     try:main()

@@ -11,6 +11,7 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from public_reporting import EVIDENCE, ReportingError, event_endpoint, private_json
+from private_files import PrivateFileError, require_private
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -35,8 +36,10 @@ def load_manifest(path):
     if path.parent.name != hashlib.sha256(agent.encode()).hexdigest()[:32] or path.parent.parent.name != 'reporting':
         raise ReportingError('reporting_manifest_path_invalid', 409)
     for directory in (path.parent, path.parent.parent):
-        if directory.stat().st_mode & 0o077:
-            raise ReportingError('reporting_directory_not_private', 409)
+        try:
+            require_private(directory, directory=True)
+        except PrivateFileError as error:
+            raise ReportingError('reporting_directory_not_private', 409) from error
     credential_path = Path(manifest.get('credential_path', ''))
     if not credential_path.is_absolute() or any(p.is_symlink() for p in (credential_path.parent, credential_path.parent.parent)):
         raise ReportingError('reporting_credential_path_invalid', 409)
@@ -81,7 +84,7 @@ def main():
     confirmation.add_argument('--readback-version', required=True)
     confirmation.add_argument('--readback-agent', required=True)
     args = parser.parse_args()
-    print(json.dumps(confirm(args.manifest, args.readback_version, args.readback_agent), ensure_ascii=False))
+    print(json.dumps(confirm(args.manifest, args.readback_version, args.readback_agent)))
 
 
 if __name__ == '__main__':

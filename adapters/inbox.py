@@ -11,6 +11,9 @@ import urllib.parse
 import urllib.request
 import uuid
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from host_runtime import process_exists
+
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):return None
@@ -20,7 +23,7 @@ def save(path, value):
     path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     tmp=path.with_name(path.name+'.'+uuid.uuid4().hex+'.tmp')
     fd=os.open(tmp,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-    with os.fdopen(fd,'w') as f:json.dump(value,f,ensure_ascii=False,indent=2)
+    with os.fdopen(fd,'w',encoding='utf-8') as f:json.dump(value,f,indent=2)
     tmp.replace(path)
 
 
@@ -48,9 +51,12 @@ def main():
         try:fd=os.open(lock,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
         except FileExistsError:
             previous=json.loads(lock.read_text())
-            try:os.kill(previous['pid'],0)
-            except ProcessLookupError:lock.unlink();fd=os.open(lock,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-            else:raise ValueError('This agent already has a waiting tool call')
+            if type(previous.get('pid')) is not int or previous['pid'] < 1:
+                raise ValueError('Invalid waiting tool lock')
+            if process_exists(previous['pid']):
+                raise ValueError('This agent already has a waiting tool call')
+            lock.unlink()
+            fd=os.open(lock,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
         with os.fdopen(fd,'w') as output:json.dump({'pid':os.getpid()},output)
         status_path=path.with_name('wait-status.json')
         run={'run_id':str(uuid.uuid4()),'pid':os.getpid(),'action':'wait','max_seconds':args.max_seconds,
@@ -69,7 +75,7 @@ def main():
                     save(path.parent/'deliveries'/(result['command_id']+'.json'),{key:result[key] for key in ('agent_id','command_id','receipt_id')})
                     result['next_step']='Run start with this command_id. Execute text only when execute=true. Report public progress and completion, then wait again if still on standby.'
                 break
-            run['state']=result['state'];print(json.dumps(result,ensure_ascii=False))
+            run['state']=result['state'];print(json.dumps(result))
         except BaseException:
             run['state']='interrupted';raise
         finally:
@@ -85,7 +91,7 @@ def main():
         result=call(body)
         if args.action=='start' and result.get('accepted'):
             state['request_id']=None;save(state_path,state)
-        print(json.dumps(result,ensure_ascii=False))
+        print(json.dumps(result))
 
 
 if __name__=='__main__':

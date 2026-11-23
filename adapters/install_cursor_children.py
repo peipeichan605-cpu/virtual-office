@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Install one scoped Office observer command per Cursor hook, preserving others."""
 import argparse
-import fcntl
 import json
 import os
 from pathlib import Path
 import shlex
+import stat
 import sys
 import uuid
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from host_runtime import lock_exclusive, shell_command
 
 EVENTS = ('beforeSubmitPrompt', 'afterAgentResponse', 'stop', 'subagentStart',
           'subagentStop', 'preToolUse', 'postToolUse', 'postToolUseFailure')
@@ -29,6 +32,9 @@ def merged(existing, observer_dir, python=None, client=None, legacy_credential_p
             if not isinstance(row, dict) or not isinstance(row.get('command'), str):
                 return False
             try:
+                if sys.platform == 'win32':
+                    return any(row['command'] == formatter([str(binary), str(legacy), '--credential', str(own)])
+                               for binary in interpreters for formatter in (shell_command, shlex.join))
                 args = shlex.split(row['command'])
                 return (len(args) == 4 and Path(args[0]).resolve() in interpreters and args[2] == '--credential'
                         and Path(args[1]).expanduser().resolve() == legacy
@@ -39,9 +45,9 @@ def merged(existing, observer_dir, python=None, client=None, legacy_credential_p
             if name in result['hooks']:
                 result['hooks'][name] = [row for row in result['hooks'][name] if not replaced(row)]
     directory = Path(observer_dir).expanduser().resolve()
-    prefix = shlex.join([python or sys.executable, str(client), '--observer-dir', str(directory), '--event'])
+    argv = [python or sys.executable, str(client), '--observer-dir', str(directory), '--event']
     for name in EVENTS:
-        command = prefix + ' ' + shlex.quote(name)
+        command = shell_command([*argv, name])
         rows = result['hooks'].setdefault(name, [])
         if not any(isinstance(row, dict) and row.get('command') == command for row in rows):
             rows.append({'command': command, 'timeout': 3, 'failClosed': False})
@@ -73,7 +79,7 @@ def _write_locked(observer_path, hooks_path, legacy_credential_path=None):
     temporary = hooks_path.with_name(hooks_path.name + '.office-tmp-' + uuid.uuid4().hex)
     try:
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, 'w') as output:
+        with os.fdopen(fd, 'w', encoding='utf-8') as output:
             json.dump(result, output, indent=2, ensure_ascii=False)
             output.write('\n')
             output.flush()
@@ -99,7 +105,7 @@ def install(observer_path, hooks_path, legacy_credential_path=None):
     observer_path = Path(observer_path).expanduser().resolve()
     if not observer_path.is_file() or observer_path.stat().st_size > 16384:
         raise ValueError('observer_unavailable')
-    observer = json.loads(observer_path.read_text())
+    observer = json.loads(observer_path.read_bytes())
     if observer.get('provider') != 'cursor' or not observer.get('observer_id'):
         raise ValueError('cursor_observer_required')
     client = Path(__file__).with_name('cursor_children.py')
@@ -108,9 +114,12 @@ def install(observer_path, hooks_path, legacy_credential_path=None):
     hooks_path = Path(hooks_path).expanduser().absolute()
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = hooks_path.with_name(hooks_path.name + '.office-install.lock')
-    fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, 'w') as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    with os.fdopen(fd, 'r+b') as lock:
+        info = lock_path.lstat()
+        if not stat.S_ISREG(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400 or not os.path.samestat(os.fstat(fd), info):
+            raise ValueError('unsupported_cursor_hook_configuration')
+        lock_exclusive(lock.fileno(), blocking=True)
         return _write_locked(observer_path, hooks_path, legacy_credential_path)
 
 
@@ -120,7 +129,7 @@ def main():
     p.add_argument('--hooks-file', required=True)
     p.add_argument('--legacy-credential', help='Replace only this installation own legacy observation command')
     args = p.parse_args()
-    print(json.dumps(install(args.observer, args.hooks_file, args.legacy_credential), ensure_ascii=False))
+    print(json.dumps(install(args.observer, args.hooks_file, args.legacy_credential)))
 
 
 if __name__ == '__main__':
