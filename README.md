@@ -57,6 +57,7 @@ G/F 與原生樓層共用日間、黃昏及夜間光照參數，後方沿用原�
 | Codex 背景模式 | 相容的本機 Codex `app-server`；Windows 使用原生 `codex.exe` | 自己的 Codex 登入 |
 | Cursor SDK 純對話 | Python 3.10+、本 OFFICE 專用環境內的 `cursor-sdk==1.3.1`；Windows 需要 x64 Python | 在 OFFICE 設定自己的 Cursor User API key |
 | Grok Bot SDK | Node.js 22.13+；固定 SDK 原始碼已隨套件附上，毋須 `npm install` | 瀏覽器登入，再選自己的 Bot／聊天 |
+| OpenRouter 免費文字 Agent | 隨 OFFICE 的 Python 核心提供 | 在 OFFICE 選免費模型，首次填自己的 OpenRouter key |
 
 **已安裝 Cursor Desktop 並不代表已安裝 Cursor SDK。** 標準流程會完成 SDK 的一次性安裝；不要只啟動網頁就宣稱全部平台已備妥。執行環境就緒與帳戶接通分開驗證，安裝不會自動加入任何 Agent。原有 App、Cloud、Webhook 和 Hermes 接駁方式繼續保留，按用戶選擇完成各自的綁定。
 
@@ -145,7 +146,7 @@ Python 持續保存及派送指令，沒有工作時不啟動模型。Codex App 
 
 設定保存在每個使用者自己的 `.office/`，不用改 Python 或找開發者逐隻接駁。Grok Webhook 的合作回報需要能使用 OFFICE 所在電腦的本機執行工具；SDK 實驗模式改由 OFFICE 觀察所選原生聊天，有獨立的相容性與背景收訊限制。詳見 [Grok Webhook](docs/GROK-BOT.md)、[Grok SDK](docs/GROK-SDK.md) 及 [Cursor](docs/CURSOR.md)。
 
-新 adapter 已通過協議 fixture 與介面測試；沒有實際帳戶憑證或選定來源時，不宣稱完成平台端到端驗證。新安裝仍是空名單。OFFICE 本身不呼叫模型；經平台發出的任務沿用該平台的權限與費用。
+新 adapter 已通過協議 fixture 與介面測試；沒有實際帳戶憑證或選定來源時，不宣稱完成平台端到端驗證。新安裝仍是空名單。發給 OpenRouter Agent 的訊息會由 OFFICE 傳到所選免費模型。其他平台的任務沿用各自原生入口的權限和費用。
 
 ## 公開同步範圍
 

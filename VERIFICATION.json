@@ -3,7 +3,7 @@
   "verified_at_utc": "2026-11-23T09:11:08+00:00",
   "verification_scope": "Published preview with repository-native onboarding. OpenRouter and Office runtime sources match the tested preview. The installer also restores the macOS launcher permission after ZIP extraction. Historical reports retain their original scope.",
   "release_validation": {
-    "macos_python_discovered": 1221,
+    "macos_python_discovered": 1222,
     "macos_python_skipped": 3,
     "macos_python_failed": 0,
     "javascript_passed": 560,
@@ -14,7 +14,18 @@
     "windows_desktop_chrome_3d_lobby": true,
     "live_openrouter_free_catalog_on_windows_and_macos": true,
     "two_turns_and_history_in_macos_browser": "deterministic provider fixture",
-    "authenticated_openrouter_inference": "not tested"
+    "authenticated_openrouter_inference": "not tested",
+    "macos_python_passed": 1219,
+    "clean_macos_release_zip": {
+      "extraction": "Python ZIP extraction in a new path containing spaces and non-ASCII characters",
+      "owner_execute_restored": true,
+      "three_platform_runtimes_ready": true,
+      "empty_roster": true,
+      "local_http": 200,
+      "webgl2_lobby": true,
+      "openrouter_choice_visible": true,
+      "runtime_stopped_and_port_released": true
+    }
   },
   "previous_release_validation_0_2_2_rc_1": {
     "release": "0.2.2-rc.1",
