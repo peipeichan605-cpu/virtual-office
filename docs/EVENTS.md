@@ -1,6 +1,6 @@
-# 通用公開事件協議 v1
+# Public event protocol v1
 
-`POST /api/agents/events`，只接受本機來源。Header：`X-Agent-Id` 和 `Authorization: Bearer ...`。憑證只限設定中的單一 Agent；不具有讀取對話、加入其他 Agent 或派工權限。請用 `adapters/client.py` 或 `adapters/emit.py` 讀取本機憑證檔，不要在 Prompt 中貼出憑證。
+Send events to the loopback endpoint `POST /api/agents/events` with `X-Agent-Id` and `Authorization: Bearer …`. The credential authorizes reports for one enrolled agent. Use `adapters/client.py` or `adapters/emit.py` to read it from its private file. Owner actions and conversation reads require a separate credential.
 
 ```json
 {
@@ -10,18 +10,30 @@
   "type": "message",
   "role": "assistant",
   "phase": "commentary",
-  "text": "正在核對測試結果。"
+  "text": "I am checking the test results."
 }
 ```
 
-每次工作先送 `turn_started`，可帶 `text` 作使用者任務。之後可送 `message`、`heartbeat`，最後送 `turn_completed`、`turn_failed` 或 `turn_cancelled`。完成事件可帶 `text` 作最終交付。`message` 只接受 `user/prompt`、`assistant/commentary`、`assistant/final`。不要送入工具輸出、分析內容、思考過程或整份原始日誌。
+Start work with `turn_started`. Its optional `text` is the user's task. Send `message` or `heartbeat` during the turn, then `turn_completed`, `turn_failed` or `turn_cancelled`. A completion event may carry the final delivery in `text`. Supported message pairs are `user/prompt`, `assistant/commentary` and `assistant/final`. Submit only text intended for the user. Exclude reasoning, raw tool output and complete logs.
 
-`run_id` 只用英數字、底線和連字號，長度上限 160；`event_id` 另外容許點號及冒號。文字上限 24,000 字元。伺服器回傳 `accepted` 與 `duplicate`，不回傳文字。可選的 `at` 為 ISO 時間。
+`run_id` accepts letters, digits, underscores and hyphens, up to 160 characters. `event_id` also allows periods and colons. Text is limited to 24,000 characters. Optional `at` is an ISO timestamp. The response returns `accepted` and `duplicate`.
 
-同一事件再次傳送時必須保留相同 `event_id` 及內容；結果不明時應先核對收據，不要改 ID 無限重試。已儲存的事件收據不因有限 FIFO 到期失效。重複 ID 配不同內容、舊回合完結事件及重啟已完結回合均會被拒絕。新回合取代仍未完結的舊回合時，舊回合記為待確認，不推斷完成。
+For a retry, keep the same event ID and payload. Check the receipt if the outcome is uncertain. Persisted receipts survive FIFO eviction. The server rejects reuse of an ID with different content, stale completions and attempts to restart a closed turn. If a new turn supersedes an open one, the old outcome is marked unconfirmed.
 
-`turn_started` 可帶 `workspace_path`（專案根目錄的絕對路徑），其他事件不可帶此欄位。`emit.py` 預設使用目前目錄，或以 `--workspace` 指定。此欄位只更新上報者自己的自動 Workspace，不能覆蓋擁有人手動指定的樓層；重複或已拒絕事件不會搬層。未提供目錄的舊版接駁器仍可上報，樓層顯示未指定。這不是檔案存取授權。
+Only `turn_started` can carry `workspace_path`, an absolute project root. `emit.py` uses the current directory by default or accepts `--workspace`. This updates the reporting agent's automatic floor. Manual owner assignments take precedence. Duplicate and rejected events leave the floor alone. Older adapters can omit the path and appear unassigned. Reporting a path grants no file access.
 
-擁有人可用 `GET /api/office/workspaces` 查看本機目錄清單；`POST /api/office/workspaces` 傳 `path` 及可選 `name` 建立 Workspace。`POST /api/office/workspaces/assign` 傳 `agent_id`、`mode`（`auto` 或 `manual`）及手動模式的可選 `workspace_id`（null 為未指定），只可操作已選 Agent，均需要 `X-Office-Key`。邀請可指定 `workspace_id`，未指定時由接入程式回報工作目錄。
+## Owner endpoints
 
-受保護的本機讀取 API：`/api/office/work`、`/api/office/history?agent=...`、`/api/office/run?id=...`、`/api/office/messages?agent=...&after=SEQ`。讀取需要擁有人的 `X-Office-Key`。訊息支援 `before` 載入較早頁，以及 `run` 篩選工作；使用實際回傳的 sequence 作游標。
+Use `X-Office-Key` for these local owner operations.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/office/workspaces` | List registered paths. |
+| `POST /api/office/workspaces` | Create a workspace with `path` and optional `name`. |
+| `POST /api/office/workspaces/assign` | Assign an enrolled `agent_id` using `mode` (`auto` or `manual`). A manual `workspace_id` of `null` leaves the agent unassigned. |
+| `GET /api/office/work` | Read work state. |
+| `GET /api/office/history?agent=…` | Read that agent's history. |
+| `GET /api/office/run?id=…` | Read a specific run. |
+| `GET /api/office/messages?agent=…&after=SEQ` | Read public messages. Use `before` for older pages and `run` to filter. Use the sequence returned by the server as the cursor. |
+
+An invitation can specify `workspace_id`. Otherwise the adapter may report its own working directory.

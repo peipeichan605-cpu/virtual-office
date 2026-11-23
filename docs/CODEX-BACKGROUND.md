@@ -1,82 +1,46 @@
-# Codex 背景模式（可選）
+# Codex background conversations
 
-這個模式由 OFFICE 管理一條獨立的 Codex 對話。你在角色頭頂輸入指示，OFFICE 透過本機 Codex app-server 執行，將公開回覆、狀態及交付紀錄同步回同一個角色；下一次指示續接同一條對話。
+Create a separate Codex thread managed by OFFICE. Messages typed above its avatar go to a local Codex app-server process. Public progress and final deliveries return to the same avatar, and subsequent prompts resume the same thread. Keep the host, OFFICE service and Codex account available. The desktop window can stay in the background.
 
-它使用獨立背景程序，不依賴 Codex Desktop 視窗來派送。運行 OFFICE 的電腦、OFFICE 服務及 Codex 登入仍須可用；這不是雲端託管，電腦睡眠或關機時不能繼續執行。
+## Register a thread
 
-## 開始使用
+1. Sign in to Codex on the host as the user running OFFICE. On macOS a compatible executable bundled with Codex Desktop can supply the runtime.
+2. Select **New conversation → Codex background**. Enter a name and choose the working folder. If it does not exist, explicitly select the option to create it.
+3. Leave the model set to **Use Codex settings**, or select a model from the runtime's list. The choice applies only to this OFFICE conversation.
+4. Choose **Register background conversation**. Open the avatar's chat and send the first instruction.
 
-1. 在運行 OFFICE 的電腦完成自己的 Codex 登入。macOS 會優先檢查 Codex Desktop 隨附的執行程式；App 已提供相容版本時，毋須另外安裝 CLI。沒有可用 App 執行程式時，亦可使用相容的獨立 Codex CLI。OFFICE 不會要求你貼上、複製或分享登入憑證；未能使用時，視窗會顯示缺少程式或登入未就緒。
-2. 在 OFFICE 按「＋ 新對話」，自行選擇「Codex · 背景模式」。這項功能不會在開啟 OFFICE 時自動啟用，亦不會掃描或加入其他聊天。
-3. 填寫名稱，選擇工作資料夾。資料夾尚未存在時，可明確勾選建立資料夾；一般情況直接選用已有資料夾。
-4. 「模型（可選）」預設為「沿用 Codex 設定」。如需不同模型，從 Codex 提供的清單明確選擇；OFFICE 不會自動選取清單中的第一項或替換失敗的模型。
-5. 按「登記背景對話」。完成後點新角色頭頂，輸入第一項指示。
+Registration saves the member and connection settings. The first instruction creates the native thread. Its receipt confirms the thread identity. A matching public response and final record verify delivery. If registration is interrupted, use **Check registration result** to look up the same request.
 
-登記只會保存 OFFICE 成員與接駁資料。第一項指示才建立原生 Codex thread；收到實際原生回條後確認身份。登記成功、入口可用、工作完成是不同階段，不能只看角色入場就當作收發已驗證。
+## How OFFICE finds Codex
 
-## 執行環境
+| Order | Executable |
+| --- | --- |
+| 1 | An explicit absolute `command_adapters.codex_background.binary`. An invalid explicit path produces an error. |
+| 2 | On macOS, look under `/Applications` and `~/Applications` for `ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex` or `Codex.app/Contents/Resources/codex`. |
+| 3 | A compatible standalone CLI on PATH or in a standard installation location. On Windows use the native `codex.exe`. |
 
-OFFICE 會檢查實際的 `app-server` 能力，按以下順序選擇執行程式：
+OFFICE probes the actual `app-server` capability. A Windows `.cmd` or `.bat` wrapper cannot carry the native argument and stdio contract. If only an npm shim is present, install or locate the official native executable. `setup-platforms --check` probes the runtime before launch. The background-settings view allows 60 seconds for a check. The backend shares a 45-second limit across the native probe, plus bounded process cleanup time. A timeout reports a check failure. It does not resend a prompt.
 
-1. 擁有人在 `command_adapters.codex_background.binary` 明確指定的絕對路徑優先；指定路徑無法使用時回報問題，不擅自改用其他版本。
-2. macOS 自動檢查 `/Applications` 及 `~/Applications` 內的 App：`ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex`，以及 `Codex.app/Contents/Resources/codex`。
-3. 沒有相容 App 執行程式時，檢查 PATH 及一般安裝位置中的獨立 Codex CLI。
+## Account, model and permissions
 
-Windows 按 PATH 尋找相容的原生 `codex.exe`，不寫死某位用戶的安裝路徑。為保持原生參數及標準輸入／輸出邊界，`.cmd`／`.bat` 啟動器不能代替執行檔；只有 npm shim 時，請安裝 Agent 按官方安裝資料提供原生執行檔。明確指定的路徑無效時不會偷偷改用另一個版本。標準完整安裝使用 `setup-platforms --check` 預先檢查 `app-server` 能力；這項檢查不會登入或建立聊天。
+The worker uses the installed Codex runtime and its host user's existing login. The model catalog comes from that runtime. A listed model's actual availability depends on the runtime version, login method and account. If it reports `model_not_found`, check which binary and version OFFICE selected. OFFICE records the failure and leaves model selection to the owner.
 
-首次讀取背景設定可能需要數秒。畫面為此項狀態檢查預留 60 秒，後端的整次原生探測共用 45 秒期限（另有有界的程序清理時間），避免一般 5 秒網頁請求誤報失敗。真正超時時會顯示檢查逾時，不會自動重送指示或更換模型。
+In the avatar's **Model settings**, select a model and choose **Save model and keep conversation**. The next new instruction uses it. The member, native thread, workspace and history stay together. Active work and unconfirmed outcomes must be resolved before changing the model. If saving is interrupted, use **Check settings result** to recover the original operation. A new instruction verifies actual execution.
 
-畫面會區分使用 Desktop App 隨附程式或獨立 CLI。每個安裝按自己的 App 及 CLI 版本檢查，不綁定開發者電腦的版本。背景模式仍使用獨立程序，不需要開啟或切換 App 聊天視窗，也不會為選擇執行環境而複製登入資料。
+This mode grants a read-only workspace and uses `on-request` approval. Supported requests are paired with the current thread and turn. The owner can allow an action once or deny it. Expired and unidentified requests receive no automatic approval. Limited local tools can run. Third-party MCP servers, plugins, apps, hooks, web search and multi-agent tools are disabled for this worker. It uses stdio with the local host.
 
-## 登入、模型與權限
+## Public conversation and recovery
 
-OFFICE 沿用所選 Codex 執行環境與運行服務的使用者已有的登入，不建立另一份帳戶憑證。模型預設沿用該 Codex 的設定，也可在建立背景對話時明確選擇模型；選擇只用於這條 OFFICE 對話，不修改全域 Codex 或原 App 設定。建立原生對話後保存實際使用的模型，以便後續續接。這不代表自動沿用另一個 Codex App 聊天的模型或聊天內容。
+OFFICE redacts and stores the selected thread's public user inputs, assistant text, state and final deliveries. Closed browser pages do not stop the Python service. Completed conversations can resume after an OFFICE restart. A send with an uncertain outcome remains unconfirmed until the same native turn has been reconciled. Resolve uncertainty before submitting more work.
 
-模型清單由目前所選的 Codex 執行環境回傳，不使用固定模型白名單。列在清單或出現在設定中，不代表目前版本、登入方式與帳戶一定可執行。先前驗證曾遇到設定中的模型被舊 CLI 拒絕，回傳 `model_not_found`；OFFICE 保留失敗結果，沒有自動換模型。遇到這種情況，先檢查使用中的執行環境與版本；不應只因另一個 CLI 版本拒絕，就認定原 App 的模型也不能使用。
+Test with one short prompt, verify the working state, matching reply and saved delivery, then send a contextual follow-up. A previous macOS trial completed four instructions on one thread, including one after about 76 idle seconds, one after restarting OFFICE, and a read-only workspace file operation. That trial covered the chosen model. Long idle periods, every listed model and a fully exited Codex Desktop app require separate verification.
 
-需要自行調整時，在原 Agent 對話按「模型設定」，選擇模型後按「儲存模型，保留對話」。此操作保留同一位 Agent、原生 thread、工作資料夾及全部歷史，只在下一項新指示使用選定模型；不重新執行之前失敗的工作，不另建 Agent，也不修改 Codex App 的全域模型設定。模型清單與保存成功都不是新模型已執行的證據，仍須另外送出新指示驗證。
+## Existing Codex App chats
 
-有尚未結束或結果未確認的工作時，模型設定會被阻止，不能藉換模型繞過不明結果。設定回應中斷時，按「核對設定結果」查回同一次變更，不自動再次套用。
+Choose **Connect an existing App / Cloud Agent** to keep a particular App chat, its native queue, observer and supported child agents. An unloaded original chat can wait for the App to load it. Background mode instead creates an OFFICE-managed thread. It has no guarantee of appearing in the Desktop sidebar and has no child-agent observer. The two routes can coexist. [Existing App commands](COMMANDS.md)
 
-第一版固定使用唯讀工作資料夾及 `on-request` 批准模式。需要批准的受支援操作會在 OFFICE 顯示「允許今次／拒絕」，不會因為加入 OFFICE 就取得永久批准。批准要求與目前對話、回合配對；過期或未能辨認的要求不會自動放行。
+## Logout and maintenance
 
-背景程序的工具範圍獨立於原本 Codex App。第三方 MCP、插件、Apps、Hooks、網頁搜尋及多 Agent 功能在此模式停用；不會把使用者原有整套外部工具權限直接帶入背景對話。唯讀模式仍可使用受限制的本機工具，因此不應將它描述成「完全沒有工具的純聊天」。
+Sign out from the avatar chat to release the OFFICE binding and keep history. Known running, queued or approval-pending work blocks logout. If only an old unconfirmed result remains, review the explanation and explicitly choose **Sign out anyway and keep records**. The provider may still be working. Unconfirmed work stays recorded as such.
 
-## 對話與紀錄
-
-公開同步只包含這條 OFFICE 背景對話的輸入、公開 assistant 文字、執行狀態及最終交付，沿用 OFFICE 的敏感內容遮蓋。內部推理、原始工具輸出及其他未選聊天不會匯入。
-
-完成後可繼續在同一角色發訊息；沒有工作時不會主動呼叫模型。OFFICE 可保持服務而關閉瀏覽器頁面，重新開頁後查看紀錄。正常完成的對話可在重啟 OFFICE 後續接；未確認完成的指示則保留「結果未確認」，不會因重啟而自動重新執行。
-
-若登記請求的回應中斷，按「核對登記結果」查回同一次請求，避免重複新增角色。傳送結果不明時，也要先核對原生回合與紀錄，不能以重發當作恢復。
-
-建議首次用簡單文字指示測試，確認 OFFICE 出現工作狀態、相配回覆和完成紀錄，再發第二輪問題檢查上下文。入口顯示可用不代替這項實測。
-
-背景模式首輪驗證已從 OFFICE 介面完成四輪真實指示，均續接同一條獨立原生對話，保存相配公開回覆與完成後交付紀錄。驗證包括閒置約 76 秒後仍能收訊並保留上下文、重啟 OFFICE 服務後恢復同一對話，以及使用唯讀工具讀取工作資料夾內檔案。公開文字在工作期間顯示為「進度」，最終回覆完成後保留為「交付」。這份既有紀錄不代替後續執行環境選擇、模型設定與登出修正的實測。
-
-這些結果只涵蓋本輪所選模型與上述情境，不代表清單內全部模型可用，也不等同長時間閒置驗證。整個 Codex App 完全退出的情境尚未實測；背景模式使用獨立程序的架構與該項實測證據分開記錄。
-
-## 與原有 Codex App 接駁的關係
-
-| 選擇 | 對話歸屬 | 使用方式 |
-| --- | --- | --- |
-| 「邀請 Agent」接入 Codex App | 你指定的原 App 聊天 | 沿用原有 queue、公開紀錄觀察及父子 Agent 機制；未載入的聊天仍可能等待 App 載入 |
-| 「＋ 新對話」選 Codex 背景模式 | OFFICE 建立及管理的獨立對話 | OFFICE 背景程序收發及續接；不保證出現在原 App 側欄或接管已有聊天 |
-
-兩種方式可同時保留。背景模式不會轉移原聊天身份，也不會改變其專案、模型或批准規則。現有 3D、節能設定、可拖曳對話框及已支援平台的子 Agent 功能繼續使用。
-
-背景模式的子 Agent 同步目前未提供；工具活動本身不等於已驗證的父子關係，OFFICE 不會據此補造子角色或交付。
-
-## 登出與未確認工作
-
-點角色頭頂對話的「登出」可解除這位 Agent 的 OFFICE 登記並保留紀錄。已知仍在執行、排隊或等待批准的工作會阻止登出，需先處理原工作。
-
-若只剩「結果未確認」的舊指示，畫面會說明不明結果，再要求你明確按「仍要登出，保留紀錄」。確認後解除 OFFICE 接駁，保留那些指示原本的未知狀態與歷史，不會將它們改成成功或已取消，也不會自動重送。登出不代表原平台工作已停止；需要取消原工作時，仍應到原平台確認。這項處理適用所有平台，不限 Codex 背景模式。
-
-## 本機資料與維護
-
-原生程序以標準輸入／輸出連接 OFFICE，不開放 app-server 網絡監聽。每個安裝在自己的私人資料目錄保存邏輯 session、原生 thread／turn 配對及執行狀態；不要把這些資料或 Codex 登入資料放入公開安裝包。
-
-更新前保留程式版本與私人資料備份。回復未支援背景模式的舊程式前，需要先移除或暫存新增模式的設定；單純覆蓋程式可能令舊版無法讀取設定。私人資料備份亦包含舊時點的歷史與身份，不應為了回退程式而直接覆蓋較新的對話紀錄。
-
-Codex 介面與版本支援見 [官方 app-server 文件](https://learn.chatgpt.com/docs/app-server)。本機可用性及實測結果以本安裝的檢查為準。
+The private installation directory stores logical sessions, native thread/turn IDs and execution state. Before an upgrade or rollback, back up these together with the program version. Older programs may need newer configuration entries set aside. Restoring an old private backup can discard newer conversations. [Upgrade guide](UPGRADING.md) · [Codex app-server documentation](https://learn.chatgpt.com/docs/app-server)
