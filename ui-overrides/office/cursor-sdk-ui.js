@@ -5,6 +5,7 @@ const messages={
   private_office_required:'請從你的私人 OFFICE 入口開啟。',
   invalid_name:'請填寫 1 至 80 字的對話名稱。',name_in_use:'這個名稱已有人使用，請換一個名字。',
   invalid_workspace:'請選擇可使用的工作資料夾。',workspace_not_found:'找不到這個工作資料夾；需要時可勾選建立資料夾。',
+  cursor_auto_workspace_unavailable:'OFFICE 未能建立對話資料夾。請檢查 OFFICE 資料目錄的寫入權限，或選擇其他資料夾。',
   cursor_sdk_unavailable:'目前 OFFICE 使用的執行環境未能載入 Cursor SDK，請按下方指引完成一次性設定。',
   cursor_sdk_missing:'目前 OFFICE 使用的執行環境未安裝 Cursor SDK，請按下方指引完成一次性設定。',
   cursor_sdk_required:'目前 OFFICE 使用的執行環境未安裝 Cursor SDK，請按下方指引完成一次性設定。',
@@ -12,7 +13,7 @@ const messages={
   cursor_sdk_version_unsupported:'目前 Cursor SDK 版本不符合這版 OFFICE 的要求（1.3.1），請按下方指引更新專用環境。',
   cursor_sdk_platform_unsupported:'Cursor SDK 1.3.1 的 Windows 版本需要 x64 Python；目前 Python 架構不支援，請讓安裝 Agent 核對相容環境。',
   cursor_credentials_required:'請填寫這個 OFFICE 使用的 Cursor API key。',
-  cursor_connection_details_required:'請填寫 Cursor API key 及可使用的對話資料夾。',
+  cursor_connection_details_required:'請核對 Cursor 連接資料。',
   platform_auth_required:'Cursor 帳戶驗證未通過，請核對連接資料。',
   platform_access_denied:'這個 Cursor 帳戶未獲准使用 SDK，請核對帳戶權限。',
   cursor_creation_pending:'這次建立仍在處理中，請核對結果；不會另開一條對話。',
@@ -95,7 +96,7 @@ export class CursorSdkController{
     if(!this.visible||this.creating||this.uncertain||this.phase!=='ready'||!this.home?.sdk_available)return false;
     const name=String(values.name||'').trim(),workspace=String(values.workspace||'').trim();
     if(!name||name.length>80){this.error=messages.invalid_name;this.emit();return false;}
-    if(!workspace){this.error=messages.invalid_workspace;this.emit();return false;}
+    if(values.workspace!==undefined&&!workspace){this.error=messages.invalid_workspace;this.emit();return false;}
     if(!this.home.credential_configured&&!String(values.api_key||'').trim()){this.error=messages.cursor_credentials_required;this.emit();return false;}
     try{
       const pending=this.pendingStore.load();
@@ -103,8 +104,11 @@ export class CursorSdkController{
       this.requestId=this.makeId();this.pendingStore.save(this.requestId);
     }catch{this.error=messages.browser_storage_unavailable;this.emit();return false;}
     const epoch=this.epoch,requestId=this.requestId;
-    const body={name,workspace,request_id:requestId};
-    if(values.create_folder===true)body.create_folder=true;
+    const body={name,request_id:requestId};
+    if(workspace){
+      body.workspace=workspace;
+      if(values.create_folder===true)body.create_folder=true;
+    }
     if(String(values.api_key||'').trim())body.api_key=String(values.api_key).trim();
     this.revision++;this.creating=true;this.phase='creating';this.error='';this.emit();
     try{
@@ -145,9 +149,9 @@ export function initCursorSdkUI({document:doc=document,events=window,key=()=>dec
       <p class="invite-footnote">SDK 可用後，這裡會顯示連接資料欄位；登入 Cursor Desktop 本身不會完成 SDK 設定。</p>
     </section>
     <form class="invite-form" hidden><label>對話名稱<input name="name" maxlength="80" required autocomplete="off" placeholder="例如：專案助手"></label>
-      <label>對話資料夾<select name="known"><option value="">自行輸入路徑</option></select></label>
-      <label>對話資料夾路徑<input name="workspace" required autocomplete="off" placeholder="輸入對話資料夾的絕對路徑"></label>
-      <label class="cursor-sdk-create-folder"><input name="create_folder" type="checkbox"> 資料夾未存在時建立</label>
+      <label>對話資料夾<select name="known"><option value="">由 OFFICE 自動安排</option></select></label>
+      <label class="cursor-sdk-path" hidden>自訂資料夾路徑<input name="workspace" disabled autocomplete="off" placeholder="輸入資料夾的完整路徑"></label>
+      <label class="cursor-sdk-create-folder" hidden><input name="create_folder" type="checkbox" disabled> 資料夾未存在時建立</label>
       <p class="cursor-sdk-saved invite-footnote" hidden>這個 OFFICE 已保存 Cursor 連接資料，其他 SDK 對話可以沿用。</p>
       <button class="cursor-sdk-change-key invite-resume" type="button" hidden>更新 Cursor API key</button>
       <label class="cursor-sdk-key">Cursor API key<input name="api_key" type="password" autocomplete="off" placeholder="只需設定一次"></label>
@@ -159,6 +163,7 @@ export function initCursorSdkUI({document:doc=document,events=window,key=()=>dec
   doc.body.append(dialog);
   const form=dialog.querySelector('form'),notice=dialog.querySelector('.invite-notice'),status=dialog.querySelector('.cursor-sdk-status'),submit=form.querySelector('button[type="submit"]'),refresh=dialog.querySelector('.cursor-sdk-refresh'),result=dialog.querySelector('.cursor-sdk-result'),saved=dialog.querySelector('.cursor-sdk-saved'),keyRow=dialog.querySelector('.cursor-sdk-key'),changeKey=dialog.querySelector('.cursor-sdk-change-key');
   const setup=dialog.querySelector('.cursor-sdk-setup'),setupNotice=dialog.querySelector('.cursor-sdk-setup-notice'),setupPrompt=dialog.querySelector('.cursor-sdk-setup-prompt');
+  const picker=form.elements.known,pathRow=form.querySelector('.cursor-sdk-path'),createFolderRow=form.querySelector('.cursor-sdk-create-folder');
   setupPrompt.value=CURSOR_SDK_SETUP_PROMPT;
   let homeSignature='',showKey=false;
   const dispatch=(name,detail)=>events.dispatchEvent(new CustomEvent(name,{detail}));
@@ -171,18 +176,30 @@ export function initCursorSdkUI({document:doc=document,events=window,key=()=>dec
     setup.hidden=state.phase!=='unavailable';
     form.hidden=!['ready','creating'].includes(state.phase);result.hidden=state.phase!=='created';
     refresh.hidden=!['unavailable','unknown','failed'].includes(state.phase);refresh.textContent=state.phase==='unknown'?'核對建立結果':'重新檢查';
-    status.textContent=({loading:'正在檢查這個 OFFICE 的 Cursor SDK…',ready:'選擇對話資料夾，登記一條新對話。',creating:'正在登記對話，請稍候…',unavailable:cursorSdkSetupMessage(state.home||{}),unknown:'登記結果未確認。請核對結果，不會自動另開一條。',created:'已登記 Cursor SDK 對話；原生收發尚待實際回覆驗證。',failed:'暫時未能讀取 Cursor SDK 設定。'}[state.phase]||'');
+    status.textContent=({loading:'正在檢查這個 OFFICE 的 Cursor SDK…',ready:'',creating:'正在登記對話，請稍候…',unavailable:cursorSdkSetupMessage(state.home||{}),unknown:'登記結果未確認。請核對結果，不會自動另開一條。',created:'已登記 Cursor SDK 對話；原生收發尚待實際回覆驗證。',failed:'暫時未能讀取 Cursor SDK 設定。'}[state.phase]||'');
+    status.hidden=!status.textContent;
     notice.textContent=state.error;
     for(const input of form.elements)input.disabled=!ready;
     submit.textContent=creating?'登記中…':'登記對話';
     const signature=JSON.stringify(state.home);
     if(signature!==homeSignature&&state.home){
-      homeSignature=signature;const known=form.elements.known;known.replaceChildren();
-      const custom=doc.createElement('option');custom.value='';custom.textContent='自行輸入路徑';known.append(custom);
-      for(const row of state.home.workspaces){const option=doc.createElement('option');option.value=row.path;option.textContent=row.name;known.append(option);}
-      if(!form.elements.workspace.value)form.elements.workspace.value=state.home.workspace;
-      known.value=[...known.options].some(o=>o.value===form.elements.workspace.value)?form.elements.workspace.value:'';
+      homeSignature=signature;
+      const selection=picker.value;
+      const folders=new Map(state.home.workspaces.map(row=>[row.path,row.name]));
+      if(state.home.workspace&&!folders.has(state.home.workspace))folders.set(state.home.workspace,state.home.workspace);
+      picker.replaceChildren();
+      const choices=[['','由 OFFICE 自動安排'],...folders,['custom','自行輸入路徑']];
+      for(const [value,label] of choices){
+        const option=doc.createElement('option');option.value=value;option.textContent=label;picker.append(option);
+      }
+      if(selection&&selection!=='custom'&&!folders.has(selection)){
+        picker.value='custom';form.elements.workspace.value=selection;
+      }else picker.value=selection;
     }
+    const custom=picker.value==='custom';
+    pathRow.hidden=createFolderRow.hidden=!custom;
+    form.elements.workspace.required=custom;
+    form.elements.workspace.disabled=form.elements.create_folder.disabled=!ready||!custom;
     const configured=state.home?.credential_configured===true;
     saved.hidden=!configured;changeKey.hidden=!configured||showKey;keyRow.hidden=configured&&!showKey;form.elements.api_key.required=!configured;
   }
@@ -190,7 +207,7 @@ export function initCursorSdkUI({document:doc=document,events=window,key=()=>dec
   dialog.querySelector('.invite-close').addEventListener('click',close);
   dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
   dialog.addEventListener('close',()=>{form.elements.api_key.value='';if(controller.visible)controller.close();});
-  form.elements.known.addEventListener('change',()=>{if(form.elements.known.value)form.elements.workspace.value=form.elements.known.value;});
+  picker.addEventListener('change',()=>paint(controller));
   changeKey.addEventListener('click',()=>{showKey=true;paint(controller);form.elements.api_key.focus();});
   refresh.addEventListener('click',()=>controller.refresh());
   dialog.querySelector('.cursor-sdk-copy-setup').addEventListener('click',async()=>{
@@ -198,7 +215,10 @@ export function initCursorSdkUI({document:doc=document,events=window,key=()=>dec
     catch{setupNotice.textContent='瀏覽器未允許複製。請展開「查看／手動複製設定 Prompt」並複製文字。';}
   });
   form.addEventListener('submit',event=>{
-    event.preventDefault();const values={name:form.elements.name.value,workspace:form.elements.workspace.value,create_folder:form.elements.create_folder.checked,api_key:form.elements.api_key.value};
+    event.preventDefault();const values={name:form.elements.name.value,api_key:keyRow.hidden?'':form.elements.api_key.value};
+    if(picker.value==='custom'){
+      values.workspace=form.elements.workspace.value;values.create_folder=form.elements.create_folder.checked;
+    }else if(picker.value)values.workspace=picker.value;
     controller.create(values);form.elements.api_key.value='';delete values.api_key;
   });
   dialog.querySelector('.cursor-sdk-open').addEventListener('click',()=>{const created=controller.created;close();if(created)dispatch('office:cursor-sdk-created',created);});

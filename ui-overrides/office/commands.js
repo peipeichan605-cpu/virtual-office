@@ -30,6 +30,7 @@ export function receivingHint(capability,received=false,agent=''){
     if(grokSdkLoginRequired(capability))return 'Grok Bot SDK（實驗）· 請重新登入';
     return capability.native_ready===true&&capability.can_send===true?'Grok Bot SDK（實驗）· 背景收訊入口可用':'Grok Bot SDK（實驗）· 入口暫時不可用';
   }
+  if(capability?.mode==='openrouter')return capability.native_ready?'OpenRouter · 免費文字對話':'OpenRouter 暫時不可用 · 對話已保留';
   if(capability?.mode==='codex_background')return capability.native_ready===true&&capability.can_send===true?'Codex 背景模式 · App 可關閉 · OFFICE 需運作':'Codex 背景入口暫時不可用 · 對話仍保留';
   if(capability?.mode==='cursor_local')return capability.native_ready===true&&capability.can_send===true?'Cursor SDK · 純對話 · 由此傳送及續接':'Cursor SDK 入口暫時不可用 · 對話仍保留';
   if(localReceiverUnavailable(capability))return '只保存留言 · 無法自動喚醒原聊天';
@@ -60,6 +61,7 @@ export function publicSyncHint(capability){
     if(sync?.state==='unavailable'||sync?.state==='disabled')return 'Grok App 公開同步暫時不可用；既有紀錄保留。';
     return 'Grok App 公開同步準備中；尚未確認新對話已同步。';
   }
+  if(capability?.mode==='openrouter')return '此 OFFICE 對話會送往 OpenRouter 及模型供應商。請只分享合適的文字。';
   if(capability?.mode==='codex_background')return '公開同步範圍：這條 OFFICE 管理的 Codex 背景對話；工作資料夾唯讀，額外權限須逐次批准。';
   if(capability?.mode==='cursor_local')return '公開同步範圍：這條 OFFICE 管理的 Cursor SDK 對話。';
   const sync=capability?.public_sync;
@@ -107,13 +109,24 @@ export async function requestIdentity(agent,text,storage=sessionStorage) {
 export class CommandComposer {
   constructor() {
     this.element=document.createElement('div');this.element.className='office-command';this.busy=false;this.epoch=0;this.readRevision=0;this.mutationDepth=0;
-    this.element.innerHTML='<form hidden><label>傳送指示到原聊天<textarea rows="2" maxlength="6000" placeholder="輸入指示…" autocomplete="off"></textarea></label><div class="command-actions"><span>背景傳送 · 忙碌時排隊</span><button type="submit">傳送</button></div></form><p class="command-status" role="status" aria-live="polite"></p><p class="command-status command-public-sync"></p>';
+    this.element.innerHTML='<form hidden><label>傳送指示到原聊天<textarea rows="2" maxlength="6000" placeholder="輸入指示…（Enter 傳送，Shift+Enter 換行）" autocomplete="off" enterkeyhint="send"></textarea></label><div class="command-actions"><span>背景傳送 · 忙碌時排隊</span><button type="submit">傳送</button></div></form><p class="command-status" role="status" aria-live="polite"></p><p class="command-status command-public-sync"></p>';
     this.form=this.element.querySelector('form');this.input=this.element.querySelector('textarea');this.button=this.element.querySelector('button');this.status=this.element.querySelector('.command-status');
     this.approvalBox=document.createElement('div');this.approvalBox.className='command-approvals';this.element.append(this.approvalBox);
     this.syncStatus=this.element.querySelector('.command-public-sync');
     this.form.addEventListener('submit',event=>{event.preventDefault();this.send();});
-    this.input.addEventListener('keydown',event=>{event.stopPropagation();if(!event.isComposing && event.key==='Enter'&&(event.metaKey||event.ctrlKey)){event.preventDefault();this.send();}});
-    this.input.addEventListener('keyup',event=>event.stopPropagation());
+    let composing=false,compositionEndedAt=-Infinity;
+    this.input.addEventListener('compositionstart',()=>{composing=true;});
+    this.input.addEventListener('compositionend',event=>{composing=false;compositionEndedAt=event.timeStamp;});
+    this.input.addEventListener('blur',()=>{composing=false;compositionEndedAt=-Infinity;});
+    this.input.addEventListener('keydown',event=>{
+      event.stopPropagation();
+      if(event.key!=='Enter'||event.shiftKey||event.altKey||event.defaultPrevented)return;
+      // Some IMEs end composition just before reporting the Enter that picked a candidate.
+      if(composing||event.isComposing||event.keyCode===229||event.timeStamp-compositionEndedAt<50)return;
+      event.preventDefault();
+      if(!event.repeat&&!this.button.disabled)this.form.requestSubmit(this.button);
+    });
+    this.input.addEventListener('keyup',event=>{event.stopPropagation();compositionEndedAt=-Infinity;});
     this.input.addEventListener('input',()=>this.updateButton());
   }
   scope(){return {agent:this.agent,epoch:this.epoch};}
@@ -134,11 +147,11 @@ export class CommandComposer {
     else if(bindingScope(this.capability)!==bindingScope(capability))this.invalidateAsync();
     this.agent=agent;this.capability=capability;
     const inbox=capability?.mode==='agent_inbox',grokSdk=capability?.mode==='grok_sdk',grok=!grokSdk&&(capability?.mode==='grok_webhook'||agent.startsWith('grok_bot:')),sdk=capability?.mode==='cursor_local',cloud=capability?.mode==='cursor_cloud',background=capability?.mode==='codex_background';
-    const targetLabel=grokSdk?'傳送到 Grok App 的同一 Bot／聊天':background?'傳送到 Codex 背景對話':sdk?'傳送到 Cursor SDK 對話':cloud?'傳送到 Cursor App 的 Cloud Agent':inbox?'同 Agent 對話':capability?.mode==='grok_webhook'?'傳送指示給 Bot':'傳送指示到原聊天';
+    const targetLabel=capability?.mode==='openrouter'?'傳送到 OpenRouter 免費對話':grokSdk?'傳送到 Grok App 的同一 Bot／聊天':background?'傳送到 Codex 背景對話':sdk?'傳送到 Cursor SDK 對話':cloud?'傳送到 Cursor App 的 Cloud Agent':inbox?'同 Agent 對話':capability?.mode==='grok_webhook'?'傳送指示給 Bot':'傳送指示到原聊天';
     this.input.setAttribute('aria-label',targetLabel);this.form.querySelector('label').firstChild.textContent=targetLabel;
     this.form.hidden=!capability?.can_send;
     if(!capability?.can_send && !this.latest)this.status.textContent=capability?.reason==='mobile_view_only'?'這部手機只有查看權限，未獲准向此 Agent 發訊息。':capability?.reason==='dispatch_disabled'?'這位 Agent 的指令入口已停用。':grokSdk?'Grok Bot SDK 入口暫時無法使用；既有 Bot、聊天及紀錄保留。':background?'Codex 背景入口暫時無法使用；既有對話及紀錄保留。':sdk?'Cursor SDK 入口暫時無法使用；既有對話及紀錄保留。':capability?.same_session?'原聊天指令入口暫時無法使用。':'尚未接通指令入口';
-    else if(!this.latest && !this.uncertain)this.status.textContent=localReceiverUnavailable(capability)?'只能保存留言，不能自動喚醒這個 Cursor 原聊天。':grokSdk?'指示會透過實驗 SDK 送到已選的 Grok Bot／聊天。入口已設定；實際回覆及交付仍需核對。':background?'首次指示會啟動獨立的 Codex 背景對話，之後續接同一對話；公開回覆及交付紀錄會同步到這裡。':sdk?'傳送時會建立或續接這條 SDK session，公開回覆會同步到這裡。':cloud?'指示會送到 Cursor App 中同一隻 Cloud Agent。':grok?grokConnectionView(capability).message:inbox?'訊息會保存在這位 Agent 的私有收件箱。':'指示會送到呢個 Agent 原本嘅聊天。';
+    else if(!this.latest && !this.uncertain)this.status.textContent=capability?.mode==='openrouter'?'模型：'+(capability.model||'免費文字模型'):localReceiverUnavailable(capability)?'只能保存留言，不能自動喚醒這個 Cursor 原聊天。':grokSdk?'指示會透過實驗 SDK 送到已選的 Grok Bot／聊天。入口已設定；實際回覆及交付仍需核對。':background?'首次指示會啟動獨立的 Codex 背景對話，之後續接同一對話；公開回覆及交付紀錄會同步到這裡。':sdk?'傳送時會建立或續接這條 SDK session，公開回覆會同步到這裡。':cloud?'指示會送到 Cursor App 中同一隻 Cloud Agent。':grok?grokConnectionView(capability).message:inbox?'訊息會保存在這位 Agent 的私有收件箱。':'指示會送到呢個 Agent 原本嘅聊天。';
     const received=inbox&&['queued','running','waiting_user'].includes(this.latest?.state);
     this.form.querySelector('.command-actions span').textContent=receivingHint(capability,received,agent);
     if(!this.connect){this.connect=document.createElement('button');this.connect.type='button';this.connect.className='office-workspace-edit';this.connect.textContent='啟用持續收訊';this.connect.addEventListener('click',()=>window.dispatchEvent(new CustomEvent(this.capability?.mode==='grok_sdk'?'office:new-grok-sdk-conversation':'office-inbox-setup',{detail:{agent_id:this.agent}})));this.element.append(this.connect);}
@@ -160,7 +173,12 @@ export class CommandComposer {
     const grokSdkLabels={pending:'等待 Grok SDK 傳送',sending:'正在送到 Grok 原聊天',queued:'Grok 入口已接收 · 等待原聊天開始',running:'Grok 原聊天執行中',completed:'Grok 原聊天已交付回覆',delivery_unknown:'Grok 送達結果未確認 · 請核對原聊天'};
     const visibleLabel=this.capability?.mode==='grok_sdk'?(grokSdkLabels[command.state]||label):this.capability?.mode==='codex_background'?(backgroundLabels[command.state]||label):this.capability?.mode==='cursor_local'?(sdkLabels[command.state]||label):localReceiverUnavailable(this.capability)&&command.state==='pending'?'已保存留言 · 原聊天未收到':label;
     this.status.textContent=hint || visibleLabel+(command.detail_code==='open_original_app'?' · 請開啟原 App':'')+' — '+command.preview.replace(/\s+/g,' ').slice(0,48);
+    if(this.capability?.mode==='openrouter'&&['failed','delivery_unknown'].includes(command.state)){
+      const reason={openrouter_account_limit:'OpenRouter 帳戶限制了這次要求，請核對免費額度。',platform_rate_limited:'免費流量已達上限，請稍後再發送。',openrouter_catalog_unavailable:'暫時無法核對免費清單。',openrouter_model_unavailable:'所選免費模型暫時不可用。',platform_auth_required:'請在加入 Agent 的 OpenRouter 選單更新金鑰。',platform_access_denied:'OpenRouter 拒絕存取，請核對帳戶設定。',openrouter_incomplete:'模型未交付完整文字。',openrouter_unconfirmed:'執行結果未確認。'};
+      this.status.textContent=reason[command.detail_code]||'OpenRouter 暫時不可用，請查看紀錄。';
+    }
     if(command.detail_code==='completed_without_reply')this.status.textContent+=' · 平台未提供回覆文字';
+    if(command.state==='failed'&&command.detail_code==='cursor_local_start_failed')this.status.textContent='Cursor SDK 未能準備對話，訊息未送出。';
     if(command.detail_code==='platform_agent_busy')this.status.textContent='原 Agent 正在處理另一項工作；此指令未送達。';
     if(command.detail_code==='waiting_for_reported_work')this.status.textContent='等待這位 Agent 在 App 的工作結束；指示尚未送出';
     if(command.detail_code==='mobile_command_expired')this.status.textContent='手機指令已過期並取消，沒有送交 Agent 執行。';

@@ -49,22 +49,25 @@ export function lockMobileAccess() {
 }
 
 async function decode(response, current = () => true) {
-  let data;try { data = await response.json(); } catch { data = {}; }
+  let data;try { data = await response.json(); } catch { /* Interrupted or non-JSON response. */ }
   // A response from before logout/cache reset must not restore old data or
   // invalidate a newer login, even if JSON parsing finished out of order.
   if (!current()) throw sessionChanged();
   if (!response.ok) {
-    const code = typeof data.error === 'string' && /^[a-z_]{1,100}$/.test(data.error) ? data.error : 'mobile_unavailable';
+    const code = typeof data?.error === 'string' && /^[a-z_]{1,100}$/.test(data.error) ? data.error : 'mobile_unavailable';
     if ((response.status === 401 && code !== 'mobile_session_renewal_required') || (response.status === 403 && /(?:revoked|expired|session_required|identity_mismatch)/.test(code))) lockMobileAccess();
     const error = new Error(code);error.code=code;error.status=response.status;throw error;
   }
+  if (data === undefined) throw new TypeError('mobile_response_unreadable');
   return data;
 }
 
 function acceptSession(data, generation) {
   if (generation !== sessionGeneration) throw sessionChanged();
   if (!data || data.authenticated !== true || typeof data.csrf_token !== 'string' || !data.csrf_token) {
-    lockMobileAccess();throw Object.assign(new Error('mobile_session_required'), {code:'mobile_session_required',status:401});
+    // A partial or incompatible successful response cannot establish a
+    // session. A later read can recover without discarding a valid login.
+    throw new TypeError('mobile_invalid_session_response');
   }
   session = data;sessionEpochs.set(data,generation);locked=false;return data;
 }

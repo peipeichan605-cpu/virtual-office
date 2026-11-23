@@ -21,3 +21,7 @@
 .office-mobile-login{position:static;flex:0 0 auto;border:1px solid #ffffff55;border-radius:10px;padding:8px 11px;background:#22392ce6;color:#fff;font:600 12px system-ui;cursor:pointer}
 .mobile-session-dialog{box-sizing:border-box;width:min(440px,calc(100vw - 28px));max-height:calc(100dvh - 32px);overflow:auto;border:1px solid #c7d5ce;border-radius:20px;padding:22px;color:#25342e;background:#f9fcfa;font:15px/1.6 system-ui}
 .mobile-session-dialog::backdrop{background:#10251cb0}.mobile-session-dialog h2{font-size:22px;margin:0 0 12px}.mobile-session-dialog p{margin:12px 0}.mobile-session-notice{min-height:24px;color:#285c43}.mobile-session-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.mobile-session-actions button{border:1px solid #b3c8bb;border-radius:10px;padding:10px 14px;background:white;color:#25342e;font:600 14px system-ui;cursor:pointer}.mobile-session-actions .mobile-session-primary{background:#285c43;color:#fff}.mobile-session-actions .mobile-session-revoke{color:#85423e}.mobile-session-actions button:disabled{opacity:.55;cursor:wait}
+
+.office-mobile .hq-loading.mobile-start-error{width:min(22rem,calc(100% - 40px));line-height:1.6;text-align:center;pointer-events:auto}
+.mobile-start-error .hq-loading-track{display:none}
+.mobile-start-error button{border:0;border-radius:10px;background:#285c43;color:#fff;padding:8px 18px;font:600 15px system-ui;cursor:pointer}

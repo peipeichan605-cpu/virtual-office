@@ -6,6 +6,6 @@
 <p class="mobile-pair-return"><a href="/mobile/">已配對？返回 OFFICE</a></p><p class="mobile-pair-return-note">若這個瀏覽器已配對，請用上方普通入口返回；舊配對連結只能使用一次，不需再次提交。</p>
 <form id="mobile-pair-form"><label for="pair-token">私人配對連結或一次性配對碼</label><input id="pair-token" type="password" autocomplete="off" spellcheck="false" autocapitalize="none" maxlength="2048" required>
 <label class="mobile-pair-remember" for="remember-device"><input id="remember-device" type="checkbox">記住這部私人手機</label><p class="mobile-pair-remember-note">由你勾選後，這個瀏覽器可自動續期，最長 30 天；連續 7 天沒有使用便需重新配對。電腦可隨時撤銷。共用手機或無痕模式請勿勾選。不勾選則最長登入 24 小時，閒置 1 小時後需要重新配對。</p>
-<button type="submit">配對並進入 OFFICE</button></form><p id="pair-notice" role="status" aria-live="polite"></p><small>手機只會取得你在電腦批准的 Agent 權限。配對碼限時一次使用，請勿公開分享。成功後請收藏 OFFICE 普通網址，不要收藏一次性配對連結。</small>
+<button type="submit" disabled>配對並進入 OFFICE</button></form><p id="pair-notice" role="status" aria-live="polite">正在載入配對功能。如按鈕一直未能使用，請在這個分頁按瀏覽器的重新載入。</p><small>手機只會取得你在電腦批准的 Agent 權限。配對碼限時一次使用，請勿公開分享。成功後請收藏 OFFICE 普通網址，不要收藏一次性配對連結。</small>
 <details class="mobile-pair-help"><summary>下次使用／登入失效時怎樣做？</summary><p>讓電腦的 OFFICE 與私人入口保持運作。手機開啟 Tailscale，再用原瀏覽器打開收藏的 OFFICE 網址。仍有效的已配對手機可在 OFFICE 的「手機登入」中選擇記住，毋須重掃碼。已記住而仍有效的手機會嘗試自動續期；已撤銷、超過期限或清除瀏覽器資料，則需要電腦重新配對。</p></details>
 </main><script type="module" src="/office/mobile-pair.js"></script></body></html>
