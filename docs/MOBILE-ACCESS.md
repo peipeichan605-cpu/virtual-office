@@ -54,6 +54,14 @@ This technical guide covers host preparation and the security boundary.
 See [Serve identity behavior](https://tailscale.com/docs/features/tailscale-serve)
 and [grants](https://tailscale.com/docs/reference/syntax/grants).
 
+## Set up a phone from the owner dashboard
+
+Open **手機接入**, choose an online phone under the same Tailscale account, and confirm. The dashboard can prepare a loopback-only mobile listener while the desktop and its Agents keep running. New installations use a private TLS-terminated Tailscale Serve forward with PROXY protocol v2. The listener uses the native node status, stable device identity, account, and current addresses to admit only selected phones. Pairing grants then restrict what each phone may see and send. The setup flow does not edit the tailnet policy, VPN preferences, or Funnel. Other peers allowed by the network might still establish TCP connections to the private port; the application denies them access to OFFICE.
+
+On a legacy installation the owner can initiate a native confirmation on the host. Approval upgrades the local owner credential, disables the old external feed, and opens the verified owner page on that computer. The initiating legacy page never receives the new credential. Existing manual HTTP Serve and tsnet deployments can keep their existing pairing workflow. The steps below document the **manually administered HTTP Serve** alternative.
+
+See [Tailscale Serve and PROXY protocol](https://tailscale.com/docs/reference/tailscale-cli/serve#use-the-proxy-protocol).
+
 ## 1. Prepare an up-to-date private network
 
 Install the official Tailscale client on the host and phone. Use a private tailnet,
@@ -203,12 +211,15 @@ scanner. A full private pairing link or its code can also be pasted into the
 pairing page; full links must match this installation's origin and pairing path.
 The QR is generated locally; no third-party QR service receives it.
 
-The host check distinguishes configuration from a current managed private
-listener. An external transport is reported unverified, not claimed connected.
-Pairing and recent phone contact are separate from an Agent message and its
-completed response. Missing host setup has a reusable local-Agent setup prompt;
-the user still completes account and OS approvals. No wizard silently modifies
-another VPN, replaces an existing policy, or enables public access.
+In the standard setup, OFFICE opens the installed Tailscale app when the owner
+needs to sign in. Once the computer and phone are connected, the owner selects
+the phone by name and activates its private entry directly in the dashboard.
+OFFICE checks the native entry and its own listener before offering a QR. Any
+account-level approval opens the official provider page. The standalone host
+assistant is available to administrators maintaining an older manual deployment.
+See the [quick start](MOBILE-QUICKSTART.md) for the dashboard steps. Scan the QR
+on the selected phone to verify pairing, then check a reply from an authorized
+Agent to verify delivery.
 
 ## 6. Daily login and optional remembered phones
 

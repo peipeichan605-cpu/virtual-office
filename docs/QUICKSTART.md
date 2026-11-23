@@ -14,15 +14,17 @@ Virtual Office 是在你自己的電腦運行的 3D Agent 辦公室。新安裝�
 
 ```sh
 python3 setup_ui.py
-python3 office.py init
-python3 office.py setup-platforms
-python3 office.py setup-platforms --check
-python3 office.py start
-python3 office.py status
-python3 office.py url
+python3 office.py --config .office/config.json init
+python3 office.py --config .office/config.json setup-platforms
+python3 office.py --config .office/config.json setup-platforms --check
+python3 office.py --config .office/config.json start
+python3 office.py --config .office/config.json status
+python3 office.py --config .office/config.json url
 ```
 
-Windows 把 `python3` 換成已確認的 `python`、`py -3` 或完整執行檔路徑。
+Windows 把 `python3` 換成已確認的 `python`、`py -3` 或完整執行檔路徑。已有預設安裝亦可在檔案總管雙擊 `Start Office.cmd`，它會啟動這個安裝已有的 OFFICE；自訂設定請沿用原本的 `OFFICE_CONFIG` 或命令列。一般 PowerShell 視窗可以在 `start` 成功後關閉。部分安裝工具或 IDE 會隨工作結束而終止子程序。若 `start` 提示目前環境不允許獨立背景啟動，請在 Windows 開始選單開啟 PowerShell，進入同一個安裝資料夾，沿用同一個 `--config` 執行 `start`。要在前景運行，可執行 `serve` 並保持視窗開啟。
+
+遇到意外中斷時，先執行 `status`。啟動回條包含服務的 `run_id`、實際服務 `pid`、啟動程序 `launcher_pid` 和本機日誌位置。同一個 run 的 `result.json` 會記錄有序停止原因，例如 `owner_api` 或 `observer_failed`。如果程序已退出但只留下 `running` 紀錄，單憑該紀錄無法判斷退出原因。
 `setup-platforms` 安裝固定版本 Cursor SDK 到這個 OFFICE 的私人環境，並檢查
 Node.js／Codex。缺少環境時會逐項列出原因，補齊官方執行程式後重新檢查；
 `runtimes_ready=true` 才算完成環境準備。這一步不讀取帳戶憑證或建立聊天，
