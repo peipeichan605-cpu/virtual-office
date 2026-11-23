@@ -19,7 +19,6 @@
 <p align="center">
   <a href="https://ronglecat.github.io/grok-bot-sdk/"><img src="https://img.shields.io/badge/docs-API%20reference-0ea5e9" alt="API docs" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
-  <a href="https://github.com/RongleCat/grok-bot-sdk/stargazers"><img src="https://img.shields.io/github/stars/RongleCat/grok-bot-sdk?style=social" alt="GitHub stars" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D22.13-339933?logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/client-Grok%20Bot%200.78.1-lightgrey" alt="Grok Bot 0.78.1" />
   <img src="https://img.shields.io/badge/note-unofficial-yellow" alt="Unofficial" />

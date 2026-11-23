@@ -74,6 +74,10 @@
     "sdk.mjs": {
       "sha256": "7ab3450fab972dfc24abe6eed58fe1d978439982e8b5f9b76bfad65d3005da93",
       "description": "Preserve validated lastTurnSettlement metadata from Grok Bot 1.0.1 native state; no other protocol changes."
+    },
+    "README.md": {
+      "sha256": "334417bf278d2ea4c665475828913be0c2edd6d9816fd04a5a6f9eddea5bcdb3",
+      "description": "Omit the upstream social badge in the bundled documentation."
     }
   }
 }
