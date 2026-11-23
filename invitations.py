@@ -17,16 +17,18 @@ from workspaces import Workspaces, workspace_path
 from reporting_policy import grok_public_reporting_policy
 from grok_onboarding import grok_connection_handoff, grok_connection_hint
 from public_reporting import ReportingError
-from private_files import PrivateFileError, require_private
+from private_files import PrivateFileError, ensure_private_directory, prepare_private_file, require_private
 from host_runtime import shell_command
 
 class InvitationError(ValueError):
     def __init__(self,code,status=400):self.code=code;self.status=status;super().__init__(code)
 
 def private_file(path,value):
-    path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-    fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-    with os.fdopen(fd,'w',encoding='utf-8') as output:output.write(value)
+    ensure_private_directory(path.parent)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as output:
+        prepare_private_file(path, output.fileno())
+        output.write(value)
 
 
 ONBOARDING_FLOW=(

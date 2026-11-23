@@ -15,6 +15,7 @@ from unittest.mock import patch
 from configuration import initialize,load_config,save_config
 from dashboard import Bridge,proxy_handler
 from invitations import InvitationError
+from private_files import require_private
 
 class InvitationTests(unittest.TestCase):
     def setUp(self):
@@ -62,7 +63,9 @@ class InvitationTests(unittest.TestCase):
         self.assertEqual(load_config(self.path)['agents'],[])
         paths=self.bridge.invitations.paths(invite['id']);private=json.loads(paths[0].read_text());credential=json.loads(paths[2].read_text())
         for secret in [private['token'],credential['token'],self.bridge.config['topic']]:self.assertNotIn(secret,json.dumps(invite))
-        for path in paths:self.assertEqual(path.stat().st_mode&0o777,0o600)
+        for path in paths:
+            require_private(path.parent, directory=True)
+            require_private(path)
         again=self.invite(request_id='request-fixture-two');self.assertEqual(again['id'],invite['id'])
         changed=self.request('/api/office/invitations',{'name':'Changed','provider':'generic','request_id':'request-fixture-one'})
         self.assertEqual(changed[0],409)

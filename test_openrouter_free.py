@@ -56,7 +56,7 @@ class FakeRouter:
 class OpenRouterTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name).resolve()
+        self.root = Path(self.temp.name).resolve() / '.office'
         self.config = self.root / 'config.json'
         initialize(self.config)
         self.remote = FakeRouter()
@@ -73,6 +73,7 @@ class OpenRouterTests(unittest.TestCase):
 
     def tearDown(self):
         self.bridge.commands.close()
+        self.bridge.mobile.close()
         self.bridge.history.close()
         self.temp.cleanup()
 
@@ -148,6 +149,7 @@ class OpenRouterTests(unittest.TestCase):
         self.assertEqual(self.terminal(first)[0], 'completed')
         self.assertTrue(self.bridge.commands.create(first)['duplicate'])
         self.bridge.commands.close()
+        self.bridge.mobile.close()
         self.bridge.history.close()
         self.start()
         second = self.send(a, 'second '+key)

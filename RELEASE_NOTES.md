@@ -4,6 +4,7 @@
 
 - 在「＋ 邀請 Agent」選 OpenRouter，可從當時有免費端點的文字模型建立對話。每次發送會再核對指定型號及零定價。金鑰由擁有人在自己的 OFFICE 設定。
 - macOS 安裝器會還原手機連接助手的擁有人執行權限，兼容會忽略權限的 ZIP 解壓工具。
+- 新建立的邀請使用系統原生私人資料夾，寫入憑證前會檢查檔案權限。GitHub 的共用 Windows 執行環境亦會測試這個流程。
 - 原生 Windows 已驗證原位更新、127 個 UI 檔案、三個平台執行環境及 Chrome 3D 大堂。19 項 Windows 測試全部通過，原有 Agent、對話及手機授權均已核對。
 - macOS 瀏覽器以模擬供應商完成兩輪對話並讀回交付紀錄。Windows 及 macOS 已從 OpenRouter 讀取免費模型清單。此次未使用真實 API key 發送推理請求。[驗證紀錄](VERIFICATION.json)
 
