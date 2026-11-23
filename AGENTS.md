@@ -1,23 +1,26 @@
 # Install Virtual Office on the user's computer
 
-When the user asks to install or start Virtual Office, carry out the following steps on the computer that will host it. This file is the installation guide for any local agent with a terminal. The repository link is sufficient to find it. Only browsing the project requires no changes to the computer.
+**For AI agents.** When a user gives you this repository and asks for an installation, use your local execution tools to install and start OFFICE on the computer they intend to use. All the instructions you need are in this repository. A user who only asks to read about the project is asking for information.
 
 ## Choose the installation
 
-- Start in the user's chosen workspace or an existing Virtual Office checkout. For a fresh install, choose a writable, dedicated folder. From its parent directory run the following command if the source is not already present. Use the version the user requested, or the release linked at the top of the README. Record the version from `VERSION` and the full Git commit.
+1. Check the target operating system, available Python and the installation folder. If you can only operate a remote sandbox, tell the user which machine you can reach. The host's private dashboard URL works on that host.
+2. If you find an existing installation, `.office/`, a custom config or a running instance, identify its config and check its status. Reuse a healthy copy of the requested version. For an upgrade, follow [Upgrade an existing OFFICE](docs/UPGRADING.md) to back up private state, preserve active work and update in place.
+3. For a fresh install, choose a dedicated writable folder. Use the release the user specified or the one linked at the top of the [README](README.md). For this release, run the following from its parent folder.
 
-  ```sh
-  git clone --branch v0.2.2-preview --depth 1 https://github.com/peipeichan605-cpu/virtual-office.git virtual-office
-  ```
+```sh
+git clone --branch v0.2.2-preview.1 --depth 1 https://github.com/peipeichan605-cpu/virtual-office.git virtual-office
+cd virtual-office
+git rev-parse HEAD
+```
 
-- Without Git, download the named release ZIP and its matching `.sha256` file. Compare the entire SHA-256 before extracting to a new folder. Use `Get-FileHash -Algorithm SHA256` on Windows, `shasum -a 256` on macOS, or `sha256sum` on Linux. Open the folder containing `office.py`.
-- If this is already an installation (including `.office/`, an explicitly configured data directory, or a running instance), use its original config to check its status. A healthy installation of the requested version can be reused. For an upgrade, follow the backup, in-place update and verification procedure. Preserve active work, private settings, conversations and device permissions. A checkout cloned from a release tag is detached. To upgrade it, fetch tags and check out the chosen release tag in the clean working tree after the backup. [Upgrade an existing OFFICE](docs/UPGRADING.md)
+If Git is unavailable, download the named ZIP and matching `.sha256` file from the [release page](https://github.com/peipeichan605-cpu/virtual-office/releases/tag/v0.2.2-preview.1). Compare the entire digest before extracting into a new directory. Use `Get-FileHash -Algorithm SHA256` on Windows, `shasum -a 256` on macOS or `sha256sum` on Linux. Work in the folder containing `office.py`. Record `VERSION` and the commit or ZIP digest.
 
-## Install and start a fresh OFFICE
+## Install and start
 
-On **Windows**, use a healthy x64 Python 3.10+ interpreter, such as `py -3` or the full path to `python.exe`. On **macOS and Linux**, use `python3` 3.10+. Full setup also needs Node.js 22.13+ and a compatible local Codex executable. The standard setup prepares the pinned Cursor SDK inside this OFFICE, checks the bundled Grok SDK and reports which dependencies need attention. When a prerequisite is missing, use the platform's official installation instructions and repeat the check. [Platform prerequisites and troubleshooting](docs/QUICKSTART.md)
+Use Python 3.10 or later. On Windows, select a healthy x64 interpreter using `py -3` or a full path. Full setup also requires Node.js 22.13 or later and a compatible local Codex executable. The installer prepares the pinned Cursor SDK for this OFFICE, checks the packaged Grok SDK and reports missing dependencies. Supply missing prerequisites from their official sources. Let the user complete any required OS approval or account sign-in. [Platform prerequisites](docs/QUICKSTART.md)
 
-From the folder containing `office.py`, run each command after the previous one succeeds. Replace `python3` with the interpreter identified above. Use 4318 if it is free or pass another available loopback port to `init`. Keep the same explicit config path throughout.
+Run each command after the previous one succeeds. On Windows replace `python3` with the chosen interpreter. Use 4318 if available, otherwise choose a free loopback port for `init`. Keep the same explicit config throughout.
 
 ```sh
 python3 setup_ui.py
@@ -29,12 +32,17 @@ python3 office.py --config .office/config.json status
 python3 office.py --config .office/config.json url
 ```
 
-After a partial installation, resume from the first unfinished step using the existing config. If a Windows terminal reports that its parent will terminate background processes, use the supplied `Start Office.cmd` from Explorer for the initialized default installation, or the same config in a normal PowerShell terminal. Then check `status` again.
+After a partial installation, use the existing config and continue from the first unfinished step. If a Windows terminal reports that it will terminate background processes, use `Start Office.cmd` from Explorer for an initialized default installation, or start from a regular PowerShell with the same custom config. Check `status` again.
 
 ## Verify and hand over
 
-1. Check that `setup-platforms --check` returns `runtimes_ready=true`. Check the same config's `status` for `state=running` and `local_ok=true`. A fresh installation has `selected=0`.
-2. Open the private URL from `url` in the user's local browser and verify that the 3D lobby loads. If you only have terminal access, check HTTP on that port at `/office/` and report which visual check is still pending. Keep the private URL and all contents of `.office/` on the owner's device.
-3. Give the user the version, install location and how to reopen or stop this instance. The precise stop command is in the start receipt. Agent selection and account sign-in happen later in **＋ 邀請 Agent**. OpenRouter uses the Python core and takes the user's key in the local UI when selected. A paired phone is optional. [Phone setup](docs/MOBILE-QUICKSTART.md)
+- Confirm `ui_installed=true`, `runtimes_ready=true`, and then `state=running` and `local_ok=true`. A fresh installation has `selected=0`. Preserve the existing roster on upgrade.
+- Open the private URL locally and verify that the 3D lobby renders. With terminal-only access, check HTTP on that port at `/office/` and tell the user that visual confirmation is pending.
+- Report the version, installation folder, runtime checks, and how to reopen or stop the instance. The start receipt gives the run ID, log and exact stop command. Keep the private URL, `.office/` data, credentials and conversation contents on the owner's device.
+- Let the user select agents from **Invite Agent**. OpenRouter uses the Python core and accepts a key in the local desktop form when selected. Verify a real prompt, public reply and delivery separately for each route being tested. Phone pairing is optional. [Phone setup](docs/MOBILE-QUICKSTART.md)
 
-For additional steps covering platform approvals, recovery and existing installations, read the detailed guide included in this checkout. [Detailed installation procedure in Traditional Chinese](INSTALL-PROMPT.txt)
+[Detailed installation checklist](INSTALL-PROMPT.txt) · [Upgrade an existing installation](docs/UPGRADING.md)
+
+## Documentation language
+
+Write the public README, installation instructions, platform guides and release notes in English. When readers need to match a control in the Traditional Chinese interface, give its English name followed by the exact on-screen label.

@@ -1,67 +1,20 @@
 # Virtual Office
 
-一個由 Python 管理的本機 3D Agent 辦公室。角色頭頂預設顯示細小姓名及狀態標籤；點選後才展開公開 Prompt、進度及交付，對話會隨角色移動。預設中文介面、空名單及本機儲存。
+Virtual Office is a local 3D dashboard for your AI agents. Click an avatar to read its public prompts, progress and deliveries, or send a message through a supported connection. Python runs the office on your computer. A fresh installation starts with an empty lobby and a Traditional Chinese interface.
 
-## 讓你的 Agent 安裝 OFFICE
+## Install with your agent
 
-將這個倉庫連結交給能操作你電腦的 Agent，告訴它「幫我安裝 Virtual Office」即可。它可以從倉庫取得安裝步驟、啟動 OFFICE 並打開你自己的 3D 大堂。已有 OFFICE 的用戶沿用原來的 Agents、對話及手機配對。
+Give an agent that can operate your computer **this repository link** and ask it to install Virtual Office. The installation steps travel with the repository. The agent can set up the host, open the 3D lobby and verify startup. If it finds an existing office, it can follow the upgrade procedure and keep your agents, conversations and phone pairings.
 
-**For AI agents** — When asked to install Virtual Office, follow the root [AGENTS.md installation guide](AGENTS.md) on the user's computer.
+**For AI agents.** Start with [AGENTS.md](AGENTS.md) when the owner asks you to install or start OFFICE.
 
-[下載 0.2.2-preview 安裝包及 SHA-256](https://github.com/peipeichan605-cpu/virtual-office/releases/tag/v0.2.2-preview) · [手動安裝](docs/QUICKSTART.md) · [更新已有 OFFICE](docs/UPGRADING.md)
+[Download the 0.2.2-preview.1 ZIP and SHA-256](https://github.com/peipeichan605-cpu/virtual-office/releases/tag/v0.2.2-preview.1) · [Manual quick start](docs/QUICKSTART.md) · [Upgrade an existing office](docs/UPGRADING.md)
 
+## Installation
 
-密集角色的標籤會自動避讓；同一時間只展開一個頭頂對話或子 Agent 名單。主 Agent 頭頂的「子 Agent N」可選擇全部子 Agent，完整及簡易模式均可使用。全文按需要展開及捲動，其他角色不會因新訊息自動彈出大型文字預覽。
+For a full first installation, use a writable folder, Python 3.10 or later, Node.js 22.13 or later and a compatible local Codex executable. Windows requires x64 Python for the pinned Cursor SDK and a native `codex.exe` for Codex. An existing Python 3.9 core can use a compatible separate SDK environment. Initial setup needs internet access for the pinned UI and Cursor SDK. The installed desktop and phone lobby load Three.js locally.
 
-## 加入 OpenRouter 免費對話 Agent
-
-在電腦的「加入 Agent → OpenRouter · 免費對話」輸入名稱及選擇免費文字模型。首次使用填入自己的 OpenRouter API key，之後同一個 OFFICE 可以沿用。金鑰在電腦端的私人設定保存。每位 Agent 有獨立的對話、狀態及交付紀錄。已配對的手機沿用原有的個別或全員發訊息權限。[建立 OpenRouter 金鑰](https://openrouter.ai/settings/keys)
-
-模型清單取自 OpenRouter。可選模型包括仍有免費端點的 Nemotron 3.5 Lightning 和 Super VL。建立及每次發送都會核對所選的確切 `:free` 型號及零定價。免費額度耗盡或模型暫停時，OFFICE 顯示原因。此模式只處理文字；每次會傳送本次訊息及同一 Agent 最近完成的對話。供應商可能記錄這些內容，請避免輸入私人資料。使用機構帳戶時，請確認該帳戶沒有強制收費的外掛。[免費模型與限額](https://openrouter.ai/docs/api/reference/limits) · [供應商及外掛設定](https://openrouter.ai/docs/guides/features/plugins/overview)
-
-## 可移動的對話框
-
-所有平台的 Agent 共用同一個對話介面，完整及簡易模式都適用。點角色頭頂名稱開啟對話後，拖曳頂部名稱列可把對話移到畫面其他位置；亦可按「浮動」。拖拉四邊或右下角可調整大小，按「回到頭頂」恢復跟隨角色。名稱列和調整大小的邊框支援方向鍵，按住 Shift 可加大每次移動距離。
-
-移動或縮放會保留目前草稿、已讀訊息與捲動位置，不會搬動 Agent 座位。搬座位使用獨立的「⇄ 搬座位」按鈕。瀏覽器只記住對話框的位置、大小及浮動模式；不把 Agent 身份、指示或對話正文寫入這份畫面設定。切換 Agent 時仍只開啟一個對話或子 Agent 名單；子 Agent 的公開對話保持唯讀，收發能力及批准規則不變。
-
-可調整大小的介面參考 [dominicliu69/virtual-office 的對話區](https://github.com/dominicliu69/virtual-office/blob/0753acc8591e48cfaf3199a6f1b2cabbdc1bbb07/ui-overrides/office/commands.js)，並擴充自由移動及回到頭頂功能；沿用本版原有的訊息、草稿及身份隔離機制。
-
-## 簡易模式
-
-按右下角「簡易模式」，畫面會集中顯示 G/F 全部已入場的 Agent 及頭頂對話，收起統計、樓層、成員名單、活動及其他工具。3D 辦公室效果保留；點角色頭頂名稱可讀取紀錄、輸入指示。
-
-右上角「完整模式」可恢復全部功能，再按「＋ 邀請 Agent」邀請新成員。完整模式每次開啟及從簡易模式切回時預設停在 G/F；辦公室未有 Agent 時亦顯示 G/F 大堂。瀏覽器會記住模式，下次開啟亦保留；切換模式不會改變 Agent 身份、權限或歷史。
-
-## G/F 空間與角色管理
-
-G/F 保持 45.5 × 41 米的大堂面積。中央休閒大堂使用原生 sofa、扶手椅、茶几、大電視及植物，座位按建築角度組成 L 字、方形等會客組，基礎提供 36 個獨立休息位；中央不放辦公桌。Pantry 茶水間以原生咖啡吧和高櫈組成。周邊 5 間辦公室分別有 8、6、4、6、8 個工作位，工作台沿建築軸線拼成一字、背對背或 L 字組合，保留入口及走道；暖金啡木地板配柔和玻璃、暖光及接觸陰影。日夜光影仍會變化，室內暖燈保持可讀。較多 Agent 入場時，額外休息區向外延伸。 G/F 後方另有獨立玻璃 CEO Room，配行政工作台、銀色 Apple 風格電腦、大電視及待客沙發；行政位可拖曳安排，並由同一套 Python 座位規則保存。電腦為 3D 場景物件。
-
-Grok Bot 直接沿用原版 `grok-bot.glb`，按 Agent 身份套用橙、綠、藍、珊瑚紅、紫、金六組身體顏色；原有幾何、白色長眼及黑色短梗保持不變。只複製各角色身體材質，共享模型不會被改色。Codex、Cursor、Hermes 亦各有六組原有配色，按穩定 Agent 身份固定分配；改名、重新載入、切換樓層或工作狀態變化時保持配色。同平台可能重色。明確上報的自訂顏色或個人 GLB 會沿用；平台圖案胸章、狀態燈、眼睛動畫、頭頂對話、拖曳及座位安排照常運作。
-
-直接按住角色拖到休息位或辦公室工作台，或在頭頂對話按「⇄ 搬座位」選擇座位。拖曳時綠色代表空位，紅色代表已有角色；放開後由 Python 保存，重新載入、重啟 OFFICE 或另一個分頁都使用同一份安排。一張 sofa 的不同座位可分別安排角色，每個位置同時只供一位 Agent 使用。搬位不會推走其他角色，也不會改變它的實際工作目錄或 Workspace 樓層；更新視覺設計保留原座位身份及歷史。
-
-每位角色的頭頂對話都有「登出」，完整和簡易模式均可使用。確認後移除該 Agent 的 OFFICE 身份及接收入口、釋放座位、取消尚未交出的留言，保留已存交付歷史。已知仍在執行、排隊或等待批准的工作會阻止登出；若只剩結果未確認的舊指示，可在看過說明後明確按「仍要登出，保留紀錄」。未知結果保持原狀，不會改成成功或已取消，也不會自動重送；登出不代表原平台工作已停止。舊邀請及收訊憑證會失效；再次入場時請建立新邀請。
-
-G/F 與原生樓層共用日間、黃昏及夜間光照參數，後方沿用原生窗框投影。保留辦公室／CEO 原有六盞局部暖燈，中央休息區補兩盞廣角暖燈，Pantry 補一盞；日間關閉，黃昏及夜晚按原生燈光強度漸變，換層時停用。暖色木地板、家具及座位保持原有設計；擴建地板使用實體光照接收陰影，避免將原版固定家具的烘焙陰影拉伸到新佈局。陰影解析度依樓層及裝置能力調整，補燈不增加陰影圖。
-
-## 安裝
-
-自動安裝請由 Agent 直接閱讀 [AGENTS.md](AGENTS.md)。手動安裝可依下列步驟進行，初次啟動後再選擇要連接的 Agent。
-
-標準安裝會先準備 Codex、Cursor SDK 及 Grok SDK 所需的執行環境，再啟動 OFFICE。請使用 Python 3.10 或以上；已有的 Python 3.9 核心安裝仍可沿用，但 Cursor SDK 須另備相容 Python。首次安裝需要網絡下載固定版本的 3D 素材。安裝器優先連接原作者倉庫，遇到來源無法下載時會嘗試保留同一 commit 的副本；每個檔案均核對原有 SHA-256。桌面及手機打開大堂時會從 OFFICE 讀取隨包附上的 Three.js。
-
-| 功能 | 標準安裝需要準備 | 首次使用由用戶完成 |
-| --- | --- | --- |
-| 3D 辦公室及紀錄 | Python、已核對雜湊的 UI 素材 | 自行選擇加入的 Agent |
-| Codex 背景模式 | 相容的本機 Codex `app-server`；Windows 使用原生 `codex.exe` | 自己的 Codex 登入 |
-| Cursor SDK 純對話 | Python 3.10+、本 OFFICE 專用環境內的 `cursor-sdk==1.3.1`；Windows 需要 x64 Python | 在 OFFICE 設定自己的 Cursor User API key |
-| Grok Bot SDK | Node.js 22.13+；固定 SDK 原始碼已隨套件附上，毋須 `npm install` | 瀏覽器登入，再選自己的 Bot／聊天 |
-| OpenRouter 免費文字 Agent | 隨 OFFICE 的 Python 核心提供 | 在 OFFICE 選免費模型，首次填自己的 OpenRouter key |
-
-**已安裝 Cursor Desktop 並不代表已安裝 Cursor SDK。** 標準流程會完成 SDK 的一次性安裝；不要只啟動網頁就宣稱全部平台已備妥。執行環境就緒與帳戶接通分開驗證，安裝不會自動加入任何 Agent。原有 App、Cloud、Webhook 和 Hermes 接駁方式繼續保留，按用戶選擇完成各自的綁定。
-
-將套件放在自己選擇的資料夾，在該資料夾逐行執行；每一步成功才繼續。檢查失敗時先修正列出的原因，不要跳到啟動步驟：
+From the folder containing `office.py`, run each step after the previous one succeeds. On Windows substitute a verified `py -3`, `python` or full interpreter path.
 
 ```sh
 python3 setup_ui.py
@@ -73,229 +26,119 @@ python3 office.py --config .office/config.json status
 python3 office.py --config .office/config.json url
 ```
 
-Windows 請將 `python3` 換成已確認可用的 `python`、`py -3` 或 Python 完整路徑。`setup-platforms` 會建立本 OFFICE 專用的 Cursor SDK 環境，並檢查 Grok 的 Node.js 及 Codex 執行程式；不會讀取帳戶憑證或建立聊天。若缺少 Node.js／Codex，安裝 Agent 應依官方安裝方法補齊，再重跑檢查。只有 `runtimes_ready=true` 才表示三個執行環境均已備妥；未登入的帳戶仍需用戶登入，不代表已完成雙向收發。
+Look for `ui_installed=true`, `runtimes_ready=true`, `state=running` and `local_ok=true`. A new roster has `selected=0`. Open the private URL on the host and check that the lobby renders. The start receipt includes the run ID, log and exact stop command. Use the same config with `stop`. An initialized default Windows installation can also reopen with `Start Office.cmd` from Explorer. [Windows startup and troubleshooting](docs/QUICKSTART.md#starting-and-stopping-on-windows)
 
-使用自訂設定時，在每個 `office.py` 子命令前加同一個 `--config "完整設定路徑"`。只需修復 Cursor SDK 時，仍可使用 `setup-cursor-sdk`。已有服務安裝 SDK 後，先妥善處理進行中工作，再用本安裝原有 `stop`／`start` 重載，勿終止其他 OFFICE。
+`setup-platforms` prepares the pinned Cursor SDK in a private environment, checks Node.js for Grok and checks Codex's app-server. If a requirement is missing, supply the official executable and rerun the check. Platform login and actual conversation delivery are verified when you choose a connection. Keep `.office/`, its private URL, settings, credentials, databases and logs off public repositories. If you already have an installation, use its original config and the [upgrade guide](docs/UPGRADING.md).
 
-最後一行只在你的終端顯示私人入口。新安裝沒有 Agent，沒有自動掃描聊天，也不使用 ntfy。用 `python3 office.py stop` 停止此 OFFICE；沒有安裝自動啟動服務。
+## Add an agent
 
-每個安裝的設定、私人入口、Agent 憑證、資料庫及日誌都在 `.office/`。移動專案後可透過 `--config` 指定設定檔；備份或搬移私人資料時由擁有人保管。不要把 `.office/` 推上 GitHub。
+Click **Invite Agent** (`＋ 邀請 Agent`) at the top right or **New conversation** (`＋ 新對話`) on a floor. Pick a platform and a connection type. Opening the menu does not add a member.
 
-已有安裝請依 [更新指南](docs/UPGRADING.md) 保留私人資料及重建 UI，不要重新執行 `init`。
+- **OFFICE-managed conversation.** Choose Codex background, Cursor SDK chat or OpenRouter to create a separate conversation. A working desktop account and a prepared SDK environment have different requirements. See the table below.
+- **Existing chat or Cloud Agent.** Choose the original App or Cloud route. Grok SDK lets you pick a bot and chat after signing in. Cursor Cloud takes the chosen agent's link. Platforms that need local action provide one invitation to paste into the selected original chat. It covers enrollment, the first reports, public sync and the supported receiver setup.
+- **Verify your selection.** Check the actual `run_id`, `joined=true` and both `accepted=true` first reports where applicable. Send a short instruction and check its matching public reply and completed delivery before relying on that route. To test work originating in the App, type a different prompt there and check its public events separately.
 
-## 手機私人接入（可選）
+Unused invitations are valid for 24 hours and can be cancelled. Reopening the invitation flow with the same platform and name can recover an unused prompt. If the installation moves, generate a fresh invitation. Logout revokes used credentials. The owner's local private state contains the invitations and bindings.
 
-手機可透過 Tailscale 私人網絡及獨立配對連接 OFFICE，只查看和操作你明確批准的 Agent。此功能預設停用；需要先完成私人網絡、權限及手機配對設定，運行 OFFICE 的 Mac／主機亦須保持開啟及連線。程式測試不代表已完成真實手機連線驗證；安裝與檢查步驟見 [手機私人接入指引](docs/MOBILE-ACCESS.md)。
+## Platform support
 
-主機需要一直保持原有 VPN 連線時，可選用通用 [tsnet 手機接入方式](docs/MOBILE-TSNET.md)，以獨立 userspace 節點連線，保留相同手機權限及配對機制，不改主機路由或 DNS。此方式仍需實測 VPN 共存及 Android 連線，並非預設啟用。
-
-在電腦「手機接入」選已連線的手機，設定 Agent 查看及發訊息權限，再用手機相機掃碼。首次登入或裝置批准會有官方入口；舊安裝可在電腦確認一次更新後，直接返回同一個助手。詳見 [手機首次連接與日常使用](docs/MOBILE-QUICKSTART.md)。
-
-配對時可自行選擇「記住手機」，最多 30 日，連續 7 日未使用失效；有效期內短期登入自動續期，日常保持 Tailscale 連線並開啟普通 OFFICE 書籤即可。舊登入不會自動延長，已撤銷登入亦不會復活。私人配對資料毋須貼到聊天。
-
-## Cursor SDK 純對話
-
-「＋ 新對話」選擇「Cursor SDK · 純對話」後，會先登記由 OFFICE 管理的對話，首次傳送時才建立原生 Cursor SDK session；收到原生回條後確認身份，後續訊息續接同一條對話並保存公開回覆及交付。登記成功不代表已驗證收發。這個可選模式需要一次安裝獨立 SDK 環境及設定自己的 Cursor API key；一般 OFFICE 安裝與既有平台接駁保留原方式。詳見 [Cursor SDK 指引](docs/CURSOR-SDK.md)。
-
-## Codex 背景模式
-
-「＋ 新對話」亦可自行選擇「Codex · 背景模式」，建立由 OFFICE 管理的獨立 Codex 對話。macOS 優先辨認 Desktop App 隨附的相容執行程式，能用時毋須另裝 CLI；亦支援明確指定版本或相容的獨立 CLI。沿用所選環境已有的 Codex 登入，首次指示才建立原生 thread，後續訊息續接同一條對話；公開回覆、狀態及交付紀錄回到 OFFICE。運行 OFFICE 的電腦及服務須保持可用。
-
-模型預設沿用 Codex 設定，也可在原 Agent 的「模型設定」明確選擇，保留同一原生對話及歷史，只用於下一項新指示；不改全域設定、不另建 Agent、不重送舊工作。尚有未結束或結果未確認的指示時不能更改。模型清單不是帳戶可用性保證；不支援的模型會顯示失敗，不會自動切換。
-
-第一版使用唯讀工作資料夾及一次性批准，停用外部 MCP／插件等工具；不接管既有 Codex App 聊天。原有「邀請 Agent」接入及父子 Agent 機制繼續保留，新增背景模式的子 Agent 同步尚未提供。登記成功仍須以實際指示、回覆及完成紀錄驗證收發。詳見 [Codex 背景模式指引](docs/CODEX-BACKGROUND.md)。
-
-首輪背景模式已完成同一對話的四輪真實 OFFICE 介面測試，包括約 76 秒閒置後收訊、服務重啟後上下文續接、唯讀檔案讀取，以及工作中公開進度與完成後交付紀錄。整個 Codex App 完全退出及長時間閒置尚未實測；既有結果不保證所有帳戶或模型組合均可用，亦不代替後續修正的實測。
-
-## Grok Bot SDK 實驗模式
-
-在「＋ 邀請 Agent」或「＋ 新對話」主動選擇「Grok Bot SDK · 實驗模式」，由你完成一次瀏覽器登入，再選擇現有 Bot 及原生聊天。這條可選路徑使用非官方 SDK，同步所選聊天的公開輸入、回覆及工作狀態；原有 Webhook 連接助手保留。需要 Node.js 22.13 或更新版本，登入資料只保存在本機私人資料目錄，不需要複製 Webhook URL 或金鑰。
-
-接入設定成功不代表新指示已執行。雙向收發、相配交付、閒置後及 Grok App 完全退出後收訊仍須分別實測；本模式不預設加入其他 Bot，也不保證每個帳戶或原平台版本均可用。詳見 [Grok Bot SDK 指引](docs/GROK-SDK.md)。
-
-## 入場後持續收訊
-
-入場及首次回報後，程式自動檢查原生指令入口：沿用已保存的路由，或嘗試平台支援的原 session 自動辨認。這不表示每個平台都已有背景入口；Grok Webhook、Hermes ACP 及 Cursor Cloud 仍須完成各自的一次性接駁。完成後，Agent 可以正常結束回合；下次直接在頭頂對話輸入指示，不用再叫它待命，也沒有一小時到期。現有 Agent 按「啟用持續收訊」可升級，保留身份、歷史及尚未收取的留言。
-
-`join.py` 的 `joined=true` 與兩個 `accepted=true` 證明入場及首次回報。另看 `receiver_status`：`ready` 表示入口已設定且目前可用；`configured_unavailable` 表示路由仍保存、等待平台恢復；`setup_required` 表示尚欠原生接駁；`unsupported` 表示目前平台沒有可用的背景入口；`disabled` 表示擁有人停用派工；`rejoin_required` 表示身份已失效，需要由擁有人產生新邀請。`persistent=true` 只表示持久路由已設定，不能單憑它判斷平台目前可用。任何入場結果都不代替實際指令的接收、執行及交付驗證。
-
-Python 持續保存及派送指令，沒有工作時不啟動模型。Codex App 的邀請會辨認目前原 session 並自動綁定；Grok Bot 依同一份指引建立自己的 Webhook 入口。平台入口尚未完成時顯示「持續接駁待完成」，可以先留言。OFFICE 及原平台需要可用；Codex 未載入的聊天仍可能等到手動開啟後才執行。只有收到相配回報才顯示完成。[使用方式及支援邊界](docs/INBOX.md)。
-
-## 平台連接助手
-
-進入 OFFICE 直接顯示辦公室，不會彈出平台設定。「＋ 邀請 Agent」先讓你選擇加入方式；「接入現有 App／Cloud Agent」內的平台選項預設空白，由你決定使用哪個平台。舊邀請連結亦只提供「查看之前的邀請」，不會自動開啟。
-
-使用 Grok Webhook 邀請入場後，同一個邀請視窗會帶你逐步完成最後連接；一次只看一步，按「下一步／上一步」前進。連接資料保持遮蓋，技術欄位收入預設收起的「進階設定」。已有入口可直接測試，毋須重新貼資料或另一段 Prompt。
-
-按「連接並測試」後，只有同一 Bot 真正回傳相配測試的開始、回覆及正常完成，才顯示「已連接」。只保存入口或收到接口接收回應，仍顯示尚未確認收發。結果不明不自動重送；沒有工作時不啟動模型。詳見 [Grok 助手](docs/GROK-BOT.md)。
-
-## 平台持續收訊支援
-
-安裝包沒有綁定開發者電腦或 Agent 名單，各平台使用自己的原生入口：
-
-| 平台 | 接駁方式 | 實際範圍 |
+| Connection | What the owner selects | Messages and public records |
 | --- | --- | --- |
-| Codex App（macOS） | 邀請時辨認目前 session；檢查本機原生 queue 能力 | 同一聊天背景排隊；未載入的聊天仍需平台載入 |
-| Codex 背景模式 | 「＋ 新對話」選 Codex；使用本機 CLI 的獨立 app-server | 同一條 OFFICE 管理的對話，公開回覆、狀態、交付及上下文續接；唯讀工作資料夾 |
-| Hermes | `office.py connect-hermes` 建立固定 ACP session | 背景執行、公開回覆及上下文續接 |
-| Cursor Desktop 的 Cloud Agent | 首次填自己的 API key，再選 Agent 連結 | OFFICE 指示及回覆；同一 Agent 在 App 新開工作的狀態、公開對話、交付及歷史自動同步 |
-| Grok Bot · Webhook | 邀請 Prompt、自己的 Webhook routine、首次本機回報 | 背景喚醒指定 Bot，公開進度與交付由 Bot 回傳 |
-| Grok Bot SDK · 實驗模式 | 瀏覽器登入後明確選擇現有 Bot／聊天 | 所選原生聊天的收發及公開觀察；新工作、閒置與 App 退出後的實測分開確認 |
-| Cursor SDK · 純對話 | 「＋ 新對話」；每個安裝設定一次 Cursor API key | 同一條 OFFICE 管理的 SDK session，公開回覆、交付及上下文續接；沒有檔案／Shell 工具權限 |
-| Cursor Desktop 的本機聊天 | 既有 Hooks／主動上報 | 只同步；尚未有已驗證的原聊天背景指令入口 |
+| Codex App on macOS | An existing App chat with the same Codex home and native queue | OFFICE queues into the original session and observes its public events. An unloaded chat may need to be opened in the App. [Codex App commands](docs/COMMANDS.md) |
+| Codex background | A name, workspace and optional model | A separate OFFICE-managed native thread keeps context, public work and deliveries. Read-only workspace and one-time approvals. Uses the host's Codex login. [Codex background](docs/CODEX-BACKGROUND.md) |
+| Cursor Cloud Agent | An authorized API key and selected `bc-…` agent link | OFFICE-originated and new App-originated turns share the same agent and public history. The observer resumes by native run ID. [Cursor Cloud](docs/CURSOR.md#connect-a-cloud-agent) |
+| Cursor local Desktop chat | A chosen chat, native hooks and an identity-binding response | Public parent and child activity can sync from the App. Background delivery into a local chat is unsupported in this release. [Cursor local](docs/CURSOR.md#bind-a-local-cursor-chat) |
+| Cursor SDK chat | A name and a User API key with SDK access | A separate OFFICE-managed session with an empty tool list. The first send creates the native session. The bundled setup installs `cursor-sdk==1.3.1`. [Cursor SDK](docs/CURSOR-SDK.md) |
+| Grok Bot SDK, experimental | Browser sign-in, one existing bot and one native chat | Public inputs, replies, status and deliveries from either side of that chat. The unofficial SDK source is bundled. [Grok SDK](docs/GROK-SDK.md) |
+| Grok Bot Webhook | One existing bot and its routine | The assistant tests receipt, reply and completion. The routine wakes that bot. App-originated work depends on cooperative reporting. [Grok Bot](docs/GROK-BOT.md) |
+| Hermes ACP | One configured native ACP session | Background dispatch, public responses and context for OFFICE-issued work. The selected Hermes environment supplies its model. [Hermes](docs/HERMES.md) |
+| OpenRouter free text | Your key and an available free text model | Prompts, replies, state and deliveries are scoped to each OFFICE agent. Uses the Python core. [OpenRouter details](#openrouter-free-text-agents) |
+| Other local runners | An individually selected source and private reporting credential | Can report public events and use the generic inbox. Native wake-up requires a platform adapter. [Event protocol](docs/EVENTS.md) · [Inbox](docs/INBOX.md) |
 
-設定保存在每個使用者自己的 `.office/`，不用改 Python 或找開發者逐隻接駁。Grok Webhook 的合作回報需要能使用 OFFICE 所在電腦的本機執行工具；SDK 實驗模式改由 OFFICE 觀察所選原生聊天，有獨立的相容性與背景收訊限制。詳見 [Grok Webhook](docs/GROK-BOT.md)、[Grok SDK](docs/GROK-SDK.md) 及 [Cursor](docs/CURSOR.md)。
+### Background receipt and public observation
 
-新 adapter 已通過協議 fixture 與介面測試；沒有實際帳戶憑證或選定來源時，不宣稱完成平台端到端驗證。新安裝仍是空名單。發給 OpenRouter Agent 的訊息會由 OFFICE 傳到所選免費模型。其他平台的任務沿用各自原生入口的權限和費用。
+A ready native receiver lets an agent finish its turn. The Python service holds new instructions until delivery. There is no recurring one-hour wait or idle model call. `receiver_status` gives the next action.
 
-## 公開同步範圍
-
-收訊入口與 App 對話同步分開顯示；已驗證 OFFICE 指示收發，不等於已訂閱原平台全部對話。
-
-| 來源 | 公開同步範圍 |
+| Reported status | Meaning |
 | --- | --- |
-| Codex App | 已選定及綁定的原聊天，由原生觀察器讀取公開事件 |
-| Cursor 本機聊天 | 只有完成身份綁定的原生 Hook，才描述為原聊天同步 |
-| Cursor Cloud | 已選定 Cloud Agent 的新工作；包括 OFFICE 派發與直接在 Cursor App 發起的回合 |
-| Hermes ACP | 目前觀察 OFFICE 派發的工作，不能推論涵蓋其他 App 工作 |
-| Grok Bot · Webhook／一般主動回報 Agent | 合作上報；App 直接工作需 Agent 實際回報，不訂閱全部原生對話 |
-| Grok Bot SDK · 實驗模式 | 只觀察已選 Bot／原生聊天的公開事件；缺失正文與同步中斷會保留未確認狀態 |
+| `ready` | A route is configured and currently available. |
+| `configured_unavailable` | The route is saved and is waiting for the platform. |
+| `setup_required` | Complete the platform's native connection steps. |
+| `unsupported` | This route can store a message but cannot wake the original chat. |
+| `disabled` | The owner has disabled command delivery. |
+| `rejoin_required` | The old identity is invalid. Generate a new invitation. |
 
-Cursor Cloud 接入後，由 Python 背景讀取該 Agent 的新回合，無需每次啟動待命或保持 OFFICE 分頁開啟。初次連接建立基準，不匯入接入前全部已完成的聊天；OFFICE 與 App 看見的同一原生回合只保存一份。同步狀態與派工入口分開顯示，首次讀取未完成或 API 暫時不可用時會如實標示。這項能力適用 Cursor Desktop 的 Cloud Agent；本機聊天與 OFFICE 管理的 SDK 對話仍有各自的接駁範圍。詳見 [Cursor 接駁](docs/CURSOR.md)。
+`persistent=true` describes a saved route. Check current availability separately. Original App observation also has its own scope. Cursor local watches the bound native chat. Cursor Cloud watches new turns on the selected Cloud Agent. Grok SDK watches the selected chat. Grok Webhook relies on the bot's authenticated cooperative reports. Hermes ACP observes work dispatched through its selected session. [Command states and recovery](docs/COMMANDS.md) · [Inbox protocol](docs/INBOX.md)
 
-同一份入場 Prompt 現在必須完成 Bot 自己的長期規則保存、讀回核對及設定回條；即使持續收訊入口已 ready，也不能跳過。每個 Bot 使用自己無 token 的 reporting manifest，連到原公開事件憑證，不能混用 inbox 憑證。普通對話、提問及工作均適用；公開輸入保留完整原文並遮蓋私人資料，不能自行摘要。設定回條標示 agent_reported_saved，與後續真實 App 工作驗證分開。
+For a Grok Webhook invitation, the same window guides the owner through setup and a short test. Its **Connected** state requires a matching start, public reply and successful end from the bot. For existing enrolled agents, **Enable continuous receiving** offers the applicable upgrade steps while preserving identity and history. Unknown sends are reconciled using their original identity before additional work.
 
-合作回報只保存公開任務、進度及交付；不讀取內部推理或工具原文。沒有來源事件時不猜測狀態。Grok 的新邀請會在同一份指引加入目前 Bot 的長期公開回報規則，仍不把記憶保存當作自動同步證據。
+## OpenRouter free text agents
 
-Cursor 本機聊天同一份入場 Prompt 亦必須接續完成原生 Hook 安裝及原聊天綁定，不能因 `receiver_status=unsupported` 就提早結束。`observation_status=setup_required` 或 `binding_required` 表示尚未完成；只有伺服器核對目前身份、世代及原生回覆標記後，才回傳 `configured`。這個公開同步結果與背景派訊息能力分開；`public_sync_onboarding_complete=true` 不代表原聊天可被 OFFICE 喚醒。一次綁定後，後續工作沿用共用 Python Hook，毋須每次提醒 Agent 上報。Python 同時補讀該原聊天已驗證回合的公開文字，主聊天與子 Agent 均按自己的原生回合隔離，不讀取思考、工具原文或未選聊天。
+In **Invite Agent → OpenRouter**, enter a display name, select a currently available free text model and enter your own OpenRouter key on first use. The key stays in this installation's private backend settings and can be reused for other agents you choose. Each agent keeps its own conversation and deliveries. Paired phones follow their existing per-agent or roster-wide message grants. [Create an OpenRouter key](https://openrouter.ai/settings/keys)
 
-## 邀請 Agent（一般使用方式）
+The catalog comes from OpenRouter. Nemotron 3.5 Lightning and Super VL can be selected when they have a supported free endpoint. OFFICE checks the exact `:free` model identifier and zero pricing at creation and on every send. If the model disappears or free quota is exhausted, it reports the cause. This text-only route sends the current message and recent completed turns from that same agent to the provider. Providers may retain content. Check an organization's plugin settings for mandatory paid extras. [OpenRouter limits](https://openrouter.ai/docs/api/reference/limits) · [Plugin settings](https://openrouter.ai/docs/guides/features/plugins/overview)
 
-安裝及啟動一次後，日常接入都在 OFFICE 介面完成：
+## The office floor and chat controls
 
-1. 開啟你的私人 OFFICE，按「＋ 邀請 Agent」。
-2. 在「加入 Agent」選擇方式：「Codex · 背景模式」或「Cursor SDK · 純對話」可直接登記 OFFICE 管理的對話；「Grok Bot SDK · 實驗模式」則登入後選擇已有 Bot 及聊天。這些方式毋須複製入場 Prompt，按該平台畫面完成設定。
-3. 若要保留已有聊天，選「接入現有 App／Cloud Agent」，再選平台。Cursor Cloud 依指定 Agent 連結接入；需要 Prompt 的平台才會產生接入指引，貼回你選定的原聊天一次。
+**G/F** shows all enrolled agents, including agents with no assigned workspace. Every floor reads the same identity, public state and history. Full mode opens on G/F. Simple mode concentrates on avatars and overhead chats. The browser remembers the selected mode.
 
-頂部「＋ 邀請 Agent」及樓層的「＋ 新對話」使用同一個入口。開啟選單不會預設平台、建立 Agent 或啟動原生工作。以下 Prompt 流程適用於需要 Agent 主動執行接入指引的平台。
+The 45.5 × 41 m lobby has a central lounge with 36 individual resting places, grouped sofas, chairs, tables, plants and a large TV. The pantry has a coffee bar and stools. The five perimeter offices have 8, 6, 4, 6 and 8 desks. The separate glass CEO room has an executive workstation, screen and guest seating. The layout expands for more members. Warm wooden floors, native day/dusk/night lighting, window shadows and adjustable graphics are shared across the scene. The lounge and pantry use additional warm lighting at dusk and night.
 
-Python 會自動建立專用回報及收訊資料、填好目前安裝位置，並在 Agent 執行後即時登記。同一份 Prompt 會要求 Agent 接續完成首次回報、平台身份綁定、公開同步，再讀取 `conversation.guide_path` 完成平台支援的持續收訊設定，不需再貼第二段 Prompt。平台要求一次性批准時，批准後繼續同一份指引；若所選平台是 Grok 且需要擁有人完成最後連接，跟同一個邀請視窗的 Grok 連接助手逐步操作，毋須再貼另一段 Prompt。平台沒有背景入口時，仍會如實回報未接通，合併 Prompt 不能新增平台能力。`capability.persistent=false` 不代表入場失敗；接通原生入口後才可背景收訊。Cursor 本機聊天不為此試接其他平台或啟動等待工具。Grok 如只能由人類讀取 Webhook 資料，會清楚指出尚欠的步驟。登出後需重新產生邀請，不能重用舊憑證。
+- **Read or send a message.** Click the name above an avatar. Drag the title bar to move its chat, drag an edge or corner to resize it, and choose **Return above avatar** to attach it again. The title and resize handles support arrow keys and larger Shift steps. The draft and scroll position survive moving the window. Only window geometry and floating mode are stored in the browser layout setting.
+- **Move a seat.** Drag the avatar to a desk or lounge seat, or use **Move seat** in its chat. Green indicates a vacant seat and red an occupied seat. Python persists each assignment across refreshes and restarts. Moving a seat has no effect on the agent's actual working directory.
+- **Review children.** Select **Child agents** above an enrolled parent. Their read-only public records are available in either mode. Dense labels avoid each other and one chat or child list opens at a time.
+- **Sign out.** Logout releases the seat and the agent's receiving identity, cancels unsent messages and retains history. Known active work must finish first. For an old unconfirmed outcome the owner can explicitly sign out and keep the record. The native task may still be running. [Logout details](docs/COMMANDS.md#logout-and-uncertain-work)
 
-畫面會依次顯示「等待 Agent 執行接入 Prompt」、「已登記，等待 Agent 首次回報」及「已收到 Agent 回報」；原生入口完成後再顯示「已入場 · 持續收訊已接通」。登記、回報、接駁及實際任務完成是不同階段。未使用的邀請有效 24 小時，可以取消；如果關閉了視窗，再用相同名稱和平台產生邀請可找回尚未使用的 Prompt。
+Grok Bot uses the original `grok-bot.glb` geometry with six identity-based body colors. Codex, Cursor and Hermes also have per-platform palettes. A stable agent identity retains its color across renames and floor changes. Explicit avatar or color selections are respected. The movable conversation panel builds on the [community Cursor integration](https://github.com/dominicliu69/virtual-office/blob/0753acc8591e48cfaf3199a6f1b2cabbdc1bbb07/ui-overrides/office/commands.js).
 
-此流程支援有本機執行能力的 Grok Bot、Cursor、Codex App、Crouton 及其他 Agent，使用通用主動回報協議。它不會自動讀取所有平台的全部聊天，也不會讓休息中的模型長駐。雲端 Agent 的 localhost 並不是你的電腦；沒有本機執行能力時應回報未接入。
+### Workspaces and child agents
 
-邀請、憑證及接入指引都存於私人資料目錄，不會包含在發佈包。搬移安裝位置後請重新產生尚未使用的邀請。
+Agents sharing a canonical project directory share a floor. Distinct paths with the same final directory name stay separate. Symbolic links to the same directory resolve together. Floors have up to 20 seats and grow into continuation floors. Use **Set workspace** to pin a visual floor manually, or choose **Follow agent working directory** for automatic placement.
 
-## Hermes 原生雙向接駁
+Codex checks a selected chat's `cwd` approximately every 30 seconds. Crouton uses the verified run's `job.workspace` and can retain the last known workspace at rest. A generic agent can send an absolute `workspace_path` on `turn_started` or use `--workspace` when invoking `emit.py`. A Cursor hook can use a single `workspace_roots` entry. With multiple roots the owner chooses the project. Full paths live in private storage.
 
-已設定好 Hermes 的使用者可以接入一個固定原生 session：
+Codex children use native metadata. Cursor children use native hooks and scoped public messages. Grok Task children use explicit parent reports. A child appears beside its parent after an accepted start, and generally leaves about 30 seconds after its own terminal outcome. A missing final event leaves its outcome unconfirmed. Its history remains available after departure. [Parent and child agents](docs/SUBAGENTS.md)
 
-```sh
-python3 office.py connect-hermes --name "My Hermes" --workspace /absolute/path/to/project
-```
+## Private phone access
 
-重新啟動 OFFICE 後，點角色頭頂對話即可傳送指示。Hermes 在背景執行、同步公開回覆並保留上下文；OFFICE 不會開啟 App 或終端視窗。所用模型與供應商沿用你的 Hermes 設定，通用套件沒有指定模型路由。支援原生批准要求的「允許今次／拒絕」。詳見 [Hermes 指引](docs/HERMES.md)。
+Open **Phone access** in desktop OFFICE. On the phone install the official Tailscale app, sign in with the same account and confirm **Connected**. Select the phone on the computer, choose the agents it may view and message, and scan the one-time QR with the phone camera. On later visits open the regular bookmarked OFFICE page with Tailscale connected. A trusted phone may opt into renewal for up to 30 days, expiring after 7 unused days.
 
-這項接駁使用 Hermes ACP session，與上面的通用上報邀請分開。已在 macOS 的一個真實 Hermes session 驗證兩輪工具執行，以及重啟後續接；其他平台及模型組合仍需各自驗證。
+The owner can update existing grants without pairing again, including separately following all enrolled agents for viewing or sending. The phone can switch permitted floors and use chat without leaving the lobby. The host and private entry must stay online. A separate userspace tsnet node is available for installations that need to preserve an existing host VPN. [Phone quick start](docs/MOBILE-QUICKSTART.md) · [Mobile permissions and recovery](docs/MOBILE-ACCESS.md) · [Optional tsnet frontend](docs/MOBILE-TSNET.md)
 
-## 主／子 Agent 同場顯示
+## Advanced enrollment
 
-已入場的 Codex App 主 Agent 呼叫子 Agent 時，Python 會從同一個本機 Codex 資料來源驗證父子關係，將本次工作中的子 Agent 顯示在主 Agent 附近。子 Agent 不用逐一邀請、不會變成永久成員，亦不會佔用已保存的座位。它們沿用 Codex 角色外觀，各自顯示工作狀態、進度及交付；平台提供明文的委派任務會先遮蓋再顯示。若 Codex 只保存加密任務正文，對話會明確標示原平台未提供可讀任務內容。
-
-子 Agent 完成後短暫顯示結果再退場，工作紀錄仍可從交付列表查看。Python 只接納已選主 Agent、本次綁定及相配工作的子 Agent 紀錄；來源不明或停止更新時不會推斷完成。主 Agent 登出或改綁來源後，舊觀察憑證失效。
-
-| 平台 | 父子資料來源 | 驗證範圍 |
-| --- | --- | --- |
-| Codex App | Python 讀取原生父子元資料及公開紀錄 | 已完成原 App 實測 |
-| Cursor Desktop | 原生 Hooks 及共用 Python 結構化公開訊息讀取器 | 3.29.9 原 App 已驗證子 Agent 身份、狀態、公開進度、交付正文及歷史；毋須逐隻設定 |
-| Grok Bot | 父 Bot 使用真實 Task ID，按接入指引回報生命週期與公開文字 | 已在同一部 Mac 的兩個 Bot 驗證三位 Task 子 Agent、平行工作及交付；屬合作回報 |
-
-Cursor 一次安裝及綁定父聊天後，共用 Python 會自動尋找後續子 Agent，只同步該 Task 範圍內的公開訊息，並保存完成後正文；不使用混合思考內容的文字匯出。Grok Bot 現階段依靠父 Agent 合作執行回報指引，畫面明示「Agent 合作回報」，沒有獨立訂閱雲端子 Agent 活動。Hermes 子 Agent 觀察器仍未實作。詳見 [父子 Agent 機制](docs/SUBAGENTS.md)。
-
-## 同一 Workspace 同層
-
-**G/F 全員工作總覽**固定在最底層，集中顯示所有已入 OFFICE 的 Agent。大堂面積至少約一般樓層 3 倍，座位隨成員數增加，每位角色顯示名稱及即時狀態；點角色可看頭頂對話和交付紀錄。尚未指定 Workspace 的 Agent 同樣可以在 G/F 登入、工作及待命。
-
-G/F 是同一批成員的總覽，不會複製 Agent、重新登入或重複計算人數。各 Workspace 樓層繼續保留，與 G/F 共用同一份狀態、Prompt 及歷史。新 Agent 完成原本接入流程後，自動加入總覽，無須額外設定。大堂沒有人時仍可開啟；較多成員時可縮放、拖動及從成員名單選擇角色。
-
-樓層按專案工作目錄分組，同一個目錄的 Codex、Cursor、Grok Bot 和 Crouton 可坐在一起。Workspace 使用規範化絕對路徑識別；同名但不同位置的資料夾會分開，符號連結指向同一目錄則合併。
-
-邀請時預設「跟隨 Agent 工作目錄」，亦可選已知 Workspace 或新增專案資料夾。現有角色點「設定 Workspace」即可搬層，不需重啟或重新接入；手動指定會固定樓層，選回「跟隨 Agent 工作目錄」可恢復自動。角色身份、狀態與歷史不變。每層最多 20 個座位；超出時建立同一 Workspace 的續層。
-
-原生 Codex 讀取已選聊天的 `cwd`，約每 30 秒更新。原生 Crouton 使用已驗證回合的 `job.workspace`；缺少時只比對已知專案內的回合路徑，休息時保留最後已知 Workspace。通用接入及 `emit.py` 在開始事件回報目前工作目錄；在子資料夾執行時可用 `--workspace /absolute/project/root` 明確指定專案根目錄。Cursor Hook 使用單一 `workspace_roots`，多根目錄時由擁有人選擇。未提供資料的 Agent 在 G/F 顯示，Workspace 設定仍列為未指定，不猜測所屬專案。
-
-完整目錄只保存在本機私人資料庫及受保護的 Workspace 設定 API；不會發送到可選的 ntfy 通道。這是畫面分組，不會更改 Agent 的實際工作目錄、檔案權限或任務。
-
-## 進階：原生觀察器與手動接入（可選）
-
-以下設定供需要原生 Codex 觀察、Cursor Hooks 或自訂執行器的人使用；一般使用者可直接使用上面的邀請流程。
-
-Codex App：只加入你指定的聊天 ID。
+Most users can enroll through the menu. These examples are for explicit source selection or custom integrations. Keep the original `--config` before each subcommand if you use a custom config. For changes to a manual roster or source, finish outstanding work and reload only this OFFICE instance.
 
 ```sh
 python3 office.py enroll --provider codex --source YOUR_CHAT_ID --name "My Codex"
-```
-
-預設讀取目前使用者的 Codex 資料庫；不同版本或位置可指定：
-
-```sh
 python3 office.py configure --codex-db /path/to/state_5.sqlite
+python3 office.py connect-hermes --name "My Hermes" --workspace /absolute/path/to/project
 ```
 
-Cursor：新接入建議使用邀請內的父子 Agent 設定，詳見 [Cursor 接駁](docs/CURSOR.md)。以下為較早的主 Agent 觀察方式，使用 [官方 Hooks](https://cursor.com/docs/hooks) 的 `conversation_id` 選定一個聊天；它只同步主 Agent，不含自動子 Agent 發現。Hooks 只取 Prompt、可見回覆與停止事件，不讀取 thinking 或工具資料。`afterAgentResponse` 是完整訊息事件，並非逐字輸出。
+The older parent-only Cursor observer can follow one known conversation ID. For new enrollments, the [Cursor hook setup](docs/CURSOR.md#bind-a-local-cursor-chat) also handles genuine children. Existing hooks are preserved. Regenerate this installation's observer command if you move its files.
 
 ```sh
 python3 office.py enroll --provider cursor --source YOUR_CONVERSATION_ID --name "My Cursor" --credential-out .office/cursor.json
 python3 office.py cursor-hooks --credential .office/cursor.json --output /path/to/your/project/.cursor/hooks.json
-```
-
-命令會保留該檔原有 Hooks，只追加此觀察器；未入選的 conversation_id 會被忽略。接入失敗只在 Hook stderr 留下錯誤種類，會讓原本工作繼續；不會發新 Prompt 或自動重試。記下生成的 hook 命令，搬移安裝資料夾後重新生成，並移除舊路徑的同一觀察器命令。
-
-Grok Bot 或其他框架：先選定固定來源 ID，再使用自己的上報憑證。
-
-```sh
 python3 office.py enroll --provider grok_bot --source my-grok --name "My Grok Bot" --credential-out .office/grok.json
-```
-
-參閱 [Grok Bot 接入指引](docs/GROK-BOT.md) 和 [通用事件協議](docs/EVENTS.md)。這個手動上報入口並非自動擷取原生 App 全部對話，與 [SDK 實驗模式](docs/GROK-SDK.md) 分開。其雲端電腦與本機分開；應使用平台提供的本機執行能力，或在 OFFICE 所在機器運行接駁器。[平台說明](https://cursor.com/docs/grok-bot/work)
-
-Crouton：將目前電腦的 Crouton runtime 路徑設為本機設定，再選路由 ID：
-
-```sh
 python3 office.py configure --crouton-root /path/to/crouton-runtime --crouton-workspace-root /path/to/allowed/workspaces
 python3 office.py enroll --provider crouton --source crouton-01 --name "Crouton 01"
 ```
 
-原生 Crouton 觀察器目前取得執行狀態、任務及最後回覆；中途訊息需由執行器接通用事件介面。角色休息不代表模型常駐或能自動接收工作。
+The Crouton observer reads verified task state and the final reply. Intermediate public messages require event reporting by the runner. A generic or Grok reporter needs execution access on the actual OFFICE host. Every external reporting credential belongs to one member and cannot read owner-only conversations.
 
-改完名單或來源設定後，執行 `stop`，待舊程序停止，再 `start`。沒有指派新的 Cursor 或 Grok Bot 身份就不會自動加入。
+## Verification, privacy and credits
 
-## 同步範圍
+The observer typically checks active sources about once a second. Dashboard data and an open chat typically refresh about every two seconds. Source write time affects delay. OFFICE stores public messages, delivery history and event receipts in local SQLite. Input is redacted for common secret patterns, private URLs, email addresses and user paths. Review what your chosen platform or agent makes public. Reasoning and raw tool transcripts are excluded.
 
-- Python 約每秒讀取選定來源；畫面及展開的對話約每 2 秒更新。來源本身寫出訊息的時間仍會影響延遲。
-- 即時訊息是對使用者可見的文字。來源沒有提供的進度不會補寫；不儲存內部推理或工具輸出。
-- 常見憑證、私人入口、電郵及使用者路徑會先遮蓋再保存，但遮蓋並非所有私人資料的完整分類器。
-- 本機 SQLite 保存訊息、交付與事件收據；重啟不會重複插入同一訊息，過期回合不能把新工作改成完成。
-- 每個外部 Agent 只持有自己的上報憑證，不能用它讀取 OFFICE 對話。擁有人儀表板只接受本機存取；可選手機入口經獨立私人網絡與手機權限接入，這版沒有雲端託管服務或公網分享入口。
-
-## 驗證
+To run the developer suites, install the pinned UI from this checkout and run the following commands from the repository root.
 
 ```sh
+python3 setup_ui.py
 python3 -m unittest discover -p 'test_*.py'
 node --test test_*.mjs
 ```
 
-基本 OFFICE 服務不需要 Node.js；JavaScript 開發測試及 Grok Bot SDK 等可選接駁需要相容的 Node.js 執行環境，詳見各平台指引。
+Release records distinguish a prepared runtime, simulated provider tests and live-account delivery. For OpenRouter the free model catalog was checked live. The two-turn browser conversation and saved delivery used a deterministic provider. [Verification record](VERIFICATION.json) · [Release notes](RELEASE_NOTES.md)
 
-## 原始 3D 前端
-
-[原作者專案](https://github.com/Bodila51/grokbot-wallpaper) 固定於 `76232f7af1a94d3cbd3d0b1cf05e460c85637acf`。此套件使用 manifest、校驗值和局部修改描述，安裝時才從原來源下載 UI；未附送你的私人設定或對話。`public/` 為安裝產物，已排除版本控制。
-
-該固定版本未找到根目錄授權檔，因此本套件不把整套原版 3D 程式與素材重新宣告為 MIT 或其他授權。公開發布含原版程式、衍生修改或素材前，仍需核實原作者授權範圍。
-
-## OFFICE 指令輸入
-
-已接通 macOS Codex App 原聊天：點 Agent 頭頂對話即可傳送文字，由 Python 排隊、去重並配對實際回覆。新邀請會在指定的原聊天完成綁定；不會自動選入其他聊天。詳見 [指令接駁及 Hermes／OpenCode 擴充方式](docs/COMMANDS.md)。Hermes ACP 已實作；OpenCode 原生背景 adapter 尚未實作。
-
-手機名單可由擁有人選擇跟隨 OFFICE 已登記 Agents；查看與發訊息權限分開。現有手機可在「手機接入」更新範圍，毋須重新配對。手機保留樓層切換及原頁對話，詳見 [手機權限與操作](docs/MOBILE-ACCESS.md#update-an-existing-phone-and-stay-in-the-office)。
+The original 3D interface comes from `Bodila51/grokbot-wallpaper` at commit `76232f7af1a94d3cbd3d0b1cf05e460c85637acf`. Local setup downloads the pinned sources and verifies the original file hashes. The repository carries patches and manifests. The generated `public/` directory stays outside version control. No root license file was found at that upstream revision. Consult the original rights holder for redistribution of upstream work. [Upstream project](https://github.com/Bodila51/grokbot-wallpaper) · [Notices and provenance](NOTICE.md)

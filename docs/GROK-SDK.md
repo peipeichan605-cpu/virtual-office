@@ -1,54 +1,36 @@
-# Grok Bot SDK 實驗模式
+# Grok Bot SDK experimental mode
 
-這是可選的接駁方式：由 OFFICE 連到你選定的 **現有 Grok Bot 及原生聊天**，傳送指示並觀察該聊天的公開訊息。使用非官方開源 SDK；它不是 xAI 模型 API，也不會另建一個只存在於 OFFICE 的 Grok 模型對話。
+Use an existing Grok Bot and its selected native chat from OFFICE. This optional route uses an unofficial open-source SDK for the Grok Bot desktop protocol. The xAI model API creates a separate model conversation. The [Webhook route](GROK-BOT.md) remains available for owners who use routines.
 
-原有 [Webhook 連接助手](GROK-BOT.md) 繼續保留。進入 OFFICE 不會預設使用 Grok、要求登入或自動加入 Bot。
+## Connect a bot and chat
 
-## 使用方式
+1. Open **Invite Agent** or **New conversation** and select **Grok Bot SDK, experimental**.
+2. Choose **Sign in** and complete authentication on the platform's own browser page. Return to OFFICE.
+3. Select an existing bot, a chat and an OFFICE display name. A verified **Main chat** can be selected even when the platform represents it without a textual session ID.
+4. Send a short instruction from the avatar's chat. Then type a different instruction directly into the same chat in Grok App. In each case, verify the public input, working state, corresponding reply and saved delivery.
 
-1. 在「＋ 邀請 Agent」或「＋ 新對話」選擇「Grok Bot SDK · 實驗模式」。
-2. 按登入，在原平台登入頁由你完成登入及平台要求的確認，再返回 OFFICE。不要把密碼、驗證碼或憑證貼進聊天。
-3. 從清單選擇一隻已有 Bot，再明確選擇聊天及 OFFICE 顯示名稱。主聊天可能沒有文字形式的 session ID；介面仍會讓你選擇已核對的「主要聊天」，不會把它當作缺失資料或另開聊天。
-4. 接入後，點角色頭頂對話傳送一項簡短指示。再直接到同一隻 Bot 的同一個 Grok App 聊天輸入另一項指示，核對兩邊的公開對話、工作狀態及交付紀錄。
+Listing bots reads available choices. Only the bot and chat you confirm become an OFFICE member and observation source.
 
-登入及列出可選 Bot 不等於加入 OFFICE。只有你選定並確認接入的 Bot／聊天會建立觀察與派工綁定，不會自動加入整個帳戶。接入成功表示設定已保存；收到相配的新指示、公開回覆及原生完成結果後，才算該輪收發已驗證。
+## Runtime and credentials
 
-## 安裝與登入資料
+Use Node.js 22.13 or later. The pinned SDK source ships in the package, so a compatible Node installation can run it without `npm install`. The separate browser sign-in flow uses its own account credential. It does not read the Desktop keychain or login files. The credential is stored locally under the installation's private `grok-sdk/` directory with mode `0600`. It has account-level scope. OFFICE limits message delivery and observation to the selected bot and chat.
 
-需要 Node.js 22.13 或更新版本。SDK 所需的固定版本原始碼隨套件提供，已有相容 Node.js 時不需要另執行 `npm install`。OFFICE 會檢查執行環境，缺少時顯示尚未備妥。
+Login links are valid for 15 minutes. If the account session expires, sign in again to the same account. A different account cannot silently replace an existing connection. The SDK offers no automatic renewal or remote revocation. Signing an agent out of OFFICE releases its OFFICE binding and keeps its history. The Bot, Grok App login and provider account session have separate lifecycles.
 
-接駁使用獨立瀏覽器登入流程，不讀取 Grok Desktop 的 Keychain、登入檔或其他帳戶憑證。登入資料保存在此安裝私人資料目錄下的 `grok-sdk/`，檔案權限為 `0600`；不回傳到 OFFICE 網頁或寫入公開紀錄。這是帳戶級憑證，權限範圍較單一 Webhook routine 廣；OFFICE 的派工與同步仍限制於你選定的 Bot／聊天。
+## What OFFICE synchronizes
 
-登入連結有效 15 分鐘；過期後可重新開始。帳戶登入過期後，由你重新登入同一個帳戶。新登入若屬另一帳戶，不會靜默取代現有連接。SDK 不提供自動續期或遠端撤銷；登出 OFFICE Agent 只解除其 OFFICE 綁定並保留歷史，不代表停止原 Bot、登出 Grok App 或撤銷平台帳戶登入。
+- Public inputs and recognized bot replies from the selected native chat appear for work started on either side. Only public text passes through OFFICE's redaction rules.
+- A send receipt acknowledges submission. OFFICE matches native messages and the native turn result to establish completion. Idle state, a closed stream or a pause in text is insufficient.
+- The observer persists message identities and its read position. On reconnect it reconciles saved records. Missing text, a lost cursor or an interrupted stream can leave an incomplete record.
+- If a send has an unknown outcome, check the original chat and command ID before attempting more work. OFFICE avoids automatic duplicate dispatch.
+- The first validation targeted the main chat. A list of SDK children does not establish child-agent conversation sync. The Webhook route has its own cooperative child reporting.
 
-## 同步與完成判斷
+## Background operation and verification
 
-- 公開同步範圍是所選原生聊天，包括從 OFFICE 發出的指示及直接在 Grok App 輸入的公開對話。其他聊天不會因同屬一隻 Bot 而自動加入。
-- 只保存已辨認的公開用戶輸入及 Bot 回覆，並經現有遮蓋流程處理。內部推理、工具參數／原文、未知正文不投影到 OFFICE。
-- 接口接受訊息只表示送達回條。OFFICE 使用相配的原生訊息及回合結果判斷完成；閒置、串流關閉或一段文字停止更新都不等於完成。
-- 觀察器保存讀取位置及訊息身份，重連時核對已有紀錄。正文缺失、游標失效或同步中斷會保留未確認狀態，不補造內容或聲稱歷史完整。
-- 送達結果不明時不自動重送指示。先核對原聊天及同一個指示編號，避免重複執行。
+Keep the OFFICE host, Python service and network available. The worker can continue with the browser closed and does not focus the desktop. The upstream SDK does not wake a sleeping cloud computer. For a particular installation, verify an OFFICE-originated turn, an App-originated turn, another after a measured idle period, and one with the Grok App fully exited. Reopen the App to check the same history. Also test an OFFICE restart or network reconnect for missing, duplicated or mismatched turns.
 
-第一階段驗證主聊天收發。原有 Webhook 的父子 Agent 合作回報能力保留；SDK 提供子 Agent 清單本身不等於已實作其公開對話與完整交付同步。
+On November 13, 2026, a Grok Desktop 1.0.1 trial on one account's existing main bot chat completed four rounds. These included both message origins, about 2.5 minutes idle and about 75 seconds with the App fully exited. Each round produced a matching public input and reply, native success result and local delivery. The App was still closed when the final reply arrived. Long idle periods, sleeping cloud computers, expired logins and other accounts or versions need their own tests.
 
-## 背景運行與驗證範圍
+## Source and compatibility
 
-OFFICE 所在電腦、Python 服務及網絡須保持可用；關閉 OFFICE 網頁不會停止背景觀察。SDK 的收發不透過桌面點擊，不需要為送訊而切換或搶焦點。
-
-雲端電腦休眠是另一個狀態：上游 SDK 本身不負責喚醒它。不能從一次成功收發推論長時間閒置、Grok App 完全退出或不同 Bot 執行環境都可用。每個帳戶及版本至少應核對：
-
-1. OFFICE 發訊後，原 App 同一個聊天收到，並同步公開回覆及完成紀錄。
-2. 直接在 App 發訊後，OFFICE 顯示公開輸入、工作狀態及交付。
-3. 閒置一段時間後再次收發，記錄實際閒置時長。
-4. Grok App 完全退出後仍可收發，再開 App 核對同一份紀錄。
-5. OFFICE 重啟或網絡重連後，沒有遺失、重複訊息或錯配交付。
-
-2026-11-13 已在 Grok Desktop 1.0.1、單一帳戶的一隻現有 Bot 主聊天完成四輪實測：OFFICE 發訊、直接在 App 發訊、約 2.5 分鐘閒置後收訊，以及 App 完全退出約 75 秒後收訊。四輪均取得相配的公開輸入、回覆、原生成功結果及 OFFICE 交付紀錄；最後一輪回覆時 App 仍未運行。
-
-這個結果不代表已驗證長時間閒置、雲端電腦休眠、登入憑證過期後恢復，或所有帳戶、Bot 及版本。OFFICE 重啟與網絡重連的驗證亦須另行記錄；本機 fixture 測試不能代替上述帳戶實測。
-
-## 來源與相容性
-
-基礎為 [RongleCat/grok-bot-sdk](https://github.com/RongleCat/grok-bot-sdk/tree/42c75eb13f24630d1b689629502d4320c4219cdb)，固定於 `42c75eb13f24630d1b689629502d4320c4219cdb`，版本 `0.78.1`，MIT 授權。它重現桌面客戶端協議，不是官方支援的 Grok Bot API；原平台更新可能需要重新核對相容性。隨附的 `vendor/grok-bot-sdk/` 保留來源校驗資料及 `OFFICE-COMPATIBILITY.md`，記錄本版讀取原生回合結果的相容性修改。
-
-官方 xAI 模型 SDK 建立的是 API 模型對話，不能單憑其可用就宣稱已連到 Grok Bot App 的既有聊天。
+The package vendors MIT-licensed `grok-bot-sdk` 0.78.1 at commit `42c75eb13f24630d1b689629502d4320c4219cdb`. Changes to the upstream desktop protocol may affect compatibility. The vendor directory includes provenance hashes and the local native-turn compatibility notes. [Pinned upstream source](https://github.com/RongleCat/grok-bot-sdk/tree/42c75eb13f24630d1b689629502d4320c4219cdb) · [Compatibility notes](../vendor/grok-bot-sdk/OFFICE-COMPATIBILITY.md)

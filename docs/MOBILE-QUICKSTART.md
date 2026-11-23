@@ -1,49 +1,37 @@
-# 手機首次連接與日常使用
+# Connect a phone and use it day to day
 
-手機版保留 OFFICE 的 3D、樓層、公開對話及交付紀錄。手機透過私人連線連到
-你自己的 OFFICE 電腦；電腦需要保持開機、連網和 OFFICE 運行。
-不需要 ADB、USB 線或另一部 Windows 電腦。
+The phone opens the same 3D office, floors, public chats and deliveries through a private connection. The host computer must stay on, online and running OFFICE. You can pair from your phone camera and browser without ADB or a USB cable.
 
-## 第一次連接
+## First connection
 
-1. **在電腦的 OFFICE 按「手機接入」。** 助手會檢查私人連線。如果手機已有 Tailscale 並已連線，可以直接選手機。首次使用可在手機下載官方 [Android 版](https://play.google.com/store/apps/details?id=com.tailscale.ipn) 或 [iPhone 版](https://apps.apple.com/app/tailscale/id1470499037)。用與電腦相同的帳戶登入、允許 VPN，然後按 **Connect／連線**。
-2. **在 OFFICE 選你的手機，再按「連接這部手機」。** 電腦需要登入 Tailscale 時，可在這個畫面開啟官方 App。舊版 OFFICE 會先請你在這部電腦確認一次更新管理入口；新管理頁會自動返回手機設定，請收藏新頁。
-3. **選 Agent 權限，然後掃碼。** 分別選擇手機可以查看哪些 Agents，以及可以向哪些 Agents 發訊息。用手機相機掃電腦上的 QR，以手機瀏覽器開啟並按「配對」。掃碼有效期為五分鐘。手機能看到你選的 Agents，即已配對；要試收發，可再發一則訊息並核對回覆。
+1. On the computer, open **Phone access** (`手機接入`) in the owner dashboard. On your phone, install the official Tailscale app for [Android](https://play.google.com/store/apps/details?id=com.tailscale.ipn) or [iPhone](https://apps.apple.com/app/tailscale/id1470499037). Sign in with the same account used on the computer, allow the VPN connection and tap **Connect**. If Tailscale already shows **Connected**, go straight to device selection.
+2. In OFFICE, select your phone and choose **Connect this phone**. If the computer needs to sign in to Tailscale, open its official app from the assistant. Older installations may ask you to confirm a one-time upgrade of the owner entry on that computer. The new owner page takes you back to phone setup. Bookmark that page.
+3. Choose which agents the phone may **view** and which it may **message**. Scan the QR code with the phone's regular camera, open it in the mobile browser and tap **Pair**. The code expires after five minutes. Check that the selected agents appear. Send one message and check the reply to verify delivery.
 
-### 選手機時遇到提示
+If a phone is missing, open Tailscale on the phone, check the account and **Connected** state, then refresh the list in OFFICE. If an administrator must approve the device or enable private HTTPS, follow the official link shown in the assistant. Issuing an HTTPS certificate puts the displayed computer domain in public certificate logs.
 
-- **清單沒有我的手機**　打開手機上的 Tailscale，確認帳戶以及 **Connected／已連線**，回到 OFFICE 重新檢查。
-- **網絡管理員需要批准**　跟畫面上的官方連結完成裝置批准或啟用私人 HTTPS，再返回 OFFICE。簽發 HTTPS 憑證時，公開憑證記錄會包含畫面顯示的電腦網域名稱。
-- **私人入口已被其他服務使用**　OFFICE 會保留原設定。可請該私人網絡的管理員核對已佔用的入口。已有獨立節點或自管入口的安裝，可繼續使用原來的配對流程。
+If another service already owns the private endpoint, contact the tailnet administrator to review it. Existing separate-node or self-managed installations can continue using their pairing flow. OFFICE checks the selected device identity on every connection. The tailnet's network rules must also allow the phone to reach the computer.
 
-新設入口沿用 Tailscale 的私人網絡規則，OFFICE 另外按每次連線的裝置身份檢查所選手機。若你的網絡本身限制手機連到電腦，請由管理員處理該限制。
+## Daily use
 
-## 平日開啟
+- Keep Tailscale connected. Bookmark and reopen the **regular OFFICE page** after pairing. The QR link is single use.
+- On a trusted personal phone, opt into **Remember this phone** when pairing or later in **Phone login** (`手機登入`). A remembered login renews short sessions for up to 30 days and expires after 7 unused days.
+- Without this option, the normal login lasts up to 24 hours and expires after one idle hour. Existing phones keep their original choice.
+- On the phone, **Phone login** lets you stop remembering it or sign out. On the computer, **Phone access** lets the owner revoke it. Revocation stops renewal. Work a provider already started can continue.
 
-- 保持 Tailscale 已連線，直接開配對後的 OFFICE 書籤。收藏正常 OFFICE 頁面，
-  不要收藏一次性配對連結。
-- 你可在配對時自行選擇記住手機，或在已登入的手機點「手機登入」再啟用。
-  最多保留 30 日；連續 7 日沒有使用就失效。在有效期內，短登入會自動續期，
-  毋須每天掃碼。共用或不可信任的手機不應選這項。
-- 舊手機登入不會自動改成記住；不選擇記住時，沿用 24 小時及一小時閒置限制。
-- 在手機「手機登入」可停止記住或登出。在電腦「手機接入」可撤銷手機；
-  撤銷後不會自動續期。已開始的 Agent 工作不會因登出自動停止。
+## Troubleshooting
 
-## 如果連不上
-
-| 畫面或情況 | 下一步 |
+| What you see | What to do |
 | --- | --- |
-| 這個分頁沒有管理權限 | 返回電腦上原先開啟的 OFFICE 管理分頁或已儲存的私人管理書籤，在該分頁按「手機接入」 |
-| 辦公室畫面檔案暫時無法載入 | 保持 Tailscale 已連線，按「重新開啟 OFFICE」。若畫面提示稍候，等候畫面顯示的時間，再繼續使用原分頁 |
-| 瀏覽器未能啟動 3D 顯示 | 關閉手機上其他使用 3D 的分頁，回到 OFFICE 按「重新開啟 OFFICE」 |
-| 從收藏的配對頁開啟 | 如果仍有有效或可續期登入，沒有配對碼的配對頁會帶你返回大堂。收到新 QR 碼時，請在畫面確認後才使用新配對 |
-| 網站逾時／一直連線中 | 先看手機 Tailscale 是否 Connected，再確認 OFFICE 電腦開機及私人入口運行 |
-| Tailscale 要重新登入 | 親自登入原本的帳戶，再回 OFFICE；不要轉用其他帳戶碰碰運氣 |
-| 配對碼過期或已用過 | 在電腦重新建立一次性配對連結 |
-| 手機登入已撤銷或記住期限已過 | 請擁有人重新配對；重新整理不能恢復已撤銷的權限 |
-| 看不到某隻 Agent／不能發訊息 | 由電腦檢查手機權限，以及 Agent 本身是否已接通收訊 |
-| 電腦剛重新啟動 | 確認 OFFICE 和私人入口都已啟動；本工具不假設已設定開機自動啟動 |
+| This tab lacks owner access | Open the original private owner tab or owner bookmark on the computer, then select **Phone access**. |
+| Office assets could not load | Keep Tailscale connected and choose **Reopen OFFICE**. If a retry time appears, wait for it and use the same tab. |
+| The browser could not start 3D | Close other 3D tabs on the phone, return and choose **Reopen OFFICE**. |
+| A bookmark opens the pairing page | A valid or renewable login returns to the lobby when there is no new code. Confirm on screen before applying a new QR pairing. |
+| The site times out | Check **Connected** on the phone, then check the host and its private frontend. |
+| Tailscale needs another sign-in | Sign in to the original account and reopen OFFICE. |
+| Pairing code expired or already used | Generate a new one-time code on the computer. |
+| Login revoked or remember period ended | Ask the owner to pair again. |
+| Missing agent or disabled message field | Check the phone's view/send grants and that agent's receiver. |
+| Host just restarted | Check that both OFFICE and its private frontend are running. |
 
-官方手機操作參考：[Android](https://tailscale.com/docs/install/android)、
-[iPhone](https://tailscale.com/docs/install/ios)、
-[與其他 VPN 共用](https://tailscale.com/docs/reference/faq/other-vpns)。
+[Tailscale on Android](https://tailscale.com/docs/install/android) · [Tailscale on iOS](https://tailscale.com/docs/install/ios) · [Using other VPNs](https://tailscale.com/docs/reference/faq/other-vpns)

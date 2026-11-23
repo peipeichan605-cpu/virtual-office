@@ -25,7 +25,7 @@ stay tied to those memberships; enrolled-roster grants follow new enrollments an
 logouts. Sending still requires a connected native command capability and keeps
 the Agent's existing approval rules.
 
-For the guided phone workflow, start with [手機首次連接與日常使用](MOBILE-QUICKSTART.md).
+For the guided phone workflow, start with [Connect a phone and use it day to day](MOBILE-QUICKSTART.md).
 This technical guide covers host preparation and the security boundary.
 
 ## Security boundaries
@@ -56,7 +56,7 @@ and [grants](https://tailscale.com/docs/reference/syntax/grants).
 
 ## Set up a phone from the owner dashboard
 
-Open **手機接入**, choose an online phone under the same Tailscale account, and confirm. The dashboard can prepare a loopback-only mobile listener while the desktop and its Agents keep running. New installations use a private TLS-terminated Tailscale Serve forward with PROXY protocol v2. The listener uses the native node status, stable device identity, account, and current addresses to admit only selected phones. Pairing grants then restrict what each phone may see and send. The setup flow does not edit the tailnet policy, VPN preferences, or Funnel. Other peers allowed by the network might still establish TCP connections to the private port; the application denies them access to OFFICE.
+Open **Phone access**, choose an online phone under the same Tailscale account, and confirm. The dashboard can prepare a loopback-only mobile listener while the desktop and its Agents keep running. New installations use a private TLS-terminated Tailscale Serve forward with PROXY protocol v2. The listener uses the native node status, stable device identity, account, and current addresses to admit only selected phones. Pairing grants then restrict what each phone may see and send. The setup flow does not edit the tailnet policy, VPN preferences, or Funnel. Other peers allowed by the network might still establish TCP connections to the private port; the application denies them access to OFFICE.
 
 On a legacy installation the owner can initiate a native confirmation on the host. Approval upgrades the local owner credential, disables the old external feed, and opens the verified owner page on that computer. The initiating legacy page never receives the new credential. Existing manual HTTP Serve and tsnet deployments can keep their existing pairing workflow. The steps below document the **manually administered HTTP Serve** alternative.
 
@@ -203,7 +203,7 @@ cause or prove a VPN conflict.
 
 ## 5. Pair and use the guided owner screen
 
-Open **手機接入** in the local owner dashboard. The first-connection assistant
+Open **Phone access** in the local owner dashboard. The first-connection assistant
 covers phone Tailscale installation and VPN permission, same-account sign-in,
 Connected status, host readiness, explicit Agent grants, and a five-minute
 single-use QR. Use the phone camera and its normal browser, not a Tailscale QR
@@ -228,7 +228,7 @@ pairing link. Keep Tailscale **Connected** and the OFFICE host awake and running
 ADB, USB, and a Windows computer are not required for ordinary use.
 
 New pairing offers an unchecked **remember this phone** choice. Existing phones
-can opt in from **手機登入** without re-pairing while their current login is valid.
+can opt in from **Phone login** without re-pairing while their current login is valid.
 A remembered phone has a separate Secure, HttpOnly, SameSite=Strict renewal cookie,
 not an owner key. The bounded credential is hashed at rest; short access sessions
 rotate on renewal. Its grant ends after 30 days in total or 7 days without use,
@@ -243,16 +243,16 @@ Revocation, expired remembering, and identity mismatch require a new owner pairi
 Remembering does not grant additional Agents or bypass native approvals. Owners
 can revoke a remembered phone even when its short session needs renewal.
 
-From **手機登入**, the user can stop remembering or sign out; the owner can revoke
-from **手機接入**. Revocation removes both access and renewal rights and prevents
+From **Phone login**, the user can stop remembering or sign out; the owner can revoke
+from **Phone access**. Revocation removes both access and renewal rights and prevents
 undispatched commands from executing. It cannot undo work already started or
 retrieve content already downloaded. Remove the device's tailnet grant as well
 if the phone or its network identity is compromised.
 
 ## Update an existing phone and stay in the office
 
-From **手機接入**, use a live or renewable phone registration's **查看範圍** and
-**發訊息範圍**, then **儲存權限**. The same browser login remains valid; no new QR
+From **Phone access**, use a live or renewable phone registration's **View scope** and
+**Send scope**, then **Save permissions**. The same browser login remains valid; no new QR
 is needed for this permission update. Changing the scope invalidates queued work
 that has not been dispatched. Already-received work is not reported as cancelled.
 A revoked or fully expired grant still requires new pairing; a valid remembered
@@ -265,7 +265,7 @@ cannot receive an old instruction.
 
 The phone retains the same 3D view and supports its authorized workspace floors,
 including a compact floor selector in simple mode. Open an Agent's head dialogue
-and use **×** to close it in place. The old **開啟對話／記錄** navigation buttons are
+and use **×** to close it in place. The old **Open chat/history** navigation buttons are
 removed; public dialogue and delivery data remain stored and readable in the office.
 
 ## Acceptance evidence and rollback

@@ -1,5 +1,7 @@
 # Optional private phone frontend with tsnet
 
+For the source layout, build flags and status file format, see the [private frontend implementation guide](../phone-tsnet/README.md).
+
 This frontend gives OFFICE its own Tailscale node without requiring the host's
 Tailscale desktop VPN to connect. It uses the existing restricted mobile gateway,
 phone pairing and Agent permissions described in [Mobile access](MOBILE-ACCESS.md).
@@ -195,9 +197,9 @@ wait up to 15 seconds for those fields, with private status `initializing_identi
 It opens no listener during that wait. A populated account or DNS mismatch fails
 immediately; once serving, missing or mismatched identity still fails immediately.
 
-In the local owner dashboard, open **手機接入**, choose a phone label and account,
-then grant **查看** and **發訊息** separately for the intended Agents. Select
-**建立一次性配對連結** and scan the locally generated QR code with your phone's
+In the local owner dashboard, open **Phone access**, choose a phone label and account,
+then grant **View** and **Send messages** separately for the intended Agents. Select
+**Create a one-time pairing link** and scan the locally generated QR code with your phone's
 camera. A private copy-link fallback is also available; no QR service receives
 the token. With Android Tailscale connected, open the link in its browser and
 retain the ordinary mobile page as a bookmark.
