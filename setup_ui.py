@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 import shutil
 import socket
+import stat
+import sys
 import tempfile
 import urllib.error
 import urllib.request
@@ -84,6 +86,13 @@ def main():
             if target.exists() and sha(target.read_bytes())!=sha(source.read_bytes()):raise ValueError('Existing UI differs; back it up before reinstalling: '+str(source.relative_to(stage)))
         for source in files:
             target=relative(final,str(source.relative_to(stage)));target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
+    # Some ZIP extractors discard the executable bit needed by macOS Terminal.
+    if sys.platform == 'darwin':
+        launcher = ROOT / 'Connect Phone.command'
+        if launcher.is_file() and not launcher.is_symlink():
+            mode = launcher.stat().st_mode
+            if not mode & stat.S_IXUSR:
+                launcher.chmod(mode | stat.S_IXUSR)
     print(json.dumps({'ui_installed':True,'files':len(files),'upstream_commit':manifest['commit']}))
 
 if __name__=='__main__':main()

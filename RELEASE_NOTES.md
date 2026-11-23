@@ -3,6 +3,7 @@
 這版加入 OpenRouter 免費文字 Agent、Windows 安裝與啟動修正，以及手機私人接入助手。從 GitHub 首頁即可找到 Agent 的安裝步驟。 [Agent 安裝指南](AGENTS.md) · [更新已有 OFFICE](docs/UPGRADING.md)
 
 - 在「＋ 邀請 Agent」選 OpenRouter，可從當時有免費端點的文字模型建立對話。每次發送會再核對指定型號及零定價。金鑰由擁有人在自己的 OFFICE 設定。
+- macOS 安裝器會還原手機連接助手的擁有人執行權限，兼容會忽略權限的 ZIP 解壓工具。
 - 原生 Windows 已驗證原位更新、127 個 UI 檔案、三個平台執行環境及 Chrome 3D 大堂。19 項 Windows 測試全部通過，原有 Agent、對話及手機授權均已核對。
 - macOS 瀏覽器以模擬供應商完成兩輪對話並讀回交付紀錄。Windows 及 macOS 已從 OpenRouter 讀取免費模型清單。此次未使用真實 API key 發送推理請求。[驗證紀錄](VERIFICATION.json)
 

@@ -3,8 +3,10 @@ from contextlib import redirect_stdout
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import tempfile
 import unittest
 import urllib.error
@@ -69,6 +71,26 @@ class PackagePortabilityTests(unittest.TestCase):
                     setup_ui.main()
                 build.assert_called_once()
                 self.assertEqual(build.call_args.args[0], expected)
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX file mode')
+    def test_mac_zip_restores_owner_execute_only_on_the_packaged_launcher(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'ui-manifest.json').write_text('{"commit": "test"}', encoding='utf-8')
+            launcher = root / 'Connect Phone.command'
+            launcher.write_text('#!/bin/sh\n', encoding='utf-8')
+            launcher.chmod(0o640)
+            with patch.object(setup_ui, 'ROOT', root), patch.object(setup_ui.sys, 'platform', 'darwin'), \
+                    patch.object(setup_ui, 'build'), redirect_stdout(io.StringIO()):
+                setup_ui.main()
+                setup_ui.main()
+                self.assertEqual(stat.S_IMODE(launcher.stat().st_mode), 0o740)
+                original = root / 'user-file'
+                launcher.rename(original)
+                original.chmod(0o640)
+                launcher.symlink_to(original)
+                setup_ui.main()
+                self.assertEqual(stat.S_IMODE(original.stat().st_mode), 0o640)
 
     def test_interrupted_download_retries_only_the_missing_file_and_verifies_it(self):
         content = b'complete file'

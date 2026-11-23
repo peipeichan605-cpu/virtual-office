@@ -1,7 +1,7 @@
 {
   "release": "0.2.2-preview",
   "verified_at_utc": "2026-11-23T09:11:08+00:00",
-  "verification_scope": "Published preview with repository-native onboarding. Runtime tests are for the identical OpenRouter preview sources. Historical reports retain their original scope.",
+  "verification_scope": "Published preview with repository-native onboarding. OpenRouter and Office runtime sources match the tested preview. The installer also restores the macOS launcher permission after ZIP extraction. Historical reports retain their original scope.",
   "release_validation": {
     "macos_python_discovered": 1221,
     "macos_python_skipped": 3,
