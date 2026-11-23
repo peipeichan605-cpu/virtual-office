@@ -51,6 +51,15 @@ test('only an explicit folder-creation choice is submitted and no folder action 
   }
 });
 
+test('automatic requests omit folder fields, while an explicitly blank custom path is rejected',async()=>{
+  const f=fixture();await f.controller.open();
+  const input={name:values.name,api_key:values.api_key,create_folder:true};
+  assert.equal(await f.controller.create({...input,workspace:'  '}),false);
+  assert.equal(f.calls.length,1);
+  assert.equal(await f.controller.create(input),true);
+  assert.deepEqual(f.calls[1][1],{name:values.name,api_key:values.api_key,request_id:ID});
+});
+
 test('creation snapshots do not retain credentials or fields returned accidentally by a server',async()=>{
   const f=fixture({create:()=>({...session,api_key:'server-echo-must-be-discarded'})});await f.controller.open();await f.controller.create(values);
   assert.ok(!JSON.stringify(f.controller).includes(values.api_key));assert.ok(!JSON.stringify(f.controller).includes('server-echo'));
@@ -194,12 +203,49 @@ test('new dialog opens only on an explicit action and masks/clears its key while
   });
   const ui=initCursorSdkUI({document:doc,events,key:()=> 'fixture-owner',pendingStore:storeFixture().store});assert.equal(ui.dialog.open,false);assert.equal(calls.length,0);
   events.dispatchEvent(new Event('office:new-conversation'));await wait();assert.equal(ui.dialog.open,true);assert.equal(ui.controller.phase,'ready');
-  const form=ui.dialog.querySelector('form');assert.equal(form.elements.api_key.type,'password');form.elements.name.value=values.name;form.elements.workspace.value=values.workspace;form.elements.api_key.value=values.api_key;
+  const form=ui.dialog.querySelector('form');assert.equal(form.elements.api_key.type,'password');form.elements.name.value=values.name;form.elements.api_key.value=values.api_key;
+  assert.equal(form.elements.known.value,'');assert.equal(form.elements.workspace.disabled,true);assert.equal(form.elements.workspace.required,false);
   await form.fire('submit');assert.equal(form.elements.api_key.value,'');assert.equal(calls.length,2);
-  assert.equal(JSON.parse(calls[1].options.body).api_key,values.api_key);
+  const body=JSON.parse(calls[1].options.body);
+  assert.equal(body.api_key,values.api_key);assert.ok(!('workspace' in body));assert.ok(!('create_folder' in body));
   post.resolve({ok:false,status:401,json:async()=>({error:'platform_auth_required'})});await wait();assert.equal(ui.controller.phase,'ready');assert.match(ui.controller.error,/帳戶驗證/);
   form.elements.api_key.value='another-synthetic-key';await ui.dialog.fire('cancel');assert.equal(form.elements.api_key.value,'');assert.equal(ui.dialog.open,false);
   ui.dispose();const before=calls.length;events.dispatchEvent(new Event('office:new-conversation'));await wait();assert.equal(calls.length,before);assert.equal(ui.dialog.open,false);
+});
+
+test('folder picker submits only the active choice and always reopens in automatic mode',async t=>{
+  const doc=dom(),events=new EventTarget(),bodies=[];
+  const home={...ready,credential_configured:true,workspace:'/previous/folder'};
+  t.mock.method(globalThis,'fetch',async(url,options)=>{
+    if(options?.method!=='POST')return {ok:true,json:async()=>home};
+    bodies.push(JSON.parse(options.body));
+    return {ok:false,status:400,json:async()=>({error:'name_in_use'})};
+  });
+  const ui=initCursorSdkUI({document:doc,events,key:()=> 'fixture-owner',pendingStore:storeFixture().store});
+  const open=async()=>{events.dispatchEvent(new Event('office:new-conversation'));await wait();};
+  await open();
+  const form=ui.dialog.querySelector('form'),{known,workspace,create_folder,api_key}=form.elements;
+  const select=async value=>{known.value=value;await known.fire('change');};
+  const submit=async()=>{await form.fire('submit');await wait();return bodies.at(-1);};
+  form.elements.name.value=values.name;
+  assert.deepEqual(known.options.map(o=>o.value),['',values.workspace,home.workspace,'custom']);
+  await select('custom');
+  assert.equal(form.querySelector('.cursor-sdk-path').hidden,false);
+  assert.equal(form.querySelector('.cursor-sdk-create-folder').hidden,false);
+  assert.equal(workspace.required,true);
+  workspace.value='C:\\Users\\Example\\My Work';create_folder.checked=true;
+  let body=await submit();
+  assert.equal(body.workspace,workspace.value);assert.equal(body.create_folder,true);
+  await select(values.workspace);
+  assert.equal(form.querySelector('.cursor-sdk-path').hidden,true);
+  assert.equal(form.querySelector('.cursor-sdk-create-folder').hidden,true);
+  assert.equal(workspace.disabled,true);assert.equal(create_folder.disabled,true);
+  body=await submit();assert.equal(body.workspace,values.workspace);assert.ok(!('create_folder' in body));
+  await select('');api_key.value='hidden-autofill';
+  body=await submit();assert.deepEqual(Object.keys(body).sort(),['name','request_id']);
+  await select(home.workspace);await ui.dialog.fire('cancel');await open();
+  assert.equal(known.value,'');assert.equal(workspace.required,false);
+  ui.dispose();
 });
 
 test('only the SDK creation route is added to the POST allowlist and HTTP auth metadata is preserved',async t=>{

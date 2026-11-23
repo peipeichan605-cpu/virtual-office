@@ -21,13 +21,10 @@ import urllib.parse
 import urllib.request
 import uuid
 
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from history import redact
+from host_runtime import lock_exclusive
+from private_files import ensure_private_directory, require_private
 
 EVENTS = {'beforeSubmitPrompt', 'afterAgentResponse', 'stop', 'subagentStart',
           'subagentStop', 'preToolUse', 'postToolUse', 'postToolUseFailure'}
@@ -89,8 +86,13 @@ def private_open(path, flags):
     if not stat.S_ISREG(info.st_mode):
         os.close(fd)
         raise HookError('not_regular_file')
-    if os.name != 'nt':
-        os.fchmod(fd, 0o600)
+    try:
+        if os.name != 'nt':
+            os.fchmod(fd, 0o600)
+        require_private(path, fd=fd)
+    except (OSError, ValueError):
+        os.close(fd)
+        raise HookError('observer_permissions') from None
     return fd
 
 
@@ -114,7 +116,8 @@ def load_observer(path):
     if not stat.S_ISREG(info.st_mode) or info.st_size > 32768 or os.name != 'nt' and info.st_mode & 0o077:
         raise HookError('observer_permissions')
     fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
-    with os.fdopen(fd) as source:
+    with os.fdopen(fd, 'rb') as source:
+        require_private(path, fd=fd)
         value = json.load(source)
     if not isinstance(value, dict) or value.get('provider') != 'cursor' or value.get('evidence') != 'native_hook':
         raise HookError('cursor_observer_required')
@@ -179,15 +182,15 @@ class Journal:
         self.scope = fingerprint(observer)
         self.root = observer['native_session_id']
         self.deadline = deadline
-        self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        if os.name != 'nt':
+        if os.name == 'nt':
+            ensure_private_directory(self.directory)
+        else:
+            self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
             os.chmod(self.directory, 0o700)
         self.path = self.directory / 'state.json'
 
     @contextmanager
     def lock(self, name, timeout=.8):
-        if fcntl is None:
-            raise HookError('platform_lock_unavailable')
         fd = private_open(self.directory / name, os.O_RDWR | os.O_CREAT)
         deadline = min(time.monotonic() + timeout, self.deadline or float('inf'))
         try:
@@ -195,7 +198,7 @@ class Journal:
                 if self.deadline and time.monotonic() > self.deadline:
                     raise HookError('observer_busy')
                 try:
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    lock_exclusive(fd, blocking=False)
                     break
                 except BlockingIOError:
                     if time.monotonic() >= deadline:
@@ -211,7 +214,7 @@ class Journal:
             if self.path.exists():
                 if self.path.lstat().st_size > MAX_STATE:
                     raise HookError('observer_state_too_large')
-                with os.fdopen(private_open(self.path, os.O_RDONLY)) as source:
+                with os.fdopen(private_open(self.path, os.O_RDONLY), 'rb') as source:
                     state = json.load(source)
                 if state.get('scope') != self.scope:
                     raise HookError('observer_generation_changed')
@@ -623,7 +626,7 @@ def process_observer(path, data, event, state_directory=None, transport=post, de
     if conversation != observer['native_session_id'] and routing.exists():
         if routing.lstat().st_size > 262144:
             return False
-        with os.fdopen(private_open(routing, os.O_RDONLY)) as source:
+        with os.fdopen(private_open(routing, os.O_RDONLY), 'rb') as source:
             scope = json.load(source)
         if scope.get('scope') != fingerprint(observer):
             return False
@@ -649,7 +652,8 @@ def observer_paths(directory):
                 or os.name != 'nt' and info.st_mode & 0o077):
             raise HookError('observer_index_permissions')
         fd = os.open(index, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
-        with os.fdopen(fd) as source:
+        with os.fdopen(fd, 'rb') as source:
+            require_private(index, fd=fd)
             value = json.load(source)
         if (not isinstance(value, dict) or value.get('version') != 1
                 or not isinstance(value.get('credentials'), list)

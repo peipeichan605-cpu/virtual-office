@@ -29,9 +29,7 @@ class ReportingOnboardingTests(unittest.TestCase):
     request = fixtures.InvitationTests.request
     claim_headers = fixtures.InvitationTests.claim_headers
 
-    def tearDown(self):
-        self.bridge.commands.close()
-        fixtures.InvitationTests.tearDown(self)
+    tearDown = fixtures.InvitationTests.tearDown
 
     def claim(self, invitation):
         ident = uuid.uuid4().hex

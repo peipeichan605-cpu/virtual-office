@@ -56,6 +56,7 @@ const focusCreatedConversation=event=>{
   if(bot){pendingCreatedSelection=null;select(bot.id);}
 };
 addEventListener('office:cursor-sdk-created',focusCreatedConversation);
+addEventListener('office:openrouter-created',focusCreatedConversation);
 addEventListener('office:codex-background-created',focusCreatedConversation);
 
 ui.initUI({

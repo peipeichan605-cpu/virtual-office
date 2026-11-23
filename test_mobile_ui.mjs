@@ -124,6 +124,23 @@ test('phone entries keep 3D scene but exclude owner setup and remote executable 
   assert.match(pair,/type="password" autocomplete="off"/);assert.doesNotMatch(pair,/\son[a-z]+=/);
 });
 
+test('the phone shell offers a local retry if the first module cannot load',async t=>{
+  const html=await readFile(new URL('./public/office/mobile.html',import.meta.url),'utf8');
+  const retryTag=html.match(/<a [^>]*id="mobile-boot-retry"[^>]*>/)?.[0];
+  assert.match(retryTag,/href="\/mobile\/"/);assert.match(retryTag,/\bhidden\b/);
+  const module=html.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(module);
+  const retry={hidden:true},label={textContent:''},track={removed:false,remove(){this.removed=true;}};
+  const loading={classList:new Set(),querySelector(name){return {'.hq-loading-label':label,'.hq-loading-track':track}[name];}};
+  globals(t,{document:{
+    querySelector(name){assert.equal(name,'.hq-loading');return loading;},
+    getElementById(id){assert.equal(id,'mobile-boot-retry');return retry;},
+  }});
+  // A data: module has no resolvable origin for the absolute-path entry import.
+  await import('data:text/javascript,'+encodeURIComponent(module));
+  assert.match(label.textContent,/啟動檔案/);assert.equal(track.removed,true);assert.equal(retry.hidden,false);
+});
+
 test('mobile polling marks an outage stale and restores authoritative delivery without sending a command',async t=>{
   const timers=new Map(),states=[],requests=[];let offline=false,finished=false;
   globals(t,{location:{pathname:'/mobile/'},document:undefined,

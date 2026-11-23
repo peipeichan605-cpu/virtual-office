@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 from pathlib import Path
+from private_files import PrivateFileError, ensure_private_directory, require_private
 import re
 import stat
 import sys
@@ -32,12 +33,14 @@ def private_json(path):
     flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
     try:
         info = path.lstat()
-        if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_size > 65536:
-            raise ReportingError('reporting_file_not_private', 409)
-        if hasattr(os, 'getuid') and info.st_uid != os.getuid():
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
             raise ReportingError('reporting_file_not_private', 409)
         fd = os.open(path, flags)
         with os.fdopen(fd, encoding='utf-8') as source:
+            try:
+                require_private(path, fd=fd)
+            except PrivateFileError as error:
+                raise ReportingError('reporting_file_not_private', 409) from error
             opened = os.fstat(source.fileno())
             if (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
                 raise ReportingError('reporting_file_changed', 409)
@@ -168,19 +171,21 @@ class PublicReporting:
         for directory in (path.parent.parent, path.parent):
             if directory.is_symlink():
                 raise ReportingError('reporting_manifest_path_invalid', 409)
-            directory.mkdir(exist_ok=True, mode=0o700)
-            if directory.stat().st_mode & 0o077:
-                raise ReportingError('reporting_directory_not_private', 409)
+            try:
+                ensure_private_directory(directory)
+            except PrivateFileError as error:
+                raise ReportingError('reporting_directory_not_private', 409) from error
         if path.exists() or path.is_symlink():
-            info = path.lstat()
-            if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077:
-                raise ReportingError('reporting_file_not_private', 409)
-            if path.read_text() == text:
+            try:
+                require_private(path)
+            except PrivateFileError as error:
+                raise ReportingError('reporting_file_not_private', 409) from error
+            if path.read_bytes() == text.encode('utf-8'):
                 return
         temporary = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
         try:
-            with os.fdopen(fd, 'w') as output:
+            with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as output:
                 output.write(text)
                 output.flush()
                 os.fsync(output.fileno())

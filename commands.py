@@ -38,8 +38,10 @@ class Commands:
         # Missing or unavailable mobile authorization always fails closed.
         self.mobile_authorizer = None
         self.bindings = config.get('command_bindings', {})
-        self.adapters = make_adapters(config, self.observe_native) if adapters is None else adapters
+        self.adapters = make_adapters(config, self.observe_native, history) if adapters is None else adapters
         self.lock = threading.RLock()
+        if self.adapters.get('openrouter'):
+            self.adapters['openrouter'].authorize = self.openrouter_send_allowed
         path = Path(config['data_dir']) / 'commands.sqlite3'
         self.db = sqlite3.connect(str(path), check_same_thread=False, timeout=3)
         os.chmod(path, 0o600)
@@ -79,7 +81,7 @@ class Commands:
         self.reconcile()
         # A restarted Office no longer owns an in-flight ACP request. Preserve
         # the uncertainty and history; never replay a possibly executed prompt.
-        self.db.execute("UPDATE commands SET state='delivery_unknown',payload=NULL,detail_code='interrupted_delivery',updated_at=? WHERE adapter IN ('hermes_acp','cursor_local','codex_background') AND state IN ('queued','running','waiting_user')", (timestamp(),))
+        self.db.execute("UPDATE commands SET state='delivery_unknown',payload=NULL,detail_code='interrupted_delivery',updated_at=? WHERE adapter IN ('hermes_acp','cursor_local','codex_background','openrouter') AND state IN ('queued','running','waiting_user')", (timestamp(),))
         self.db.commit()
 
     def restore_observations(self):
@@ -180,6 +182,15 @@ class Commands:
                 prompt=row['preview'], delivery='手機授權已失效，指示未獲准開始執行。', source_kind='agent_inbox')
         return True
 
+    def openrouter_send_allowed(self, agent, session, command):
+        # Catalog lookup runs asynchronously. Recheck authorization afterwards,
+        # immediately before any conversation text leaves the installation.
+        with self.lock:
+            row = self.db.execute('SELECT * FROM commands WHERE id=? AND agent_id=?',(command,agent)).fetchone()
+            return bool(row and row['state'] in {'sending','queued','running'} and not self.detached(command)
+                        and self.allowed(agent) and self.binding(agent)=={'adapter':'openrouter','session_id':session}
+                        and self.validate_mobile_delivery(row))
+
     def validate_mobile_delivery(self, row):
         """Recheck the originating device immediately before dispatch/claim.
 
@@ -273,6 +284,10 @@ class Commands:
         from public_sync import capability as public_sync_capability
         capability['public_sync']=public_sync_capability(self.config,agent,self.binding(agent),
             getattr(self,'public_sync_observer',None))
+        if self.binding(agent) and self.binding(agent)['adapter']=='openrouter':
+            settings = self.config.get('command_adapters', {}).get('openrouter', {}).get('sessions', {})
+            capability.update(conversation_scope='office_owned_session', tool_policy='chat_only', tools_enabled=False,
+                              model=settings.get(self.binding(agent)['session_id'], {}).get('model'))
         if self.binding(agent) and self.binding(agent)['adapter']=='cursor_local':
             binding=self.binding(agent);adapter=self.adapters.get('cursor_local')
             capability.update(conversation_scope='office_owned_session', tool_policy='chat_only',
@@ -490,20 +505,24 @@ class Commands:
             self.db.commit()
 
             final=self.db.execute('SELECT * FROM commands WHERE id=?',(row['id'],)).fetchone()
-        if (row['adapter'] in {'cursor_local','codex_background','grok_sdk'} and final['state'] in {'failed','delivery_unknown'}
+        if ((row['adapter'] in {'cursor_local','codex_background','grok_sdk'} or
+             (row['adapter']=='openrouter' and not final['run_id'])) and final['state'] in {'failed','delivery_unknown'}
                 and not final['native_message_id']):
             # A local dispatcher failure is not a native start event. Keep the
             # owner's prompt and uncertainty visible even before a run receipt.
             definition=next((agent for agent in self.config.get('agents',[]) if agent['id']==row['agent_id']),None)
             if definition:
                 unknown=final['state']=='delivery_unknown'
+                preparation_error = (row['adapter'] == 'cursor_local' and not unknown
+                                     and final['detail_code'] == 'cursor_local_start_failed')
+                step = 'Cursor SDK 未能準備對話，訊息未送出。' if preparation_error else None
                 self.history.record(row['agent_id'],definition['provider'],definition['name'],row['id'],
                     'unknown' if unknown else 'error',prompt=row['preview'],
-                    delivery='執行結果未確認；不會自動重送。' if unknown else '指示未能送出；請查看接駁狀態。',
+                    delivery=step or ('執行結果未確認；不會自動重送。' if unknown else '指示未能送出；請查看接駁狀態。'),
                     source_kind=row['adapter']+'_dispatch')
                 if self.on_status:
                     self.on_status(row['agent_id'],{'type':'interrupted' if unknown else 'finished',
-                        'state':final['state'],'run_id':row['id'],'transport_only':True})
+                        'state':final['state'],'run_id':row['id'],'transport_only':True,'step':step})
 
     def reported_work_in_progress(self, agent):
         """Called under the command lock; no timeout fabricates completion."""
@@ -669,7 +688,7 @@ class Commands:
             # Membership may change while a native callback waits for this
             # lock. Validate it here, never from a pre-lock snapshot.
             binding = self.bindings.get(agent)
-            if not binding or binding['adapter'] != event.get('adapter','hermes_acp') or binding['adapter'] not in {'hermes_acp','cursor_cloud','cursor_local','codex_background','grok_sdk'} or binding['session_id'] != event.get('session_id'):
+            if not binding or binding['adapter'] != event.get('adapter','hermes_acp') or binding['adapter'] not in {'hermes_acp','cursor_cloud','cursor_local','codex_background','grok_sdk','openrouter'} or binding['session_id'] != event.get('session_id'):
                 return
             definition = next((a for a in self.config['agents'] if a['id'] == agent), None)
             if not definition:

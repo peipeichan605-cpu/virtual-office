@@ -95,6 +95,34 @@ test('session bootstrap retries a transient GET and cleans every retry listener 
   assert.equal(f.timeouts.size,0);assert.equal(f.events.count(),0);assert.equal(f.doc.count(),0);
 });
 
+for(const [description,incomplete] of [
+  ['truncated JSON',()=>new Response('{"authenticated":',{status:200})],
+  ['incomplete session',()=>reply({authenticated:true})],
+])test('a successful response with '+description+' retries without requesting new pairing',async t=>{
+  let calls=0;
+  const f=fixture(t,async()=>++calls===1?incomplete():session('recovered'));
+  const ready=access.waitForMobileSession();
+  await settle();
+  assert.equal(f.doc.cleared,false);assert.equal(location.replaced,undefined);
+  assert.equal(f.timeouts.size,1);
+  await f.tick();assert.equal((await ready).csrf_token,'recovered');
+  assert.equal(f.doc.cleared,false);assert.equal(location.replaced,undefined);
+});
+
+test('an incomplete renewal response cannot dispatch the requested command or log the phone out',async t=>{
+  const calls=[];let failed=true;
+  const f=fixture(t,async path=>{
+    calls.push(path);
+    if(path==='/api/mobile/session')return failed?needsRenewal():session('recovered');
+    if(path==='/api/mobile/renew'){failed=false;return reply({authenticated:true});}
+    throw new Error('The command must not have been sent');
+  });
+  await assert.rejects(access.mobileRequest('/api/mobile/commands',{method:'POST',body:{text:'test'}}),/mobile_invalid_session_response/);
+  assert.deepEqual(calls,['/api/mobile/session','/api/mobile/renew']);
+  assert.equal(f.doc.cleared,false);assert.equal(location.replaced,undefined);
+  assert.equal((await access.ensureMobileSession()).csrf_token,'recovered');
+});
+
 test('slow retry pauses while hidden and resumes on foreground activity',async t=>{
   let calls=0,online=false;const states=[];
   const f=fixture(t,async()=>{calls++;if(!online)throw new TypeError('offline');return session('ok');});
@@ -229,6 +257,64 @@ test('3D startup runs exactly once after session recovery and never after a term
   f.events.dispatchEvent({type:'online'});f.doc.dispatchEvent({type:'visibilitychange'});await settle();assert.equal(loads,1);
   access.clearMobileSession();globalThis.fetch=async()=>reply({error:'mobile_forbidden'},403);
   await entry.startMobileOffice({doc,load:async()=>{loads++;}});assert.equal(loads,1);assert.match(doc.getElementById('loading').textContent,/未獲准/);
+});
+
+for(const [reason,error,expected] of [
+  ['session',Object.assign(new Error('private-detail'),{status:400}),/手機登入狀態/],
+  ['module',new TypeError('Failed to fetch dynamically imported module: https://private.invalid/sensitive-path'),/載入辦公室的畫面檔案/],
+  ['WebGL',new Error('Error creating WebGL context.'),/啟動 3D 顯示/],
+  ['unknown',new TypeError('private-detail'),/畫面未能啟動/],
+])test(`mobile startup exposes a safe manual retry for ${reason} failure`,async t=>{
+  let requests=0,reloads=0,loads=0;
+  const f=fixture(t,async()=>{requests++;return reason==='session'?reply({error:'invalid_request'},error.status):session('ok');});
+  const doc=f.doc,panel=doc.createElement('div'),label=doc.getElementById('loading');
+  label.parentElement=panel;
+  doc.createElement=()=>target();
+  location.reload=()=>{reloads++;};
+  globalThis.document=undefined;
+  const entry=await import('./public/office/mobile-entry.js?manual-retry');
+  globalThis.document=doc;
+  await entry.startMobileOffice({doc,load:async()=>{loads++;throw error;}});
+  assert.match(label.textContent,expected);assert.doesNotMatch(label.textContent,/private|sensitive-path/);
+  assert.equal(panel.children.length,1);assert.equal(panel.children[0].type,'button');
+  assert.equal(reloads,0);assert.equal(f.timeouts.size,0);assert.equal(loads,reason==='session'?0:1);
+  panel.children[0].dispatchEvent({type:'click'});assert.equal(reloads,1);assert.equal(requests,reason==='module'?2:1);
+});
+
+test('the private asset cooldown reloads once per failed startup and resets after success',async t=>{
+  const storage=new Map();
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'sessionStorage');
+  Object.defineProperty(globalThis,'sessionStorage',{configurable:true,value:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}});
+  t.after(()=>{if(previous)Object.defineProperty(globalThis,'sessionStorage',previous);else delete globalThis.sessionStorage;});
+  const paths=[];
+  const f=fixture(t,async(path,options)=>{
+    paths.push(path);
+    if(path==='/api/mobile/session')return session('fixture-secret');
+    assert.equal(path,'/office/mobile-entry.js');assert.equal(options.cache,'no-store');
+    return {status:429,headers:{get:key=>key==='Retry-After'?'7':null}};
+  });
+  const doc=f.doc,panel=doc.createElement('div'),label=doc.getElementById('loading');label.parentElement=panel;
+  let reloads=0;location.reload=()=>{reloads++;};doc.createElement=()=>target();
+  globalThis.document=undefined;
+  const entry=await import('./public/office/mobile-entry.js?cooldown');globalThis.document=doc;
+  const failed=()=>entry.startMobileOffice({doc,load:async()=>{throw new TypeError('Failed to fetch dynamically imported module: private-host');}});
+  await failed();assert.match(label.textContent,/7 秒後會自動/);assert.doesNotMatch(label.textContent,/private-host|fixture-secret/);
+  assert.deepEqual([...storage.values()],['1']);assert.equal(panel.children.at(-1).disabled,true);
+  assert.deepEqual([...f.timeouts.values()].map(task=>task.ms),[7000]);
+  assert.equal(reloads,0);await f.tick();assert.equal(reloads,1);
+  await failed();assert.match(label.textContent,/等候約 7 秒/);await f.tick();
+  assert.equal(reloads,1);assert.equal(panel.children.at(-1).disabled,false);assert.equal(f.timeouts.size,0);
+  await entry.startMobileOffice({doc,load:async()=>{}});
+  assert.equal(storage.size,0);assert.deepEqual(paths,['/api/mobile/session','/office/mobile-entry.js','/office/mobile-entry.js']);
+  await failed();access.clearMobileSession();await f.tick();assert.equal(reloads,1);
+});
+
+test('logout during a rejected 3D import cannot show stale retry controls',async t=>{
+  const f=fixture(t,async()=>session('valid'));
+  const doc=f.doc;globalThis.document=undefined;
+  const entry=await import('./public/office/mobile-entry.js?after-logout');globalThis.document=doc;
+  await entry.startMobileOffice({doc,load:async()=>{access.lockMobileAccess();throw new TypeError('Failed to fetch dynamically imported module');}});
+  assert.equal(doc.cleared,true);assert.equal(location.replaced,'/mobile/pair');
 });
 
 test('a ready callback clearing authorization cannot resolve session startup',async t=>{

@@ -128,7 +128,7 @@ def main():
     try:
         credential=json.loads(path.read_text())
     except FileNotFoundError:
-        print(json.dumps(missing_credential_result(path), ensure_ascii=False))
+        print(json.dumps(missing_credential_result(path)))
         raise SystemExit(1)
     if args.action=='auto':result=auto_connect(credential)
     elif args.action=='cursor-children':result=cursor_children(credential,args.hooks_file,args.credential)
@@ -136,7 +136,7 @@ def main():
         details=json.loads(sys.stdin.read(16001))
         if not isinstance(details,dict) or set(details)!={'url','key'}:raise ValueError('Invalid details')
         result=native_request(credential,{'adapter':'grok_webhook',**details})
-    print(json.dumps(result,ensure_ascii=False))
+    print(json.dumps(result))
 
 
 if __name__=='__main__':

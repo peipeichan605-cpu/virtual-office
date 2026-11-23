@@ -226,6 +226,19 @@ class PreflightTests(unittest.TestCase):
             self.assertEqual(tm.inspect_tailscale(ORIGIN, IDENTITY, PORT, timeout=6)['issues'], ['invalid_expected_configuration'])
         mocked.assert_not_called()
 
+    def test_fresh_native_serve_and_funnel_can_report_json_null(self):
+        data = fixture()
+        data.update(serve=None, funnel=None)
+        result, _ = self.run_fake(data)
+        self.assertTrue(result['checks']['funnel_disabled'])
+        self.assertEqual(result['issues'], ['serve_setup_or_conflict_review_required'])
+        for name in ('version', 'status', 'preferences', 'remote_control'):
+            with self.subTest(name=name), patch.object(tm.subprocess,'Popen',return_value=FakeProcess(b'null')), self.assertRaisesRegex(tm.ProbeError, 'cli_unexpected_schema'):
+                tm._probe('/mock/tailscale', name, 1, 'linux')
+        for name in ('serve', 'funnel'):
+            with self.subTest(name=name), patch.object(tm.subprocess,'Popen',return_value=FakeProcess(b'[]')), self.assertRaisesRegex(tm.ProbeError,'cli_unexpected_schema'):
+                tm._probe('/mock/tailscale', name, 1, 'linux')
+
     def test_output_limit_invalid_json_duplicates_and_errors_are_redacted(self):
         for raw, code in ((b'x' * (tm.MAX_OUTPUT_BYTES + 1), 'cli_output_limit'),
                           (b'{SECRET', 'cli_invalid_json'),

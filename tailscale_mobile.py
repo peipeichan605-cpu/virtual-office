@@ -65,7 +65,8 @@ def _unique_object(pairs):
     return result
 
 
-def _probe(binary, name, timeout, platform_name):
+def _capture_cli(binary, argv, timeout, platform_name, *, include_stderr=False):
+    """Run a caller-selected, fixed argv with bounded output and time."""
     env = os.environ.copy()
     if platform_name == 'darwin':
         # The macOS app executable can otherwise launch a second GUI process.
@@ -97,9 +98,10 @@ def _probe(binary, name, timeout, platform_name):
     try:
         deadline = time.monotonic() + timeout
         process = subprocess.Popen(
-            [binary, *PROBES[name]], stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            env=env, shell=False)
+            [binary, *argv], stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT if include_stderr else subprocess.DEVNULL,
+            env=env, shell=False,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         # A daemon reader also bounds memory on Windows, where select() cannot
         # monitor subprocess pipes. It owns closure of the read descriptor.
         threading.Thread(target=read_stdout, daemon=True).start()
@@ -121,13 +123,20 @@ def _probe(binary, name, timeout, platform_name):
                 process.wait(timeout=1)
             except (OSError, subprocess.TimeoutExpired):
                 pass
-    if process.returncode != 0:
+    return process.returncode, b''.join(chunks)
+
+
+def _probe(binary, name, timeout, platform_name):
+    code, raw = _capture_cli(binary, PROBES[name], timeout, platform_name)
+    if code != 0:
         raise ProbeError('cli_command_failed')
-    raw = b''.join(chunks)
     try:
         value = json.loads(raw, object_pairs_hook=_unique_object)
     except (ValueError, UnicodeError, RecursionError):
         raise ProbeError('cli_invalid_json') from None
+    # The stock CLI marshals a nil ServeConfig as JSON null on fresh installs.
+    if value is None and name in ('serve', 'funnel'):
+        return {}
     if not isinstance(value, dict):
         raise ProbeError('cli_unexpected_schema')
     return value

@@ -7,12 +7,12 @@ from pathlib import Path
 import re
 import secrets
 import sqlite3
-import stat
 import time
 import uuid
 
 from event_ingest import EventConflict, ingest, validate_event
 from history import redact, timestamp
+from private_files import ensure_private_directory, require_private, prepare_private_file
 from subagents import MAX_CHILDREN, MAX_DEPTH, clean_name, seconds
 from cursor_public_sync import CursorPublicSync
 
@@ -150,8 +150,7 @@ class ChildEvents:
             if old and old['native_session_id']==native and old['generation']==state['generation']:
                 p=Path(old['credential_path'])
                 try:
-                    info=p.lstat()
-                    if stat.S_ISREG(info.st_mode) and not info.st_mode&0o077 and self._file_matches(old,self._read_private(p)):
+                    if self._file_matches(old,self._read_private(p)):
                         self.refresh_index()
                         return self._binding(old)
                 except (OSError,ValueError,TypeError):pass
@@ -164,7 +163,7 @@ class ChildEvents:
             ident=uuid.uuid4().hex;token=secrets.token_urlsafe(32)
             kind='cursor_hook' if root['provider']=='cursor' else 'parent_reported'
             evidence='native_hook' if kind=='cursor_hook' else 'parent_reported'
-            self.directory.mkdir(parents=True,exist_ok=True,mode=0o700)
+            ensure_private_directory(self.directory)
             path=self.directory/(ident+'.json')
             base='http://127.0.0.1:'+str(b.config['port'])
             credential={'endpoint':base+'/api/agents/children/events',
@@ -172,8 +171,7 @@ class ChildEvents:
                         'observer_id':ident,'agent_id':root['id'],'provider':root['provider'],
                         'native_session_id':native,'generation':state['generation'],'token':token,
                         'source_kind':kind,'evidence':evidence}
-            fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
-            with os.fdopen(fd,'w') as out:json.dump(credential,out,ensure_ascii=False,indent=2)
+            self._write_private(path, credential)
             with self.db:
                 self.db.execute('UPDATE child_observers SET active=0 WHERE root_id=?',(root['id'],))
                 self.db.execute('INSERT INTO child_observers (id,root_id,provider,native_session_id,generation,token_sha256,credential_path,source_kind,evidence,active) VALUES (?,?,?,?,?,?,?,?,?,1)',
@@ -188,18 +186,20 @@ class ChildEvents:
 
     @staticmethod
     def _write_private(path,data):
-        fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
-        with os.fdopen(fd,'w') as out:
+        fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o600)
+        with os.fdopen(fd,'w',encoding='utf-8') as out:
+            prepare_private_file(path, fd)
             json.dump(data,out,ensure_ascii=False,indent=2)
             out.flush();os.fsync(out.fileno())
 
     def _read_private(self,path):
         path=Path(path)
         if path.parent.resolve()!=self.directory.resolve():raise ValueError('invalid_observer_path')
-        fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
-        with os.fdopen(fd) as source:
+        fd=os.open(path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
+        with os.fdopen(fd,'rb') as source:
+            require_private(path, fd=fd)
             info=os.fstat(source.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_size>16384 or info.st_mode&0o077:
+            if info.st_size>16384:
                 raise ValueError('invalid_observer_file')
             return json.load(source)
 

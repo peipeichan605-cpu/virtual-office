@@ -1,13 +1,69 @@
-"""Read-only, owner-facing mobile setup observations.
+"""Owner-facing mobile setup observations and the assistant's local pairing gate.
 
 Configuration, a locally running private listener, and a phone round trip are
-different facts. This module never starts a frontend, creates private files,
-authenticates an account, changes a VPN, or probes a user-supplied network URL.
+different facts. Status reads never write files. Only the explicit setup
+assistant creates and clears its private marker.
 """
+import hashlib
 import json
+import os
 from pathlib import Path
 
 import phone_tsnet as frontend
+from mobile_gateway import settings as gateway_settings
+from private_files import prepare_private_file, require_private
+
+
+def _pending_path(config, mobile):
+    root = require_private(config['data_dir'], directory=True)
+    target = gateway_settings(dict(config, mobile=mobile))
+    # A separate empty file per installation/target lets an external mount
+    # coexist with an interrupted setup for different host settings.
+    target.pop('enabled')
+    payload = json.dumps([config.get('port', 4318), target], sort_keys=True).encode()
+    return root / ('phone-setup-pending-' + hashlib.sha256(payload).hexdigest())
+
+
+def _has_marker(path):
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False
+    require_private(path)
+    if info.st_size != 0 or info.st_nlink != 1:
+        raise ValueError('Invalid private mobile setup marker')
+    return True
+
+
+def mark_assistant_pending(config, mobile_settings):
+    """Publish an empty gate atomically before enabling the selected settings."""
+    path = _pending_path(config, mobile_settings)
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        if not _has_marker(path):
+            raise ValueError('Mobile setup marker changed') from None
+        return
+    try:
+        prepare_private_file(path, fd)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def clear_assistant_pending(config, mobile_settings):
+    """Called by the serialized setup assistant after matching local proofs."""
+    path = _pending_path(config, mobile_settings)
+    if _has_marker(path):
+        path.unlink(missing_ok=True)
+
+
+def assistant_pending(config):
+    try:
+        return _has_marker(_pending_path(config, config.get('mobile', {})))
+    except (OSError, ValueError, TypeError, KeyError):
+        # Lack of access or a malformed marker is never proof of completion.
+        return True
 
 
 def _transport(config):
@@ -91,8 +147,12 @@ def _transport(config):
 
 def connection_setup(config, *, configured=False):
     """Return safe owner UI facts, not an ACL or phone-reachability attestation."""
-    transport = _transport(config)
     configured = configured is True
+    if configured and assistant_pending(config):
+        transport = {'kind': 'tailscale_serve', 'state': 'assistant_pending',
+                     'running': False, 'listening': False, 'configuration_matches': False}
+    else:
+        transport = _transport(config)
     listening = bool(configured and transport['listening'])
     # Unknown external frontends remain usable; the UI must label them as
     # unverified. Known managed failures must not be presented as ready.

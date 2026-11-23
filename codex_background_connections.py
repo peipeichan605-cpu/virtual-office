@@ -226,7 +226,7 @@ class CodexBackgroundConnections:
             raise ConnectionError('agent_membership_changed', 409)
         settings = config['command_adapters']['codex_background']['sessions'][sid]
         try:
-            state = json.loads(Path(settings['lifecycle_file']).read_text())
+            state = json.loads(Path(settings['lifecycle_file']).read_bytes())
         except (OSError, ValueError):
             raise ConnectionError('codex_background_recovery_required', 409)
         if not isinstance(state, dict) or state.get('schema') != 1 or state.get('session_id') != sid or state.get('cwd') != settings['cwd']:
@@ -259,7 +259,7 @@ class CodexBackgroundConnections:
         catalog_available = availability.get('model_catalog_status') == 'available'
         for sid, settings in self.bridge.config.get('command_adapters', {}).get('codex_background', {}).get('sessions', {}).items():
             try:
-                state = json.loads(Path(settings['lifecycle_file']).read_text())
+                state = json.loads(Path(settings['lifecycle_file']).read_bytes())
             except (OSError, ValueError):
                 continue
             model = (state.get('model_error_model') or state.get('model')) if isinstance(state, dict) else None

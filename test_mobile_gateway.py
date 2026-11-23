@@ -13,6 +13,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 import uuid
 
 from mobile_gateway import BoundedHTTPServer, COOKIE, MAX_BODY, handler, settings
@@ -97,6 +98,22 @@ class MobileGatewayTests(unittest.TestCase):
 
     def command(self, agent=A, text='phone fixture instruction'):
         return {'request_id': str(uuid.uuid4()), 'agent_id': agent, 'text': text}
+
+    def test_desktop_assistant_identifies_its_local_gateway_before_setup(self):
+        from phone_setup_assistant import gateway_proof
+        nonce = '7a' * 32
+        port = settings(self.bridge.config)['port']
+        headers = {'Host': '127.0.0.1:' + str(port), 'Cookie': None,
+                   'Tailscale-User-Login': None, 'X-Office-Setup-Nonce': nonce}
+        status, _, body = self.json('/_office/local/gateway-proof', headers=headers)
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {'proof': gateway_proof(self.bridge.config, nonce)})
+        for change in ({'Origin': ORIGIN}, {'Host': HOST}, {'Tailscale-User-Login': IDENTITY},
+                       {'X-Forwarded-Host': HOST}, {'X-Office-Setup-Nonce': 'invalid'}):
+            with self.subTest(headers=change):
+                status, _, body = self.json('/_office/local/gateway-proof', headers={**headers, **change})
+                self.assertEqual(status, 403)
+                self.assertNotIn('proof', body)
 
     def test_pair_issues_only_host_secure_http_only_strict_cookie(self):
         cookie = self.pair_headers['Set-Cookie']
@@ -352,6 +369,60 @@ class MobileGatewayTests(unittest.TestCase):
             with self.subTest(post=path):
                 self.assertEqual(self.json(path, method='POST', data={})[0], 404)
 
+    def test_rate_limited_shell_and_module_probe_give_the_same_remaining_wait(self):
+        auth = self.service.auth
+        auth.RATE_LIMITS = {**auth.RATE_LIMITS, 'asset': (1, 60)}
+        now = auth.clock()
+        with patch.object(auth, 'clock', return_value=now) as clock:
+            self.assertEqual(self.request('/mobile/')[0], 200)
+            clock.return_value = now + 12.1
+            for path in ('/', '/mobile/'):
+                status, headers, body = self.request(path)
+                self.assertEqual(status, 429)
+                self.assertEqual(headers['Retry-After'], '48')
+                self.assertEqual(headers['Cache-Control'], 'no-store')
+                self.assertIn('text/html', headers['Content-Type'])
+                self.assertNotIn('Set-Cookie', headers)
+                html = body.decode('utf-8')
+                self.assertIn('48 秒', html)
+                self.assertEqual(re.findall(r'href="([^"]+)"', html), ['/mobile/'])
+                self.assertNotIn('<script', html)
+                self.assertNotIn(IDENTITY, html)
+            for path in ('/office/mobile.css', '/mobile/pair', '/mobile/?unexpected=1'):
+                status, headers, body = self.json(path)
+                self.assertEqual((status, headers['Retry-After']), (429, '48'))
+                self.assertEqual(body, {'error': 'mobile_rate_limited'})
+            self.assertEqual(self.request('/api/mobile/session')[0], 200)
+            clock.return_value = now + 60
+            status, headers, _ = self.request('/mobile/')
+            self.assertEqual(status, 200)
+            self.assertNotIn('Retry-After', headers)
+
+    def test_rate_limited_pairing_navigation_keeps_same_tab_for_manual_retry(self):
+        auth = self.service.auth
+        auth.RATE_LIMITS = {**auth.RATE_LIMITS, 'asset': (1, 60)}
+        with patch.object(auth, 'clock', return_value=auth.clock()):
+            self.assertEqual(self.request('/mobile/pair')[0], 200)
+            for fields in (self.external_pair_navigation(), {'Accept': 'text/html,application/xhtml+xml'}):
+                status, headers, raw = self.request('/mobile/pair', headers=fields)
+                html = raw.decode('utf-8')
+                self.assertEqual(status, 429)
+                self.assertEqual(headers['Retry-After'], '60')
+                self.assertIn('text/html', headers['Content-Type'])
+                self.assertEqual(headers['Cache-Control'], 'no-store')
+                self.assertNotIn('Set-Cookie', headers)
+                self.assertIn('60 秒', html)
+                self.assertIn('location.reload()', html)
+                self.assertNotIn('href=', html)
+                self.assertNotIn('src=', html)
+                self.assertNotIn(self.pairing_token, html)
+                nonce = re.search(r"'nonce-([^']+)'", headers['Content-Security-Policy']).group(1)
+                self.assertIn(f'<script nonce="{nonce}">', html)
+            fetch = {'Accept': 'text/html', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty'}
+            status, headers, body = self.json('/mobile/pair', headers=fetch)
+            self.assertEqual((status, body['error']), (429, 'mobile_rate_limited'))
+            self.assertIn('application/json', headers['Content-Type'])
+
     def test_shell_has_fresh_nonce_local_assets_and_security_policy(self):
         for path in ('/mobile/', '/mobile/pair', '/mobile/agent?agent='+A):
             with self.subTest(path=path):
@@ -383,6 +454,29 @@ class MobileGatewayTests(unittest.TestCase):
                 self.assertIn('max-age=', headers['Strict-Transport-Security'])
                 next_headers = self.request(path)[1]
                 self.assertNotEqual(headers['Content-Security-Policy'], next_headers['Content-Security-Policy'])
+
+    def test_mobile_pages_and_imports_are_independent_of_host_text_defaults(self):
+        native_read = Path.read_text
+
+        def legacy_text_default(path, encoding=None, **kwargs):
+            return native_read(path, encoding=encoding or 'cp1252', **kwargs)
+
+        with patch.object(Path, 'read_text', legacy_text_default):
+            for url in ('/mobile/', '/mobile/pair', '/mobile/agent?agent=' + A):
+                with self.subTest(url=url):
+                    status, _, data = self.request(url)
+                    self.assertEqual(status, 200)
+                    self.assertIn('lang="zh-Hant"', data.decode('utf-8'))
+
+        with patch('mobile_gateway.mimetypes.guess_type', return_value=('text/plain', None)):
+            for url, expected in (('/office/mobile-entry.js', 'text/javascript'),
+                                  ('/assets/vendor/three/build/three.module.js', 'text/javascript'),
+                                  ('/office/mobile.css', 'text/css')):
+                with self.subTest(url=url):
+                    status, headers, _ = self.request(url)
+                    self.assertEqual(status, 200)
+                    self.assertEqual(headers['Content-Type'].split(';')[0], expected)
+                    self.assertEqual(headers['X-Content-Type-Options'], 'nosniff')
 
     def test_disabling_or_reconfiguring_gateway_fails_closed_including_session(self):
         original = dict(self.bridge.config['mobile'])
@@ -529,6 +623,9 @@ class MobileGatewayTests(unittest.TestCase):
             self.assertTrue(acquired, 'Timed-out worker did not release its admission slot')
             if acquired:
                 server.slots.release()
+            # The next request verifies normal service after the previous
+            # worker exited. Give its DB commit the ordinary production budget.
+            server.request_deadline = original_server.request_deadline
             status, _, sent = self.json('/api/mobile/commands', method='POST', data=self.command())
             self.assertEqual(status, 202, sent)
             self.assertEqual(sent['command']['state'], 'pending')

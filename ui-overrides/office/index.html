@@ -31,13 +31,13 @@
   <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        "three": "/assets/vendor/three/build/three.module.js",
+        "three/addons/": "/assets/vendor/three/examples/jsm/"
       }
     }
   </script>
   <!-- the two big downloads start with the page, not after the scripts that ask for them (after the import map) -->
-  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js">
+  <link rel="modulepreload" href="/assets/vendor/three/build/three.module.js">
   <link rel="preload" href="../assets/office/office.glb" as="fetch" crossorigin>
 <style>.office-empty #panel,.office-empty #feed,.office-empty #floors,.office-empty .bhq-dock{display:none!important}</style></head>
 <body>

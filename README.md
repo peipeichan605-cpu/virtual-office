@@ -2,7 +2,22 @@
 
 一個由 Python 管理的本機 3D Agent 辦公室。角色頭頂預設顯示細小姓名及狀態標籤；點選後才展開公開 Prompt、進度及交付，對話會隨角色移動。預設中文介面、空名單及本機儲存。
 
+## 讓你的 Agent 安裝 OFFICE
+
+將這個倉庫連結交給能操作你電腦的 Agent，告訴它「幫我安裝 Virtual Office」即可。它可以從倉庫取得安裝步驟、啟動 OFFICE 並打開你自己的 3D 大堂。已有 OFFICE 的用戶沿用原來的 Agents、對話及手機配對。
+
+**For AI agents** — When asked to install Virtual Office, follow the root [AGENTS.md installation guide](AGENTS.md) on the user's computer.
+
+[下載 0.2.2-preview 安裝包及 SHA-256](https://github.com/peipeichan605-cpu/virtual-office/releases/tag/v0.2.2-preview) · [手動安裝](docs/QUICKSTART.md) · [更新已有 OFFICE](docs/UPGRADING.md)
+
+
 密集角色的標籤會自動避讓；同一時間只展開一個頭頂對話或子 Agent 名單。主 Agent 頭頂的「子 Agent N」可選擇全部子 Agent，完整及簡易模式均可使用。全文按需要展開及捲動，其他角色不會因新訊息自動彈出大型文字預覽。
+
+## 加入 OpenRouter 免費對話 Agent
+
+在電腦的「加入 Agent → OpenRouter · 免費對話」輸入名稱及選擇免費文字模型。首次使用填入自己的 OpenRouter API key，之後同一個 OFFICE 可以沿用。金鑰在電腦端的私人設定保存。每位 Agent 有獨立的對話、狀態及交付紀錄。已配對的手機沿用原有的個別或全員發訊息權限。[建立 OpenRouter 金鑰](https://openrouter.ai/settings/keys)
+
+模型清單取自 OpenRouter。可選模型包括仍有免費端點的 Nemotron 3.5 Lightning 和 Super VL。建立及每次發送都會核對所選的確切 `:free` 型號及零定價。免費額度耗盡或模型暫停時，OFFICE 顯示原因。此模式只處理文字；每次會傳送本次訊息及同一 Agent 最近完成的對話。供應商可能記錄這些內容，請避免輸入私人資料。使用機構帳戶時，請確認該帳戶沒有強制收費的外掛。[免費模型與限額](https://openrouter.ai/docs/api/reference/limits) · [供應商及外掛設定](https://openrouter.ai/docs/guides/features/plugins/overview)
 
 ## 可移動的對話框
 
@@ -32,9 +47,9 @@ G/F 與原生樓層共用日間、黃昏及夜間光照參數，後方沿用原�
 
 ## 安裝
 
-想交給自己的 Agent 自動安裝，可複製 [通用安裝 Prompt](INSTALL-PROMPT.txt)。它會下載目前版本、辨認新安裝或更新、啟動並驗證本機 OFFICE；平台登入及手機接入留待你選擇。
+自動安裝請由 Agent 直接閱讀 [AGENTS.md](AGENTS.md)。手動安裝可依下列步驟進行，初次啟動後再選擇要連接的 Agent。
 
-標準安裝會先準備 Codex、Cursor SDK 及 Grok SDK 所需的執行環境，再啟動 OFFICE。請使用 Python 3.10 或以上；已有的 Python 3.9 核心安裝仍可沿用，但 Cursor SDK 須另備相容 Python。前端需要網絡下載固定版本 3D 資源、Three.js 及字型。
+標準安裝會先準備 Codex、Cursor SDK 及 Grok SDK 所需的執行環境，再啟動 OFFICE。請使用 Python 3.10 或以上；已有的 Python 3.9 核心安裝仍可沿用，但 Cursor SDK 須另備相容 Python。首次安裝需要網絡下載固定版本的 3D 素材。安裝器優先連接原作者倉庫，遇到來源無法下載時會嘗試保留同一 commit 的副本；每個檔案均核對原有 SHA-256。桌面及手機打開大堂時會從 OFFICE 讀取隨包附上的 Three.js。
 
 | 功能 | 標準安裝需要準備 | 首次使用由用戶完成 |
 | --- | --- | --- |
@@ -42,6 +57,7 @@ G/F 與原生樓層共用日間、黃昏及夜間光照參數，後方沿用原�
 | Codex 背景模式 | 相容的本機 Codex `app-server`；Windows 使用原生 `codex.exe` | 自己的 Codex 登入 |
 | Cursor SDK 純對話 | Python 3.10+、本 OFFICE 專用環境內的 `cursor-sdk==1.3.1`；Windows 需要 x64 Python | 在 OFFICE 設定自己的 Cursor User API key |
 | Grok Bot SDK | Node.js 22.13+；固定 SDK 原始碼已隨套件附上，毋須 `npm install` | 瀏覽器登入，再選自己的 Bot／聊天 |
+| OpenRouter 免費文字 Agent | 隨 OFFICE 的 Python 核心提供 | 在 OFFICE 選免費模型，首次填自己的 OpenRouter key |
 
 **已安裝 Cursor Desktop 並不代表已安裝 Cursor SDK。** 標準流程會完成 SDK 的一次性安裝；不要只啟動網頁就宣稱全部平台已備妥。執行環境就緒與帳戶接通分開驗證，安裝不會自動加入任何 Agent。原有 App、Cloud、Webhook 和 Hermes 接駁方式繼續保留，按用戶選擇完成各自的綁定。
 
@@ -49,12 +65,12 @@ G/F 與原生樓層共用日間、黃昏及夜間光照參數，後方沿用原�
 
 ```sh
 python3 setup_ui.py
-python3 office.py init
-python3 office.py setup-platforms
-python3 office.py setup-platforms --check
-python3 office.py start
-python3 office.py status
-python3 office.py url
+python3 office.py --config .office/config.json init
+python3 office.py --config .office/config.json setup-platforms
+python3 office.py --config .office/config.json setup-platforms --check
+python3 office.py --config .office/config.json start
+python3 office.py --config .office/config.json status
+python3 office.py --config .office/config.json url
 ```
 
 Windows 請將 `python3` 換成已確認可用的 `python`、`py -3` 或 Python 完整路徑。`setup-platforms` 會建立本 OFFICE 專用的 Cursor SDK 環境，並檢查 Grok 的 Node.js 及 Codex 執行程式；不會讀取帳戶憑證或建立聊天。若缺少 Node.js／Codex，安裝 Agent 應依官方安裝方法補齊，再重跑檢查。只有 `runtimes_ready=true` 才表示三個執行環境均已備妥；未登入的帳戶仍需用戶登入，不代表已完成雙向收發。
@@ -73,7 +89,7 @@ Windows 請將 `python3` 換成已確認可用的 `python`、`py -3` 或 Python 
 
 主機需要一直保持原有 VPN 連線時，可選用通用 [tsnet 手機接入方式](docs/MOBILE-TSNET.md)，以獨立 userspace 節點連線，保留相同手機權限及配對機制，不改主機路由或 DNS。此方式仍需實測 VPN 共存及 Android 連線，並非預設啟用。
 
-第一次使用可跟 [手機首次連接與日常使用](docs/MOBILE-QUICKSTART.md)：先在手機下載官方 Tailscale、用同一帳戶登入並確認 Connected，再由電腦「手機接入」助手選權限、建立一次性 QR 碼，以手機相機掃碼配對；不需要 ADB 或 USB 線。
+在電腦「手機接入」選已連線的手機，設定 Agent 查看及發訊息權限，再用手機相機掃碼。首次登入或裝置批准會有官方入口；舊安裝可在電腦確認一次更新後，直接返回同一個助手。詳見 [手機首次連接與日常使用](docs/MOBILE-QUICKSTART.md)。
 
 配對時可自行選擇「記住手機」，最多 30 日，連續 7 日未使用失效；有效期內短期登入自動續期，日常保持 Tailscale 連線並開啟普通 OFFICE 書籤即可。舊登入不會自動延長，已撤銷登入亦不會復活。私人配對資料毋須貼到聊天。
 
@@ -130,7 +146,7 @@ Python 持續保存及派送指令，沒有工作時不啟動模型。Codex App 
 
 設定保存在每個使用者自己的 `.office/`，不用改 Python 或找開發者逐隻接駁。Grok Webhook 的合作回報需要能使用 OFFICE 所在電腦的本機執行工具；SDK 實驗模式改由 OFFICE 觀察所選原生聊天，有獨立的相容性與背景收訊限制。詳見 [Grok Webhook](docs/GROK-BOT.md)、[Grok SDK](docs/GROK-SDK.md) 及 [Cursor](docs/CURSOR.md)。
 
-新 adapter 已通過協議 fixture 與介面測試；沒有實際帳戶憑證或選定來源時，不宣稱完成平台端到端驗證。新安裝仍是空名單。OFFICE 本身不呼叫模型；經平台發出的任務沿用該平台的權限與費用。
+新 adapter 已通過協議 fixture 與介面測試；沒有實際帳戶憑證或選定來源時，不宣稱完成平台端到端驗證。新安裝仍是空名單。發給 OpenRouter Agent 的訊息會由 OFFICE 傳到所選免費模型。其他平台的任務沿用各自原生入口的權限和費用。
 
 ## 公開同步範圍
 

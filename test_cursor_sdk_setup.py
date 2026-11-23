@@ -200,18 +200,33 @@ class SetupTests(unittest.TestCase):
     def test_serve_launcher_uses_verified_optional_env_and_retains_existing_config_path(self):
         import office
         config_path=(self.base/'private config.json').resolve()
-        with patch.object(sys,'argv',['office.py','--config',str(config_path),'serve']),patch.object(office,'load_config',return_value=self.config),patch.object(setup,'service_python',return_value='/private/sdk env/bin/python'),patch.object(office.os,'execv') as execute:
-            office.main()
-        execute.assert_called_once_with('/private/sdk env/bin/python',['/private/sdk env/bin/python',str(office.ROOT/'dashboard.py'),'--config',str(config_path)])
+        binary = str(self.base / 'sdk env' / 'python')
+        with patch.object(sys,'argv',['office.py','--config',str(config_path),'serve']),patch.object(office,'load_config',return_value=self.config),patch.object(setup,'service_python',return_value=binary),patch.object(office.os,'execv') as execute,patch.object(office.subprocess,'call',return_value=0) as call:
+            if sys.platform == 'win32':
+                with self.assertRaises(SystemExit) as stopped:
+                    office.main()
+                self.assertEqual(stopped.exception.code, 0)
+                argv, = call.call_args.args
+            else:
+                office.main()
+                executable, argv = execute.call_args.args
+                self.assertEqual(executable, binary)
+        self.assertEqual(argv[:-1], [binary,str(office.ROOT/'dashboard.py'),'--config',str(config_path),'--run-id'])
+        self.assertRegex(argv[-1], r'^office-[0-9a-f]{32}$')
 
     def test_start_launcher_preserves_core_default_and_does_not_enroll_or_install(self):
         import office
         config_path=(self.base/'private config.json').resolve()
         child=unittest.mock.Mock(pid=424243);child.poll.return_value=None
-        with patch.object(sys,'argv',['office.py','--config',str(config_path),'start']),patch.object(office,'load_config',return_value=self.config),patch.object(office,'save_config') as save,patch.object(office,'request',side_effect=[OSError('not running'),{'agents':[]}]),patch.object(office.subprocess,'Popen',return_value=child) as launch,patch.object(setup,'setup_environment') as install,contextlib.redirect_stdout(io.StringIO()):
+        def request(config, route):
+            if route == '/api/office/work':
+                raise OSError('not running')
+            self.assertEqual(route, '/health')
+            return {'ok': True, 'pid': child.pid, 'run_id': config['run_id']}
+        with patch.object(sys,'argv',['office.py','--config',str(config_path),'start']),patch.object(office,'load_config',return_value=self.config),patch.object(office,'save_config') as save,patch.object(office,'request',side_effect=request),patch('office_launch.background_launch_options',return_value={}),patch.object(office.subprocess,'Popen',return_value=child) as launch,patch.object(setup,'setup_environment') as install,contextlib.redirect_stdout(io.StringIO()):
             office.main()
         argv=launch.call_args.args[0]
-        self.assertEqual(argv,[sys.executable,str(office.ROOT/'dashboard.py'),'--config',str(config_path)])
+        self.assertEqual(argv,[sys.executable,str(office.ROOT/'dashboard.py'),'--config',str(config_path),'--run-id',self.config['run_id']])
         self.assertNotIn('agents',self.config)
         install.assert_not_called();save.assert_called_once()
 

@@ -16,6 +16,18 @@ class Element{
   replaceChildren(...items){this.children=[];this.append(...items);}
   setAttribute(name,value){this[name]=value;}
   addEventListener(type,callback){this.handlers.set(type,callback);}
+  querySelector(selector){
+    this.selectors??=new Map();
+    if(!this.selectors.has(selector))this.selectors.set(selector,new Element());
+    return this.selectors.get(selector);
+  }
+  emit(type,properties={}){
+    const event=new Event(type,{cancelable:true});
+    for(const [name,value] of Object.entries(properties))Object.defineProperty(event,name,{value});
+    this.handlers.get(type)?.(event);
+    return event;
+  }
+  requestSubmit(submitter){this.emit('submit',{submitter});}
   async click(){return this.handlers.get('click')?.({});}
   remove(){if(this.parent)this.parent.children=this.parent.children.filter(item=>item!==this);}
 }
@@ -26,10 +38,64 @@ function fixture(t){
   }
   globalThis.document={createElement:()=>new Element()};globalThis.location={hash:'#fixture-owner'};
   const storage=new Map();globalThis.sessionStorage={getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
-  const label={firstChild:{textContent:''}},hint=new Element(),form=new Element();form.querySelector=selector=>selector==='label'?label:hint;
-  const c=Object.assign(Object.create(CommandComposer.prototype),{epoch:0,element:new Element(),form,input:new Element(),button:new Element(),status:new Element(),syncStatus:new Element(),approvalBox:new Element(),connect:new Element(),busy:false});
+  const c=new CommandComposer();
+  c.form.querySelector('label').firstChild={textContent:''};
   c.bind(A,cap());return c;
 }
+
+test('Enter and the form submit button deliver the current draft once to the same Agent',async t=>{
+  const c=fixture(t),requests=[];
+  t.mock.method(globalThis,'fetch',async(url,options)=>{
+    const body=JSON.parse(options.body);
+    requests.push({url,body});
+    return {ok:true,json:async()=>({command:command(A,body.request_id)})};
+  });
+  for(const [text,submit] of [
+    ['第一行\n第二行',()=>assert.ok(c.input.emit('keydown',{key:'Enter'}).defaultPrevented)],
+    ['按鈕傳送',()=>c.form.requestSubmit(c.button)],
+  ]){
+    c.input.value=text;c.input.emit('input');
+    submit();
+    await until(()=>!c.busy);
+    assert.equal(c.input.value,'');
+    assert.equal(requests.at(-1).url,'/api/office/commands');
+    assert.equal(requests.at(-1).body.text,text);
+    assert.equal(requests.at(-1).body.agent_id,A);
+  }
+  assert.equal(requests.length,2);
+});
+
+test('multiline editing, held keys and disabled send do not start another command',t=>{
+  const c=fixture(t),submitted=t.mock.method(c,'send',()=>{});
+  const enter=(properties={})=>c.input.emit('keydown',{key:'Enter',...properties});
+  c.input.value='draft';c.input.emit('input');
+  assert.equal(enter({shiftKey:true}).defaultPrevented,false);
+  assert.equal(enter({altKey:true}).defaultPrevented,false);
+  assert.equal(submitted.mock.callCount(),0);
+  for(const modifier of ['ctrlKey','metaKey'])assert.ok(enter({[modifier]:true}).defaultPrevented);
+  assert.equal(submitted.mock.callCount(),2);
+  assert.ok(enter({repeat:true}).defaultPrevented);
+  c.busy=true;c.updateButton();enter();
+  c.busy=false;c.input.value='  ';c.input.emit('input');enter();
+  c.input.value='view only';c.bind(A,cap({can_send:false}));enter();
+  assert.equal(submitted.mock.callCount(),2);
+});
+
+test('Enter commits IME text without sending and the next deliberate Enter submits',t=>{
+  const c=fixture(t),submitted=t.mock.method(c,'send',()=>{});
+  const enter=(properties={})=>c.input.emit('keydown',{key:'Enter',...properties});
+  c.input.value='選字';c.input.emit('input');
+  assert.equal(enter({isComposing:true}).defaultPrevented,false);
+  assert.equal(enter({keyCode:229}).defaultPrevented,false);
+  c.input.emit('compositionstart');
+  assert.equal(enter().defaultPrevented,false);
+  c.input.emit('compositionend',{timeStamp:500});
+  assert.equal(enter({timeStamp:501}).defaultPrevented,false,'some IMEs end composition before the candidate Enter');
+  assert.equal(submitted.mock.callCount(),0);
+  c.input.emit('keyup',{key:'Enter',timeStamp:502});
+  assert.ok(enter({timeStamp:503}).defaultPrevented);
+  assert.equal(submitted.mock.callCount(),1);
+});
 
 test('same-name re-enrollment resets all old Agent state while same identity preserves its draft',t=>{
   const c=fixture(t);c.input.value='Draft for selected Agent';c.latest=command(A,'old');c.attempt={id:'old-attempt',text:c.input.value};c.uncertain=true;

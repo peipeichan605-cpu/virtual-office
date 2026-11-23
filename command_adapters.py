@@ -84,12 +84,13 @@ class CodexAppAdapter:
         return {'native_message_id': match.group(1), 'delivery_mode': self.mode}
 
 
-def make_adapters(config, on_event=None):
+def make_adapters(config, on_event=None, history=None):
     from hermes_acp import HermesAcpAdapter
     from platform_adapters import CursorCloudAdapter, GrokWebhookAdapter
     from cursor_local import CursorLocalAdapter
     from codex_background import CodexBackgroundAdapter
     from grok_sdk import GrokSdkAdapter
+    from openrouter_free import OpenRouterAdapter
     settings = config.get('command_adapters', {})
     return {'codex_app': CodexAppAdapter(settings.get('codex_app')),
             'hermes_acp': HermesAcpAdapter(config, on_event),
@@ -97,4 +98,5 @@ def make_adapters(config, on_event=None):
             'cursor_local': CursorLocalAdapter(config, on_event),
             'codex_background': CodexBackgroundAdapter(config, on_event),
             'grok_webhook': GrokWebhookAdapter(config, on_event),
+            'openrouter': OpenRouterAdapter(config, on_event, history),
             'grok_sdk': GrokSdkAdapter(config, on_event)}

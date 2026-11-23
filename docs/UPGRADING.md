@@ -52,6 +52,8 @@ git status --short
 git pull --ff-only
 ```
 
+如原安裝依 AGENTS.md 使用發佈標籤，請在備份且工作目錄乾淨後，用 `git fetch origin --tags` 及 `git switch --detach <新版標籤>` 更新至擁有人選擇的版本。上面的 `git pull` 只適用於追蹤遠端的分支。
+
 如果 Git 回報分支分歧，停在這一步，先核對雙方更改；不要強推或覆寫其他人的提交。
 
 ### 原本使用 ZIP

@@ -35,7 +35,13 @@
   <link rel="preload" href="/assets/office/office.glb" as="fetch" crossorigin>
 <link rel="stylesheet" href="/office/mobile.css"></head>
 <body>
-  <main id="scene" aria-label="Office"><div class="hq-loading" role="status"><span class="hq-loading-label">Building the office</span><span class="hq-loading-track"><i></i></span></div></main>
+  <main id="scene" aria-label="Office">
+    <div class="hq-loading" role="status">
+      <span class="hq-loading-label">正在開啟 OFFICE…</span>
+      <span class="hq-loading-track"><i></i></span>
+      <a id="mobile-boot-retry" href="/mobile/" style="pointer-events:auto" hidden>重新開啟 OFFICE</a>
+    </div>
+  </main>
   <header id="topbar"></header>
   <section id="enrollment-empty" aria-label="入駐說明" hidden>
     <strong style="display:block;font-size:18px;margin-bottom:8px">這部手機尚未取得 Agent</strong>
@@ -44,7 +50,18 @@
   <nav id="floors" aria-label="Floors"></nav>
   <aside id="panel" aria-label="Bot card and floor team"></aside>
   <section id="feed" aria-label="Event feed"></section>
-  <script type="module" src="/office/mobile-entry.js"></script>
+  <script type="module">
+    try {
+      await import('/office/mobile-entry.js');
+    } catch {
+      // Keep recovery in the document so it also works when the entry module is unavailable.
+      const loading = document.querySelector('.hq-loading');
+      loading.classList.add('mobile-start-error');
+      loading.querySelector('.hq-loading-label').textContent = '未能載入 OFFICE 的啟動檔案。請保持手機的 Tailscale 已連線，稍候再試。';
+      loading.querySelector('.hq-loading-track').remove();
+      document.getElementById('mobile-boot-retry').hidden = false;
+    }
+  </script>
 
 </body>
 </html>

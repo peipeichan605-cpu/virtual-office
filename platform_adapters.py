@@ -23,8 +23,8 @@ MARKER = re.compile(r'^\[OFFICE:([0-9a-f-]{36})\]\n')
 
 
 class RemoteError(Exception):
-    def __init__(self, code, uncertain=False):
-        self.code, self.uncertain = code, uncertain
+    def __init__(self, code, uncertain=False, http_status=None):
+        self.code, self.uncertain, self.http_status = code, uncertain, http_status
         super().__init__(code)
 
 
@@ -34,7 +34,14 @@ def secret_file(path):
         raise ValueError('platform_credentials_unavailable')
     if os.name != 'nt' and p.stat().st_mode & 0o077:
         raise ValueError('platform_credentials_permissions')
-    data = json.loads(p.read_text())
+    raw = p.read_bytes()
+    try:
+        data = json.loads(raw)
+    except UnicodeDecodeError:
+        # Older Windows SDK lifecycle files used the host ANSI code page.
+        if os.name != 'nt':
+            raise
+        data = json.loads(raw.decode('mbcs'))
     if not isinstance(data, dict):
         raise ValueError('platform_credentials_unavailable')
     return data
@@ -69,6 +76,9 @@ class HTTPS:
     Never passes credentials to another host, proxy, or a redirect destination.
     Errors contain fixed codes, never response bodies, URLs, headers or prompts.
     """
+    def __init__(self, *, response_timeout=None):
+        self.response_timeout = response_timeout
+
     def open(self, method, url, headers, body=None):
         u = urllib.parse.urlsplit(url)
         if u.scheme != 'https' or not u.hostname or u.username or u.password or u.port not in (None, 443):
@@ -90,6 +100,8 @@ class HTTPS:
             raise RemoteError('platform_connection_failed')
         connection = http.client.HTTPSConnection(u.hostname, timeout=15)
         connection.sock = tls
+        if self.response_timeout is not None:
+            tls.settimeout(self.response_timeout)
         try:
             path = urllib.parse.urlunsplit(('', '', u.path or '/', u.query, ''))
             connection.request(method, path, body=body, headers=headers)
@@ -98,7 +110,7 @@ class HTTPS:
                 status = response.status
                 code = {401:'platform_auth_required',403:'platform_access_denied',404:'platform_target_not_found',
                         409:'platform_agent_busy',410:'platform_stream_expired',429:'platform_rate_limited'}.get(status, 'platform_request_failed')
-                raise RemoteError(code, method == 'POST' and status >= 500)
+                raise RemoteError(code, method == 'POST' and status >= 500, http_status=status)
             return connection, response
         except RemoteError:
             connection.close()

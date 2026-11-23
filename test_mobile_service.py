@@ -111,6 +111,31 @@ class MobileServiceTests(unittest.TestCase):
         self.assertEqual(before, set(Path(self.temp.name).iterdir()))
         self.assertNotIn(self.bridge.config['owner_key'], json.dumps(result))
 
+    def test_incomplete_assistant_setup_blocks_a_stale_owner_pairing_request(self):
+        from mobile_setup import mark_assistant_pending, clear_assistant_pending
+        config = self.bridge.config
+        config['data_dir'] = str(Path(config['data_dir']).resolve())  # Production load_config resolves it.
+        self.assertTrue(self.service.owner_status()['setup']['pairing_available'])
+        data = {'identity': IDENTITY, 'label': 'Another phone', 'view_agents': [A], 'send_agents': []}
+        mark_assistant_pending(config, config['mobile'])
+        with self.assertRaises(MobileServiceError) as error:
+            self.service.owner_create_pairing(data)
+        self.assertEqual((error.exception.status, error.exception.code), (409, 'mobile_setup_pending'))
+        clear_assistant_pending(config, config['mobile'])
+        self.assertIn('pairing_token', self.service.owner_create_pairing(data))
+
+    def test_pairing_roster_uses_registered_bindings_without_starting_provider_checks(self):
+        self.bridge.adapter.available = lambda: self.fail('Setup must not contact a provider')
+        self.bridge.config['agents'] = [a for a in self.bridge.config['agents'] if a['id'] != B]
+        roster = self.service.owner_status()['agents']
+        self.assertEqual({a['id']: a['connected'] for a in roster}, {A: True, B: False})
+        request = {'identity': IDENTITY, 'label': 'Test phone', 'view_agents': [A, B], 'send_agents': [B]}
+        with self.assertRaises(MobileServiceError) as error:
+            self.service.owner_create_pairing(request)
+        self.assertEqual(error.exception.code, 'mobile_agent_not_connected')
+        request['send_agents'] = [A]
+        self.assertIn('pairing_token', self.service.owner_create_pairing(request))
+
     def test_remembered_logout_revokes_expired_access_without_widening_identity(self):
         invitation = self.service.owner_create_pairing({'identity': IDENTITY, 'label': 'Remember fixture',
                                                        'view_agents': [A], 'send_agents': [A]})

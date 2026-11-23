@@ -5,6 +5,7 @@ from pathlib import Path, PureWindowsPath
 import shlex
 import stat
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -13,8 +14,35 @@ from unittest.mock import Mock, patch
 from command_adapters import CodexAppAdapter, DeliveryError
 from dashboard import bounded_json, process_stop_metadata, proxy_handler
 from history import open_native_rollout
+from host_runtime import process_exists, shell_command, lock_exclusive
 from office import stop_metadata
 from workspaces import workspace_path
+
+
+class NativeHelperTests(unittest.TestCase):
+    def test_checking_a_live_worker_preserves_it_and_detects_its_exit(self):
+        with subprocess.Popen([sys.executable, '-c', 'import sys; sys.stdin.read()'],
+                              stdin=subprocess.PIPE) as worker:
+            self.assertTrue(process_exists(worker.pid))
+            self.assertIsNone(worker.poll())
+            worker.communicate(timeout=5)
+            self.assertFalse(process_exists(worker.pid))
+
+    def test_two_handles_cannot_acquire_the_same_observer_lock(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'observer.lock'
+            with path.open('w+b') as first, path.open('r+b') as second:
+                lock_exclusive(first.fileno(), blocking=False)
+                with self.assertRaises(BlockingIOError):
+                    lock_exclusive(second.fileno(), blocking=False)
+            with path.open('r+b') as reopened:
+                lock_exclusive(reopened.fileno(), blocking=False)
+
+    def test_powershell_invitation_preserves_literal_paths_and_labels(self):
+        argv = [r'C:\Program Files\Python\python.exe', "我的 OFFICE's folder", '$literal']
+        with patch('host_runtime.sys.platform', 'win32'):
+            self.assertEqual(shell_command(argv),
+                             r"& 'C:\Program Files\Python\python.exe' '我的 OFFICE''s folder' '$literal'")
 
 
 class SourceFileTests(unittest.TestCase):

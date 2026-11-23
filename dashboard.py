@@ -11,6 +11,7 @@ import datetime as dt
 import hashlib
 import hmac
 import http.server
+from office_http import LoopbackHTTPServer
 import json
 import mimetypes
 import os
@@ -62,7 +63,7 @@ def parsed_time(value):
 def atomic_json(path, data):
     tmp = path.with_name(path.name + '.tmp')
     fd = os.open(tmp, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600)
-    with os.fdopen(fd, 'w') as f:
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
 
@@ -76,11 +77,11 @@ def bounded_json(path, limit=256 * 1024):
 
 
 def alive(pid):
+    from host_runtime import process_exists
     if type(pid) is not int or pid < 2:
         return False
     try:
-        os.kill(pid, 0)
-        return True
+        return process_exists(pid)
     except OSError:
         return False
 
@@ -307,6 +308,9 @@ class Bridge:
         self.run_dir = Path(config['run_dir'])
         self.dry_run = dry_run
         self.stop = threading.Event()
+        self.feed_lock = threading.Lock()
+        self.stop_requests = queue.SimpleQueue()
+        self.stop_reason = None
         self.outbound = queue.Queue(maxsize=1000)
         self.counts = {'published': 0, 'publish_errors': 0, 'codex_events': 0, 'crouton_events': 0}
         self.last = {}
@@ -358,6 +362,8 @@ class Bridge:
         self.connections = Connections(self)
         from codex_background_connections import CodexBackgroundConnections
         self.codex_background_connections = CodexBackgroundConnections(self)
+        from openrouter_free import OpenRouterConnections
+        self.openrouter_connections = OpenRouterConnections(self)
         from grok_sdk_connections import GrokSdkConnections
         self.grok_sdk_connections = GrokSdkConnections(self)
         from connection_checks import ConnectionChecks
@@ -394,6 +400,13 @@ class Bridge:
         except (ValueError, OSError, KeyError, TypeError):
             pass
 
+        from openrouter_free import read_key as read_openrouter_key
+        from command_adapters import DeliveryError
+        try:
+            self.history.secrets += (read_openrouter_key(config),)
+        except DeliveryError:
+            pass
+
         from cursor_cloud_sync import CursorCloudSync
         self.cursor_cloud_sync = CursorCloudSync(self, enabled=not dry_run)
         self.commands.cloud_sync = self.cursor_cloud_sync
@@ -402,17 +415,29 @@ class Bridge:
         self.commands.grok_sdk_sync = self.grok_sdk_sync
         from mobile_service import MobileService
         self.mobile = MobileService(self)
+        from mobile_host import MobileHostAssistant
+        self.mobile_host = MobileHostAssistant(config)
+        from phone_local_consent import PhoneLocalConsent
+        from phone_onboarding import PhoneOnboarding
+        from phone_tailscale_open import TailscaleAppOpener
+        self.phone_local_consent = PhoneLocalConsent(self)
+        self.phone_onboarding = PhoneOnboarding(self)
+        self.tailscale_app = TailscaleAppOpener()
+        from mobile_lifecycle import MobileLifecycle
+        self.mobile_lifecycle = MobileLifecycle(self, ROOT / 'public')
 
     def native_status(self, agent, event):
         info=self.agents.get(agent)
         if not info:return
-        label={'cursor':'Cursor','codex':'Codex','grok_bot':'Grok Bot'}.get(info['provider'],'Hermes')
+        label={'cursor':'Cursor','codex':'Codex','grok_bot':'Grok Bot','openrouter':'OpenRouter'}.get(info['provider'],'Hermes')
         kind=event['type'];status='working';step=label+' 正在處理指示'
         if kind=='status':
             status='waiting_user' if event.get('waiting') else 'working';step=event['step']
         elif kind in {'finished','interrupted'}:
             status={'completed':'done','failed':'error','cancelled':'idle','delivery_unknown':'waiting_user'}[event['state']]
             step={'done':'已完成','error':label+' 執行失敗；請查看紀錄','idle':'已中止','waiting_user':'執行結果未確認；不會自動重送'}[status]
+            if event.get('transport_only') and event.get('step'):
+                step = event['step']
         self.report(info['name'],{'status':status,'step':step,'run_id':event['run_id']},info['provider'],agent_id=agent)
 
     def get_connection_checks(self):
@@ -480,7 +505,7 @@ class Bridge:
                         previous=self.commands.db.execute('SELECT state FROM commands WHERE agent_id=? ORDER BY created_at DESC LIMIT 1',(a['id'],)).fetchone()
                     pending=previous and previous['state'] in {'queued','running','waiting_user','delivery_unknown'}
                     self.sources[a['name']]={'status':'waiting_user' if pending else 'idle','step':'正在恢復原生執行紀錄' if pending else 'Cursor 已接入；等待 OFFICE 指示','provider':'cursor','observed_at':utc(),'changed_at':utc()}
-            if (a['driver']=='cursor' and config.get('command_bindings',{}).get(a['id'],{}).get('adapter')=='cursor_local') or a['driver'] in {'codex_background','grok_sdk'}:
+            if (a['driver']=='cursor' and config.get('command_bindings',{}).get(a['id'],{}).get('adapter')=='cursor_local') or a['driver'] in {'codex_background','grok_sdk','openrouter'}:
                 if a['name'] not in self.sources or self.sources[a['name']].get('step')=='等待 Agent 首次回報':
                     with self.commands.lock:
                         uncertain=self.commands.db.execute("SELECT 1 FROM commands WHERE agent_id=? AND state='delivery_unknown' LIMIT 1",(a['id'],)).fetchone()
@@ -505,7 +530,7 @@ class Bridge:
         self.crouton_names={a['source_id']:a['name'] for a in config['agents'] if a['driver']=='crouton'}
         for sid,a in self.codex_targets.items():
             self.agents[a['id']]['native_url']='codex://threads/'+sid
-        for key in ('cursor_cloud','cursor_local','grok_webhook','grok_sdk'):
+        for key in ('cursor_cloud','cursor_local','grok_webhook','grok_sdk','openrouter'):
             adapter=self.commands.adapters.get(key)
             if adapter:adapter.sessions=self.config['command_adapters'].get(key,{}).get('sessions',{})
         background=self.commands.adapters.get('codex_background')
@@ -829,7 +854,7 @@ class Bridge:
         for start in range(0, len(names), 15):
             chunk = names[start:start + 15]
             self.enqueue({'roster': chunk})
-            self.enqueue({'groups': {a['name']: {'codex':'Codex','crouton':'Crouton','cursor':'Cursor','grok_bot':'Grok Bot','hermes':'Hermes'}.get(a['provider'],'Agents') for a in self.agents.values() if a['name'] in chunk}})
+            self.enqueue({'groups': {a['name']: {'codex':'Codex','crouton':'Crouton','cursor':'Cursor','grok_bot':'Grok Bot','hermes':'Hermes','openrouter':'OpenRouter'}.get(a['provider'],'Agents') for a in self.agents.values() if a['name'] in chunk}})
             looks = {}
             for name in chunk:
                 # Original upstream Grok Bot reference: orange body and dark stem.
@@ -885,6 +910,9 @@ class Bridge:
             pass  # Keep the last observed workspace while the source is unavailable.
 
     def restore_publish_pause(self):
+        if hasattr(self, 'config') and not self.config.get('feed'):
+            self.limit_until = 0
+            return
         try:
             self.limit_until = float(bounded_json(self.backoff_path).get('until', 0))
         except (OSError, ValueError, TypeError):
@@ -901,40 +929,48 @@ class Bridge:
                 payload = self.outbound.get(timeout=1)
             except queue.Empty:
                 continue
-            raw = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode()
-            receipt = {'at': utc(), 'payload_sha256': hashlib.sha256(raw).hexdigest(),
-                       'kind': 'status' if 'bot' in payload else next(iter(payload)),
-                       'bot': payload.get('bot'), 'status': payload.get('status')}
             try:
-                if self.dry_run:
-                    response = {'id': 'dry-run'}
-                else:
-                    req = urllib.request.Request(self.config['feed'], data=raw, method='POST', headers={'Content-Type': 'text/plain; charset=utf-8'})
-                    with urllib.request.urlopen(req, timeout=15) as r:
-                        response = json.load(r)
-                    if response.get('event') != 'message' or response.get('message') != raw.decode():
-                        raise ValueError('Unverified receipt')
-                receipt.update(result='confirmed', message_id=response.get('id'))
-                self.counts['published'] += 1
-                self.health.pop('last_publish_error', None)
-            except urllib.error.HTTPError as e:
-                self.counts['publish_errors'] += 1
-                receipt.update(result='rejected', http_status=e.code)
-                if e.code == 429:
-                    self.limit_until = time.time() + 3600
-                    atomic_json(self.backoff_path, {'until': self.limit_until})
-                    receipt['pause_seconds'] = 3600
-                self.health['last_publish_error'] = 'HTTP %s' % e.code
-            except Exception as e:
-                self.counts['publish_errors'] += 1
-                receipt.update(result='unconfirmed', error_type=type(e).__name__)
-                self.health['last_publish_error'] = type(e).__name__
-            with open(self.run_dir / 'receipts.jsonl', 'a') as f:
-                f.write(json.dumps(receipt, ensure_ascii=False) + '\n')
-            self.outbound.task_done()
+                with self.feed_lock:
+                    if not self.config.get('feed'):
+                        continue
+                    self.publish_payload(payload)
+            finally:
+                self.outbound.task_done()
             self.stop.wait(1.1)
 
-    def status(self):
+    def publish_payload(self, payload):
+        raw = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode()
+        receipt = {'at': utc(), 'payload_sha256': hashlib.sha256(raw).hexdigest(),
+                   'kind': 'status' if 'bot' in payload else next(iter(payload)),
+                   'bot': payload.get('bot'), 'status': payload.get('status')}
+        try:
+            if self.dry_run:
+                response = {'id': 'dry-run'}
+            else:
+                req = urllib.request.Request(self.config['feed'], data=raw, method='POST', headers={'Content-Type': 'text/plain; charset=utf-8'})
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    response = json.load(r)
+                if response.get('event') != 'message' or response.get('message') != raw.decode():
+                    raise ValueError('Unverified receipt')
+            receipt.update(result='confirmed', message_id=response.get('id'))
+            self.counts['published'] += 1
+            self.health.pop('last_publish_error', None)
+        except urllib.error.HTTPError as e:
+            self.counts['publish_errors'] += 1
+            receipt.update(result='rejected', http_status=e.code)
+            if e.code == 429:
+                self.limit_until = time.time() + 3600
+                atomic_json(self.backoff_path, {'until': self.limit_until})
+                receipt['pause_seconds'] = 3600
+            self.health['last_publish_error'] = 'HTTP %s' % e.code
+        except Exception as e:
+            self.counts['publish_errors'] += 1
+            receipt.update(result='unconfirmed', error_type=type(e).__name__)
+            self.health['last_publish_error'] = type(e).__name__
+        with open(self.run_dir / 'receipts.jsonl', 'a', encoding='utf-8') as f:
+            f.write(json.dumps(receipt, ensure_ascii=False) + '\n')
+
+    def status(self, *, final=False):
         state = {'run_id': self.config['run_id'], 'pid': os.getpid(),
                  **process_stop_metadata(os.getpid()), 'updated_at': utc(),
                  'state': 'running' if not self.stop.is_set() else 'stopped', 'dry_run': self.dry_run,
@@ -945,8 +981,22 @@ class Bridge:
                  'last_publish_error': self.health.get('last_publish_error'),
                  'source_lookup_error': self.health.get('source_lookup_error'),
                  'history_error': self.health.get('history_error')}
+        if self.stop_reason:
+            state['stop_reason'] = self.stop_reason
+        if final:
+            atomic_json(self.run_dir / 'result.json', state)
         atomic_json(self.run_dir / 'status.json', state)
         return state
+
+    def supervise_observer(self):
+        try:
+            self.observe_loop()
+        except BaseException:
+            # Source exceptions can include private text. Record a fixed reason.
+            self.stop_requests.put('observer_failed')
+        else:
+            if not self.stop.is_set():
+                self.stop_requests.put('observer_exited')
 
     def observe_loop(self):
         self.load_paths()
@@ -995,8 +1045,12 @@ class Bridge:
                 next_metadata = time.time() + 6 * 3600
             self.status()
             self.stop.wait(1)
-        state = self.status()
-        atomic_json(self.run_dir / 'result.json', state)
+
+
+PHONE_SETUP_ACTIONS = frozenset({
+    'setup-status', 'setup-activate', 'local-consent', 'open-tailscale',
+    'host-check', 'host-assistant',  # Retain older owner clients.
+})
 
 
 def proxy_handler(bridge):
@@ -1041,9 +1095,71 @@ def proxy_handler(bridge):
             self.send_header('Content-Length', '0')
             self.end_headers()
 
+        def phone_setup_action(self, route):
+            from security_keys import upgraded_security
+            from mobile_lifecycle import MobileLifecycleError
+            action = route.rsplit('/', 1)[-1]
+            self.close_connection = True
+            lengths = self.headers.get_all('Content-Length', [])
+            if (route != '/api/office/mobile/' + action or self.path != route or
+                    self.headers.get_all('Transfer-Encoding') or len(lengths) != 1 or
+                    not re.fullmatch(r'[0-9]{1,4}', lengths[0]) or not 0 < int(lengths[0]) <= 1024 or
+                    len(self.headers.get_all('Content-Type', [])) != 1 or
+                    self.headers.get_content_type() != 'application/json'):
+                return self.small(400, {'error': 'invalid_mobile_request'})
+            # Consume the bounded request before closing the socket. On Windows,
+            # closing with an unread POST body can reset the error response.
+            raw = self.rfile.read(int(lengths[0]))
+            hosts = self.headers.get_all('Host', [])
+            auth_config = dict(bridge.config)
+            keys = self.headers.get_all('X-Office-Key', [])
+            if (self.client_address[0] != '127.0.0.1' or not self.allowed() or len(hosts) != 1 or
+                    self.headers.get_all('Origin', []) != ['http://' + hosts[0]] or
+                    len(keys) != 1 or not matches_owner_key(auth_config, keys[0])):
+                return self.small(403, {'error': 'private_office_required'})
+            if action != 'local-consent' and not upgraded_security(auth_config):
+                return self.small(403, {'error': 'mobile_owner_upgrade_required'})
+
+            def unique_fields(pairs):
+                result = dict(pairs)
+                if len(result) != len(pairs):
+                    raise ValueError('duplicate field')
+                return result
+
+            try:
+                data = json.loads(raw, object_pairs_hook=unique_fields)
+                if action == 'setup-activate':
+                    if (not isinstance(data, dict) or set(data) != {'phone_id', 'selection_token'} or
+                            not all(isinstance(v, str) and 0 < len(v) <= 256 for v in data.values())):
+                        raise ValueError('invalid selection')
+                elif data != {}:
+                    raise ValueError('unexpected fields')
+            except (ValueError, UnicodeError, RecursionError):
+                return self.small(400, {'error': 'invalid_mobile_request'})
+            try:
+                if action == 'setup-activate':
+                    result = bridge.phone_onboarding.activate(data['phone_id'], data['selection_token'])
+                elif action == 'setup-status':
+                    result = bridge.phone_onboarding.inspect()
+                elif action == 'local-consent':
+                    result = bridge.phone_local_consent.request()
+                elif action == 'open-tailscale':
+                    result = bridge.tailscale_app.open()
+                elif action == 'host-check':
+                    result = bridge.mobile_host.check()
+                else:
+                    result = bridge.mobile_host.open()
+            except MobileLifecycleError as error:
+                return self.small(error.status, {'error': error.code})
+            except (ValueError, OSError, sqlite3.Error):
+                return self.small(503, {'error': 'mobile_setup_unavailable'})
+            return self.small(200, result)
+
         def do_POST(self):
             self.connection.settimeout(5)
             route = urllib.parse.urlsplit(self.path).path
+            if route.startswith('/api/office/mobile/') and route.rsplit('/', 1)[-1] in PHONE_SETUP_ACTIONS:
+                return self.phone_setup_action(route)
             if not self.allowed():
                 self.close_connection = True
                 return self.small(403, {'error':'forbidden'})
@@ -1168,7 +1284,7 @@ def proxy_handler(bridge):
                     self.close_connection = True
                     return self.small(403, {'error':'private_office_required'})
                 self.close_connection = True
-                bridge.stop.set()
+                bridge.stop_requests.put('owner_api')
                 return self.small(200, {'state':'stop_requested','pid':os.getpid()})
             if route in {'/api/office/conversation','/api/agents/inbox'}:
                 from agent_inbox import InboxError
@@ -1233,7 +1349,7 @@ def proxy_handler(bridge):
                 except ConnectionError as error:return self.small(error.status,{'error':error.code})
                 except (ValueError,KeyError,TypeError):return self.small(400,{'error':'invalid_grok_sdk_request'})
                 except (OSError,sqlite3.Error):return self.small(503,{'error':'grok_sdk_unavailable'})
-            if route in {'/api/office/cursor/local/create','/api/office/codex/background/create','/api/office/codex/background/model'}:
+            if route in {'/api/office/openrouter/create','/api/office/openrouter/key','/api/office/cursor/local/create','/api/office/codex/background/create','/api/office/codex/background/model'}:
                 if not self.owner_authorized():
                     self.close_connection=True
                     return self.small(403,{'error':'private_office_required'})
@@ -1242,7 +1358,11 @@ def proxy_handler(bridge):
                     length=int(self.headers.get('Content-Length','0'))
                     if self.headers.get('Transfer-Encoding') or self.headers.get_content_type()!='application/json' or not 0<length<=16000:raise ValueError()
                     data=json.loads(self.rfile.read(length))
-                    if route=='/api/office/codex/background/model':
+                    if route=='/api/office/openrouter/create':
+                        result=bridge.openrouter_connections.create(data)
+                    elif route=='/api/office/openrouter/key':
+                        result=bridge.openrouter_connections.set_key(data)
+                    elif route=='/api/office/codex/background/model':
                         result=bridge.codex_background_connections.update_model(data)
                     elif route=='/api/office/codex/background/create':
                         result=bridge.codex_background_connections.create(data)
@@ -1364,13 +1484,35 @@ def proxy_handler(bridge):
         def do_GET(self):
             if not self.allowed():
                 return self.small(403, {'error': 'forbidden'})
+            if self.path == '/_office/local/owner-proof':
+                from mobile_host import local_setup_nonce
+                from security_keys import upgraded_security
+                nonce = local_setup_nonce(self, bridge.config['port'])
+                if nonce is None or not upgraded_security(bridge.config):
+                    return self.small(403, {'error': 'forbidden'})
+                from phone_setup_assistant import owner_listener_proof
+                return self.small(200, {'proof': owner_listener_proof(bridge.config, nonce)})
             u = urllib.parse.urlsplit(self.path)
             if u.path.startswith('/api/office/'):
                 local_origins = {None, 'http://127.0.0.1:%s' % bridge.config['port'], 'http://localhost:%s' % bridge.config['port']}
                 if self.headers.get('Origin') not in local_origins or not self.owner_authorized():
                     return self.small(403, {'error': 'private_office_required'})
                 if u.path == '/api/office/mobile':
-                    return self.small(200,bridge.mobile.owner_status())
+                    from mobile_auth import MobileAuthError
+                    from mobile_service import MobileServiceError
+                    try:
+                        status = bridge.mobile.owner_status()
+                        if status.get('credentials_separated') is False:
+                            status['local_consent'] = bridge.phone_local_consent.status()
+                        elif 'mobile_peer_gate' in bridge.config:
+                            status['managed_phone_entry'] = True
+                        if not self.owner_authorized():
+                            return self.small(403, {'error': 'private_office_required'})
+                    except (MobileAuthError, MobileServiceError) as error:
+                        return self.small(error.status, {'error': error.code})
+                    except (OSError, sqlite3.Error):
+                        return self.small(503, {'error': 'mobile_unavailable'})
+                    return self.small(200, status)
                 if u.path.startswith('/api/office/grok/sdk/'):
                     from connections import ConnectionError
                     routes={'/api/office/grok/sdk/status':{'request_id','login_request_id'},
@@ -1394,6 +1536,11 @@ def proxy_handler(bridge):
                     except ConnectionError as error:return self.small(error.status,{'error':error.code})
                     except (ValueError,TypeError,KeyError):return self.small(400,{'error':'invalid_grok_sdk_request'})
                     except (OSError,sqlite3.Error):return self.small(503,{'error':'grok_sdk_unavailable'})
+                if u.path == '/api/office/openrouter/status':
+                    from connections import ConnectionError
+                    if u.query: return self.small(400,{'error':'invalid_request'})
+                    try: return self.small(200,bridge.openrouter_connections.status())
+                    except ConnectionError as error: return self.small(error.status,{'error':error.code})
                 if u.path in {'/api/office/cursor/local/status','/api/office/codex/background/status'}:
                     from connections import ConnectionError
                     try:
@@ -1496,7 +1643,8 @@ def proxy_handler(bridge):
                                        'local_ok': bridge.local_ready(),
                                        'sync_ok': not (bridge.health.get('last_publish_error') or bridge.health.get('source_lookup_error')
                                                        or time.time() < bridge.limit_until or bridge.outbound.unfinished_tasks),
-                                       'source_count': len(bridge.sources), 'published': bridge.counts['published'], 'pid':os.getpid()})
+                                       'source_count': len(bridge.sources), 'published': bridge.counts['published'], 'pid':os.getpid(),
+                                       **({'run_id': bridge.config['run_id']} if self.owner_authorized() else {})})
             prefix = '/' + bridge.config['topic']
             if u.path not in {prefix + '/json', prefix + '/sse'}:
                 return self.small(404, {'error': 'not_found'})
@@ -1507,7 +1655,8 @@ def proxy_handler(bridge):
             if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,80}', since):
                 return self.small(400, {'error': 'invalid_since'})
             stream = u.path.endswith('/sse')
-            if not bridge.allowed_names or not bridge.config.get('feed'):
+            feed = bridge.config.get('feed')
+            if not bridge.allowed_names or not feed:
                 self.send_response(200)
                 self.headers_common()
                 self.send_header('Content-Type', 'text/event-stream' if stream else 'application/x-ndjson')
@@ -1523,7 +1672,7 @@ def proxy_handler(bridge):
                     except (OSError, BrokenPipeError):
                         pass
                 return
-            upstream = bridge.config['feed'] + ('/sse' if stream else '/json?poll=1&since=' + since)
+            upstream = feed + ('/sse' if stream else '/json?poll=1&since=' + since)
             try:
                 response = urllib.request.urlopen(upstream, timeout=65 if stream else 20)
             except Exception:
@@ -1537,9 +1686,9 @@ def proxy_handler(bridge):
                 self.close_connection = True
                 try:
                     if stream:
-                        while not bridge.stop.is_set():
+                        while not bridge.stop.is_set() and bridge.config.get('feed') == feed:
                             line = response.readline(128 * 1024)
-                            if not line:
+                            if not line or bridge.config.get('feed') != feed:
                                 break
                             if line.startswith(b'data: '):
                                 try:
@@ -1551,6 +1700,8 @@ def proxy_handler(bridge):
                                     self.wfile.flush()
                     else:
                         for line in response.read(8 * 1024 * 1024).splitlines():
+                            if bridge.config.get('feed') != feed:
+                                break
                             try:
                                 item = bridge.filter_record(json.loads(line))
                             except (ValueError, TypeError):
@@ -1567,46 +1718,53 @@ def main():
     parser.add_argument('--config', default=str(DEFAULT_CONFIG))
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--duration', type=int)
+    parser.add_argument('--run-id', help=argparse.SUPPRESS)
     args = parser.parse_args()
     config_path = Path(args.config).expanduser().absolute()
     # The shared loader enforces the platform's private-file policy.
     config = load_config(config_path)
-    if not config.get('run_dir'):
-        config['run_id'] = 'office-' + uuid.uuid4().hex[:12]
+    if args.run_id or not config.get('run_dir'):
+        if args.run_id and not re.fullmatch(r'office-[0-9a-fT-]{1,64}', args.run_id):
+            parser.error('invalid run ID')
+        config['run_id'] = args.run_id or 'office-' + uuid.uuid4().hex[:12]
         config['run_dir'] = str(Path(config['data_dir']) / 'runs' / config['run_id'])
     Path(config['run_dir']).mkdir(parents=True, exist_ok=True, mode=0o700)
     os.umask(0o077)
     bridge = Bridge(config, args.dry_run)
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', config['port']), proxy_handler(bridge))
+    server = LoopbackHTTPServer(('127.0.0.1', config['port']), proxy_handler(bridge))
     server.daemon_threads = True
-    from mobile_gateway import create_server
-    mobile_server = create_server(bridge, ROOT / 'public')
+    bridge.mobile_lifecycle.start_configured()
     for sig in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(sig, lambda *_: bridge.stop.set())
+        signal.signal(sig, lambda number, _: bridge.stop_requests.put('signal_' + signal.Signals(number).name.lower()))
     atomic_json(bridge.run_dir / 'pid.json', {'pid': os.getpid(), **process_stop_metadata(os.getpid()), 'script': str(Path(__file__).resolve())})
-    threads = [threading.Thread(target=f, daemon=True) for f in (bridge.publish_loop, bridge.observe_loop, lambda:bridge.commands.run(bridge.stop), lambda:bridge.cursor_cloud_sync.run(bridge.stop), lambda:bridge.grok_sdk_sync.run(bridge.stop), server.serve_forever)]
-    if mobile_server:
-        threads.append(threading.Thread(target=mobile_server.serve_forever,daemon=True))
+    threads = [threading.Thread(target=f, daemon=True) for f in (bridge.publish_loop, bridge.supervise_observer, lambda:bridge.commands.run(bridge.stop), lambda:bridge.cursor_cloud_sync.run(bridge.stop), lambda:bridge.grok_sdk_sync.run(bridge.stop), server.serve_forever)]
     for thread in threads:
         thread.start()
     print(json.dumps({'run_id': config['run_id'], 'pid': os.getpid(), 'state': 'running', 'dry_run': args.dry_run}), flush=True)
     started = time.monotonic()
-    while not bridge.stop.wait(1):
-        if not threads[1].is_alive() or (args.duration and time.monotonic() - started >= args.duration):
-            bridge.stop.set()
-    if mobile_server:
-        mobile_server.shutdown()
-        mobile_server.server_close()
-    server.shutdown()
-    bridge.grok_sdk_sync.close()
-    for thread in threads[:-1]:
-        thread.join(timeout=20)
-    server.server_close()
-    bridge.commands.close()
-    bridge.status()
-    bridge.mobile.auth.close()
-    bridge.history.close()
+    while True:
+        try:
+            bridge.stop_reason = bridge.stop_requests.get(timeout=1)
+            break
+        except queue.Empty:
+            if args.duration and time.monotonic() - started >= args.duration:
+                bridge.stop_reason = 'duration_elapsed'
+                break
+    bridge.stop.set()
+    try:
+        bridge.mobile_lifecycle.close()
+        server.shutdown()
+        bridge.grok_sdk_sync.close()
+        for thread in threads:
+            thread.join(timeout=20)
+        server.server_close()
+        bridge.commands.close()
+        bridge.mobile.auth.close()
+        bridge.history.close()
+    finally:
+        bridge.status(final=True)
+    return 1 if bridge.stop_reason in {'observer_failed', 'observer_exited'} else 0
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

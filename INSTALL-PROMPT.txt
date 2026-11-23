@@ -1,17 +1,17 @@
 請使用你能操作的本機工具，幫我從 GitHub 下載、安裝及啟動 Virtual Office。請實際完成並以繁體中文回覆，不要只提供教學。一般下載、檢查及可逆的安裝步驟請自行處理；只有需要登入、系統批准、改動既有工作或缺少必要資料時才問我。
 
 官方專案：https://github.com/peipeichan605-cpu/virtual-office
-本 Prompt 核對版本：0.2.1-preview（2026-11-18）。下載以此倉庫執行當時的 main 為準，記錄實際 VERSION 及完整 commit；不要假設版本號就是 Git tag，也不要使用舊版 Release 下載連結。若版本有變，先閱讀下載版本的文件及安裝程式，按其實際介面操作。
+本指引隨 0.2.2-preview 提供。Agent 可從倉庫根目錄 AGENTS.md 直接開始。用戶指定版本時沿用該版本，否則使用首頁連結的發佈版。核對 VERSION 及完整 Git commit，或核對發佈 ZIP 與同版 .sha256，再使用該版本的安裝文件。
 
 1. 確認執行位置與安裝環境
 先確認你能操作我的電腦，檢查作業系統、Python、Git 及預定資料夾。雲端沙盒不能當成我的本機；無法操作本機就如實回報未安裝，不要把雲端 localhost 當成我的入口。
-本次要做完整功能安裝，先準備好 Codex、Cursor SDK、Grok SDK 三種接駁的執行環境，再交付。需要可寫入的資料夾及下載 UI／固定 SDK 的網絡。選用健康的 Python 3.10 或以上（須能匯入 ssl、sqlite3、venv、plistlib）；Windows 的 Cursor SDK 需要 x64 Python。已有 Python 3.9 的 OFFICE 核心可保留，SDK 使用安裝專用的相容 Python，不覆寫系統 Python。
+本次要做完整功能安裝，先準備好 Codex、Cursor SDK、Grok SDK 三種接駁的執行環境，再交付。OpenRouter 免費文字模式由 Python 核心提供；用家首次在「加入 Agent → OpenRouter」自行設定本 OFFICE 的金鑰。安裝驗收只需核對入口及免費模型清單，實際模型回覆另行驗證。需要可寫入的資料夾及下載 UI／固定 SDK 的網絡。選用健康的 Python 3.10 或以上（須能匯入 ssl、sqlite3、venv、plistlib）；Windows 的 Cursor SDK 需要 x64 Python。已有 Python 3.9 的 OFFICE 核心可保留，SDK 使用安裝專用的相容 Python，不覆寫系統 Python。
 檢查 Node.js 22.13 或以上及相容的本機 Codex app-server；缺少時依該平台官方安裝方法準備，正常可逆的依賴安裝毋須逐項問我，遇系統批准則停在確切批准步驟。優先沿用已裝且健康的程式；Windows Codex 使用可驗證的原生 codex.exe，不以 .cmd／.bat 或任意 shell 指令代替。不要從我的另一部電腦搬程式或憑證，不掃描全機聊天、不另建虛擬機或容器。不要因某平台不能支援，就宣稱所有功能已備妥。
 
 2. 選擇獨立資料夾並下載
-在我有寫入權限的位置選擇獨立的 virtual-office 資料夾，簡短告知位置；不要掃描整個家目錄。先按第 3 項檢查是否已有安裝；只有確定是新安裝才下載到新資料夾。優先使用 Git，將以下目標換成實際新資料夾：
-git clone --branch main https://github.com/peipeichan605-cpu/virtual-office.git "<安裝目錄>"
-進入該資料夾，記錄 git rev-parse HEAD 及 VERSION。公開倉庫下載不需要我提供 GitHub 密碼或 token。沒有 Git 時，可從該倉庫已確認的完整 commit 下載 GitHub 原始碼 ZIP，記錄 commit 並檢查解壓路徑不能逃出新資料夾；不要猜測不存在的 Release 資產。
+在我有寫入權限的位置選擇獨立的 virtual-office 資料夾，簡短告知位置；不要掃描整個家目錄。先按第 3 項檢查是否已有安裝。全新安裝如已指定 ZIP，將它解壓到新資料夾並使用該副本；如要從官方倉庫下載此發佈版，將以下目標換成實際新資料夾：
+git clone --branch v0.2.2-preview --depth 1 https://github.com/peipeichan605-cpu/virtual-office.git "<安裝目錄>"
+進入該資料夾，記錄 VERSION。Git 安裝記錄 git rev-parse HEAD；指定的 ZIP 安裝記錄檔案的 SHA-256。公開倉庫下載不需要我提供 GitHub 密碼或 token。沒有 Git 時，從 README 指定的 Release 選取安裝 ZIP 和同名 .sha256，核對完整 SHA-256 後解壓到新資料夾。
 先閱讀 README.md、docs/QUICKSTART.md、docs/CURSOR-SDK.md、docs/CODEX-BACKGROUND.md、docs/GROK-SDK.md、NOTICE.md、office.py 及 setup_ui.py。只使用這個安裝自己的檔案和設定。Git checkout 必須遵守 .gitattributes 的 LF 規則；不要為了 Windows 換行而改寫 UI 雜湊或略過校驗。
 
 3. 分清全新安裝與已有 OFFICE
@@ -28,7 +28,7 @@ python3 office.py --config .office/config.json start
 python3 office.py --config .office/config.json status
 
 每一步成功才繼續。setup_ui.py 必須完成固定素材的雜湊校驗並回報 ui_installed=true；失敗就排查，不繞過校驗。setup-platforms 會在本 OFFICE 專用環境安裝固定版本 Cursor SDK，並核對 Node.js／Codex；已有 Cursor Desktop 不等於已有 SDK。setup-platforms --check 必須回報 runtimes_ready=true，否則依逐項原因補齊官方環境，再檢查；不要只重試網頁或宣稱完整安裝完成。Grok SDK 原始碼已隨套件提供，不需要另跑 npm install。每個 office.py 命令都明確使用這份安裝設定，--config 放在子命令之前，避免環境中的 OFFICE_CONFIG 指向別的 OFFICE。已有安裝則沿用其原本完整設定路徑；補裝環境後只在工作妥善處理後重載這個 OFFICE。
-start 自己會背景執行；保存它回傳的 run_id、PID、日誌位置及精確 stop_command。不要另開無限等待迴圈、額外服務或開機啟動項目。保留本機 loopback 存取，不為安裝更改防火牆、VPN 或公開網絡設定。
+Windows 的 start 若提示目前工作環境會在結束時終止子程序，預設安裝請引導用戶在檔案總管雙擊安裝資料夾的 Start Office.cmd；自訂設定則從開始選單開啟一般 PowerShell，用原 config 執行 start。啟動後由另一個命令核對 status。start 自己會背景執行；保存它回傳的 run_id、PID、日誌位置及精確 stop_command。不要另開無限等待迴圈、額外服務或開機啟動項目。保留本機 loopback 存取，不為安裝更改防火牆、VPN 或公開網絡設定。
 
 5. 驗證成功後才交付
 檢查同一安裝的 status JSON 必須是 state=running、local_ok=true；全新安裝還應 selected=0。命令 exit 0、顯示 Office ready 或產生網址都不能單獨代替驗證。

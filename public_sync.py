@@ -69,7 +69,7 @@ def capability(config, agent_id, binding=None, observer=None):
     if adapter == 'codex_background' and driver == 'codex_background':
         return descriptor('native_rpc_observer', 'office_dispatched_runs', 'limited',
                           configured=True, automatic=True, reason='office_owned_session_only')
-    if adapter in {'hermes_acp', 'cursor_cloud', 'cursor_local'}:
+    if adapter in {'hermes_acp', 'cursor_cloud', 'cursor_local', 'openrouter'}:
         return descriptor('native_run_observer', 'office_dispatched_runs', 'limited',
                           configured=True, automatic=True, reason='office_runs_only')
     if driver == 'crouton':
